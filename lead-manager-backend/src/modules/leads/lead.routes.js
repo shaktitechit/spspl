@@ -41,6 +41,8 @@ router.put('/follow-ups/:followUpId/complete', controller.completeFollowUp);
 /* --- Lead Quotations --- */
 router.get('/quotations/default-terms', requireLeadManagerSalesTeamRole, quotationController.getDefaultTerms);
 router.get('/quotations/:quotationId', requireLeadManagerSalesTeamRole, quotationController.getById);
+router.get('/quotations/:quotationId/versions/:version', requireLeadManagerSalesTeamRole, quotationController.getVersionDetails);
+router.get('/quotations/:quotationId/compare', requireLeadManagerSalesTeamRole, quotationController.compareVersions);
 router.patch('/quotations/:quotationId', requireLeadManagerSalesTeamRole, quotationController.update);
 router.post('/quotations/:quotationId/submit-for-approval', requireLeadManagerSalesTeamRole, quotationController.submitForApproval);
 router.post('/quotations/:quotationId/approve', requireLeadManagerSalesTeamRole, quotationController.approve);

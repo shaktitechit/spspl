@@ -2057,6 +2057,8 @@ export function QuotationFormPage({
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {isCopyMode
                 ? `Creating a new quotation copied from #${existingQuotation?.quotation_no || existingQuotation?.ref_no || "previous quotation"}`
+                : isEditing
+                ? `Editing existing quotation ${existingQuotation?.quotation_no || ""} (Current v${existingQuotation?.version || 1}). Updates will save to revision history without duplicating.`
                 : `Official Letterhead format proposal for ${customerName || "Customer"}`}
             </p>
           </div>
@@ -2098,7 +2100,7 @@ export function QuotationFormPage({
             {isCreating || isUpdating
               ? "Saving..."
               : isEditing
-              ? "Update Quotation"
+              ? (existingQuotation?.status === "draft" ? "Update Quotation (v1)" : `Save Revision (v${(existingQuotation?.version || 1) + 1})`)
               : isCopyMode
               ? "Create Copied Quotation"
               : "Generate Quotation"}
@@ -3612,7 +3614,7 @@ export function QuotationFormPage({
               {isCreating || isUpdating
                 ? "Saving..."
                 : isEditing
-                ? "Update Quotation"
+                ? (existingQuotation?.status === "draft" ? "Update Quotation (v1)" : `Save Revision (v${(existingQuotation?.version || 1) + 1})`)
                 : isCopyMode
                 ? "Create Copied Quotation"
                 : "Generate Quotation"}

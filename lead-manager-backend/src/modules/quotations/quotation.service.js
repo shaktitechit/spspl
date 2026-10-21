@@ -1115,6 +1115,8 @@ async function getById(id, user) {
     .populate('conversion.order_id', 'order_no status grand_total total_amount')
     .populate('revision_history.saved_by', 'name email department')
     .populate('revision_history.approved_by', 'name email department')
+    .populate('revision_history.signatory_user', 'name email department phone designation')
+    .populate('revision_history.sales_person_user', 'name email department phone designation')
     .populate('proforma_details.generated_by', 'name email department')
     .populate({ path: 'validity_extension_history.extended_by', select: 'name email department', strictPopulate: false })
     .lean();
@@ -1122,6 +1124,72 @@ async function getById(id, user) {
   if (!quotation) throw new ApiError(404, 'Quotation not found');
   await assertQuotationVisible(id, user);
   return quotation;
+}
+
+/**
+ * Helper to build an immutable snapshot of all quotation details for revision_history.
+ */
+function buildRevisionSnapshot(quotation, user, changeSummary) {
+  const previousVersion = quotation.version || 1;
+  return {
+    version: previousVersion,
+    quotation_no: quotation.quotation_no || '',
+    ref_no: quotation.ref_no || '',
+    customer_ref: quotation.customer_ref || '',
+    quotation_date: quotation.quotation_date || null,
+    valid_until: quotation.valid_until || null,
+    validity_days: quotation.validity_days || 15,
+    subject: quotation.subject || '',
+    message: quotation.message || '',
+    quotation_message: quotation.quotation_message || '',
+    customer_name: quotation.customer_name || '',
+    kind_attn: quotation.kind_attn || '',
+    phone: quotation.phone || '',
+    cell: quotation.cell || '',
+    email: quotation.email || '',
+    gstin: quotation.gstin || '',
+    address: quotation.address ? JSON.parse(JSON.stringify(quotation.address)) : {},
+    items: quotation.items ? JSON.parse(JSON.stringify(quotation.items)) : [],
+    subtotal: quotation.subtotal || 0,
+    total_discount: quotation.total_discount || 0,
+    gst_enabled: quotation.gst_enabled !== false,
+    total_gst: quotation.total_gst || 0,
+    round_off: quotation.round_off || 0,
+    grand_total: quotation.grand_total || 0,
+    amount_in_words: quotation.amount_in_words || '',
+    terms_and_conditions: Array.isArray(quotation.terms_and_conditions) ? [...quotation.terms_and_conditions] : [],
+    branch_id: quotation.branch_id || null,
+    branch_code: quotation.branch_code || '',
+    company_branch_name: quotation.company_branch_name || '',
+    company_name: quotation.company_name || '',
+    company_regd_address: quotation.company_regd_address || '',
+    company_phone: quotation.company_phone || '',
+    company_email: quotation.company_email || '',
+    company_gstin: quotation.company_gstin || '',
+    bank_name: quotation.bank_name || '',
+    account_name: quotation.account_name || '',
+    account_number: quotation.account_number || '',
+    ifsc_code: quotation.ifsc_code || '',
+    branch_name: quotation.branch_name || '',
+    account_type: quotation.account_type || '',
+    signatory_name: quotation.signatory_name || '',
+    signatory_phone: quotation.signatory_phone || '',
+    signatory_email: quotation.signatory_email || '',
+    signatory_designation: quotation.signatory_designation || '',
+    signatory_user: quotation.signatory_user ? (quotation.signatory_user._id || quotation.signatory_user) : null,
+    sales_person_name: quotation.sales_person_name || '',
+    sales_person_phone: quotation.sales_person_phone || '',
+    sales_person_email: quotation.sales_person_email || '',
+    sales_person_designation: quotation.sales_person_designation || '',
+    sales_person_user: quotation.sales_person_user ? (quotation.sales_person_user._id || quotation.sales_person_user) : null,
+    status: quotation.status,
+    approval_status: quotation.approval_status || 'pending_approval',
+    approved_by: quotation.approved_by ? (quotation.approved_by._id || quotation.approved_by) : null,
+    approved_at: quotation.approved_at || null,
+    saved_by: user._id || user.id,
+    saved_at: new Date(),
+    change_summary: changeSummary || `Revised to version ${previousVersion + 1}`,
+  };
 }
 
 /**
@@ -1181,28 +1249,9 @@ async function update(id, body, user) {
       if (!Array.isArray(quotation.revision_history)) {
         quotation.revision_history = [];
       }
-      quotation.revision_history.push({
-        version: previousVersion,
-        items: quotation.items || [],
-        subtotal: quotation.subtotal || 0,
-        total_discount: quotation.total_discount || 0,
-        total_gst: quotation.total_gst || 0,
-        round_off: quotation.round_off || 0,
-        grand_total: quotation.grand_total || 0,
-        amount_in_words: quotation.amount_in_words || '',
-        terms_and_conditions: quotation.terms_and_conditions || [],
-        signatory_name: quotation.signatory_name || '',
-        signatory_user: quotation.signatory_user || null,
-        sales_person_name: quotation.sales_person_name || '',
-        sales_person_user: quotation.sales_person_user || null,
-        status: previousStatus,
-        approval_status: previousApprovalStatus || 'pending_approval',
-        approved_by: quotation.approved_by || null,
-        approved_at: quotation.approved_at || null,
-        saved_by: user._id,
-        saved_at: new Date(),
-        change_summary: body.change_summary || `Revised to version ${previousVersion + 1}`,
-      });
+      quotation.revision_history.push(
+        buildRevisionSnapshot(quotation, user, body.change_summary)
+      );
 
       quotation.version = previousVersion + 1;
       versionIncremented = true;
@@ -1765,24 +1814,9 @@ async function reviseQuotation(quotationId, user) {
     quotation.revision_history = [];
   }
 
-  quotation.revision_history.push({
-    version: previousVersion,
-    items: quotation.items || [],
-    subtotal: quotation.subtotal || 0,
-    total_discount: quotation.total_discount || 0,
-    total_gst: quotation.total_gst || 0,
-    round_off: quotation.round_off || 0,
-    grand_total: quotation.grand_total || 0,
-    amount_in_words: quotation.amount_in_words || '',
-    terms_and_conditions: quotation.terms_and_conditions || [],
-    status: previousStatus,
-    approval_status: previousApprovalStatus || 'pending_approval',
-    approved_by: quotation.approved_by || null,
-    approved_at: quotation.approved_at || null,
-    saved_by: user._id,
-    saved_at: new Date(),
-    change_summary: `Created Revision v${previousVersion + 1} from v${previousVersion}`,
-  });
+  quotation.revision_history.push(
+    buildRevisionSnapshot(quotation, user, `Created Revision v${previousVersion + 1} from v${previousVersion}`)
+  );
 
   quotation.version = previousVersion + 1;
   quotation.status = 'draft';
@@ -2459,12 +2493,190 @@ async function extendValidity(id, body = {}, user) {
   return getById(quotation._id, user);
 }
 
+/**
+ * Get specific version of a quotation.
+ * If version equals current quotation version, returns current quotation.
+ * Otherwise reconstitutes the quotation state from revision_history.
+ */
+async function getVersionDetails(id, versionNumber, user) {
+  const quotation = await getById(id, user);
+  const targetVersion = Number(versionNumber);
+
+  if (quotation.version === targetVersion) {
+    return quotation;
+  }
+
+  const historical = (quotation.revision_history || []).find((r) => Number(r.version) === targetVersion);
+  if (!historical) {
+    throw new ApiError(404, `Version ${targetVersion} not found for quotation ${quotation.quotation_no}`);
+  }
+
+  // Combine top-level identity fields with historical snapshot fields
+  return {
+    ...quotation,
+    version: historical.version,
+    quotation_no: historical.quotation_no || quotation.quotation_no,
+    ref_no: historical.ref_no || quotation.ref_no,
+    customer_ref: historical.customer_ref !== undefined ? historical.customer_ref : quotation.customer_ref,
+    quotation_date: historical.quotation_date || quotation.quotation_date,
+    valid_until: historical.valid_until || quotation.valid_until,
+    validity_days: historical.validity_days || quotation.validity_days,
+    subject: historical.subject !== undefined ? historical.subject : quotation.subject,
+    message: historical.message !== undefined ? historical.message : quotation.message,
+    quotation_message: historical.quotation_message !== undefined ? historical.quotation_message : quotation.quotation_message,
+    customer_name: historical.customer_name || quotation.customer_name,
+    kind_attn: historical.kind_attn !== undefined ? historical.kind_attn : quotation.kind_attn,
+    phone: historical.phone !== undefined ? historical.phone : quotation.phone,
+    cell: historical.cell !== undefined ? historical.cell : quotation.cell,
+    email: historical.email !== undefined ? historical.email : quotation.email,
+    gstin: historical.gstin !== undefined ? historical.gstin : quotation.gstin,
+    address: historical.address && Object.keys(historical.address).length > 0 ? historical.address : quotation.address,
+    items: historical.items && historical.items.length > 0 ? historical.items : quotation.items,
+    subtotal: historical.subtotal !== undefined ? historical.subtotal : quotation.subtotal,
+    total_discount: historical.total_discount !== undefined ? historical.total_discount : quotation.total_discount,
+    gst_enabled: historical.gst_enabled !== undefined ? historical.gst_enabled : quotation.gst_enabled,
+    total_gst: historical.total_gst !== undefined ? historical.total_gst : quotation.total_gst,
+    round_off: historical.round_off !== undefined ? historical.round_off : quotation.round_off,
+    grand_total: historical.grand_total !== undefined ? historical.grand_total : quotation.grand_total,
+    amount_in_words: historical.amount_in_words || quotation.amount_in_words,
+    terms_and_conditions: historical.terms_and_conditions && historical.terms_and_conditions.length > 0
+      ? historical.terms_and_conditions
+      : quotation.terms_and_conditions,
+    branch_id: historical.branch_id || quotation.branch_id,
+    branch_code: historical.branch_code || quotation.branch_code,
+    company_branch_name: historical.company_branch_name || quotation.company_branch_name,
+    company_name: historical.company_name || quotation.company_name,
+    company_regd_address: historical.company_regd_address || quotation.company_regd_address,
+    company_phone: historical.company_phone || quotation.company_phone,
+    company_email: historical.company_email || quotation.company_email,
+    company_gstin: historical.company_gstin || quotation.company_gstin,
+    bank_name: historical.bank_name || quotation.bank_name,
+    account_name: historical.account_name || quotation.account_name,
+    account_number: historical.account_number || quotation.account_number,
+    ifsc_code: historical.ifsc_code || quotation.ifsc_code,
+    branch_name: historical.branch_name || quotation.branch_name,
+    account_type: historical.account_type || quotation.account_type,
+    signatory_name: historical.signatory_name || quotation.signatory_name,
+    signatory_phone: historical.signatory_phone || quotation.signatory_phone,
+    signatory_email: historical.signatory_email || quotation.signatory_email,
+    signatory_designation: historical.signatory_designation || quotation.signatory_designation,
+    signatory_user: historical.signatory_user || quotation.signatory_user,
+    sales_person_name: historical.sales_person_name || quotation.sales_person_name,
+    sales_person_phone: historical.sales_person_phone || quotation.sales_person_phone,
+    sales_person_email: historical.sales_person_email || quotation.sales_person_email,
+    sales_person_designation: historical.sales_person_designation || quotation.sales_person_designation,
+    sales_person_user: historical.sales_person_user || quotation.sales_person_user,
+    status: historical.status || quotation.status,
+    approval_status: historical.approval_status || quotation.approval_status,
+    approved_by: historical.approved_by || null,
+    approved_at: historical.approved_at || null,
+    saved_by: historical.saved_by || null,
+    saved_at: historical.saved_at || null,
+    change_summary: historical.change_summary || '',
+    is_historical_snapshot: true,
+  };
+}
+
+/**
+ * Compare two versions of a quotation.
+ */
+async function compareVersions(id, fromVersion, toVersion, user) {
+  const vFrom = await getVersionDetails(id, fromVersion, user);
+  const vTo = await getVersionDetails(id, toVersion, user);
+
+  const fromItems = vFrom.items || [];
+  const toItems = vTo.items || [];
+
+  const getItemKey = (it) => {
+    const pId = typeof it.product === 'object' && it.product !== null ? it.product._id : it.product;
+    return String(pId || it.product_name || '').trim().toLowerCase();
+  };
+
+  const fromMap = new Map();
+  fromItems.forEach((it, idx) => fromMap.set(getItemKey(it) || `idx_${idx}`, it));
+
+  const toMap = new Map();
+  toItems.forEach((it, idx) => toMap.set(getItemKey(it) || `idx_${idx}`, it));
+
+  const itemsComparison = [];
+  const allKeys = new Set([...fromMap.keys(), ...toMap.keys()]);
+
+  allKeys.forEach((key) => {
+    const f = fromMap.get(key);
+    const t = toMap.get(key);
+
+    if (f && !t) {
+      itemsComparison.push({
+        status: 'removed',
+        product_name: f.product_name,
+        from: f,
+        to: null,
+      });
+    } else if (!f && t) {
+      itemsComparison.push({
+        status: 'added',
+        product_name: t.product_name,
+        from: null,
+        to: t,
+      });
+    } else if (f && t) {
+      const qtyDiff = (t.quantity || 0) - (f.quantity || 0);
+      const rateDiff = (t.rate || 0) - (f.rate || 0);
+      const discountDiff = (t.discount_percent || 0) - (f.discount_percent || 0);
+      const totalDiff = (t.line_total || 0) - (f.line_total || 0);
+
+      const isChanged = qtyDiff !== 0 || rateDiff !== 0 || discountDiff !== 0 || totalDiff !== 0;
+
+      itemsComparison.push({
+        status: isChanged ? 'modified' : 'unchanged',
+        product_name: t.product_name,
+        from: f,
+        to: t,
+        diff: {
+          quantity_delta: qtyDiff,
+          rate_delta: rateDiff,
+          discount_delta: discountDiff,
+          line_total_delta: totalDiff,
+        },
+      });
+    }
+  });
+
+  return {
+    from_version: Number(fromVersion),
+    to_version: Number(toVersion),
+    from_saved_at: vFrom.saved_at || vFrom.createdAt,
+    to_saved_at: vTo.saved_at || vTo.updatedAt,
+    from_saved_by: vFrom.saved_by,
+    to_saved_by: vTo.saved_by,
+    financial_comparison: {
+      subtotal_from: vFrom.subtotal || 0,
+      subtotal_to: vTo.subtotal || 0,
+      subtotal_delta: (vTo.subtotal || 0) - (vFrom.subtotal || 0),
+      discount_from: vFrom.total_discount || 0,
+      discount_to: vTo.total_discount || 0,
+      discount_delta: (vTo.total_discount || 0) - (vFrom.total_discount || 0),
+      gst_from: vFrom.total_gst || 0,
+      gst_to: vTo.total_gst || 0,
+      gst_delta: (vTo.total_gst || 0) - (vFrom.total_gst || 0),
+      grand_total_from: vFrom.grand_total || 0,
+      grand_total_to: vTo.grand_total || 0,
+      grand_total_delta: (vTo.grand_total || 0) - (vFrom.grand_total || 0),
+    },
+    items_comparison: itemsComparison,
+    terms_from: vFrom.terms_and_conditions || [],
+    terms_to: vTo.terms_and_conditions || [],
+  };
+}
+
 module.exports = {
   create,
   listAll,
   listByLead,
   list: listByLead, // alias for backwards compatibility
   getById,
+  getVersionDetails,
+  compareVersions,
   update,
   remove,
   convert,

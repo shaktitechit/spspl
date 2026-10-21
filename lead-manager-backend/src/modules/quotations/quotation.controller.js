@@ -50,6 +50,26 @@ exports.getById = asyncHandler(async (req, res) => {
   });
 });
 
+exports.getVersionDetails = asyncHandler(async (req, res) => {
+  const quotationId = req.params.quotationId || req.params.id;
+  const version = req.params.version;
+  const data = await quotationService.getVersionDetails(quotationId, version, req.user);
+  res.json({
+    success: true,
+    data,
+  });
+});
+
+exports.compareVersions = asyncHandler(async (req, res) => {
+  const quotationId = req.params.quotationId || req.params.id;
+  const { from, to } = req.query;
+  const data = await quotationService.compareVersions(quotationId, from, to, req.user);
+  res.json({
+    success: true,
+    data,
+  });
+});
+
 exports.update = asyncHandler(async (req, res) => {
   const quotationId = req.params.quotationId || req.params.id;
   validation.assertUpdate(req.body);

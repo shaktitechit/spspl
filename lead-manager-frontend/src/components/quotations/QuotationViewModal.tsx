@@ -5,9 +5,9 @@
  */
 "use client";
 
-import React, { useRef, useMemo } from "react";
+import React, { useRef, useMemo, useState } from "react";
 import Link from "next/link";
-import { X, Printer, FileText, Lock, Copy } from "lucide-react";
+import { X, Printer, FileText, Lock, Copy, History } from "lucide-react";
 import { useGetCompanyInfoQuery, type LeadQuotationRecord } from "@/store/api";
 import { useAppSelector } from "@/store/hooks";
 import { readSessionFromStorage } from "@/utils/authStorage";
@@ -32,6 +32,9 @@ export function QuotationViewModal({
   const reduxUser = useAppSelector((s) => s.auth.user);
   const sessionUser = useMemo(() => (typeof window !== "undefined" ? readSessionFromStorage()?.user || null : null), []);
   const authUser = (reduxUser || sessionUser) as any;
+
+  const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
+
   const downloadedBy = useMemo(() => {
     if (!authUser) return quotation?.signatory_name || "User";
     const name = String(authUser.name || "").trim();
@@ -46,6 +49,76 @@ export function QuotationViewModal({
     if (email) return email;
     return quotation?.signatory_name || "User";
   }, [authUser, quotation?.signatory_name]);
+
+  const currentVersion = quotation?.version || 1;
+  const activeVersion = selectedVersion ?? currentVersion;
+  const isViewingArchive = activeVersion !== currentVersion;
+
+  const availableVersions = useMemo(() => {
+    if (!quotation) return [];
+    const set = new Set<number>();
+    set.add(currentVersion);
+    if (Array.isArray(quotation.revision_history)) {
+      quotation.revision_history.forEach((rev) => {
+        if (rev && typeof rev.version === "number") set.add(rev.version);
+      });
+    }
+    return Array.from(set).sort((a, b) => a - b);
+  }, [currentVersion, quotation]);
+
+  const selectedRevisionSnapshot = useMemo(() => {
+    if (!quotation || !isViewingArchive || !Array.isArray(quotation.revision_history)) return null;
+    return quotation.revision_history.find((r) => r.version === activeVersion) || null;
+  }, [quotation, isViewingArchive, activeVersion]);
+
+  const displayedQuotation = useMemo<LeadQuotationRecord>(() => {
+    if (!quotation) return quotation as unknown as LeadQuotationRecord;
+    if (!isViewingArchive || !selectedRevisionSnapshot) return quotation;
+    const snap = selectedRevisionSnapshot;
+    return {
+      ...quotation,
+      version: snap.version,
+      subtotal: snap.subtotal ?? quotation.subtotal,
+      total_discount: snap.total_discount ?? quotation.total_discount,
+      total_gst: snap.total_gst ?? quotation.total_gst,
+      round_off: snap.round_off ?? quotation.round_off,
+      grand_total: snap.grand_total ?? quotation.grand_total,
+      amount_in_words: snap.amount_in_words ?? quotation.amount_in_words,
+      items: (snap.items as any) || quotation.items,
+      terms_and_conditions: snap.terms_and_conditions ?? quotation.terms_and_conditions,
+      message: snap.message ?? quotation.message,
+      quotation_message: snap.quotation_message ?? quotation.quotation_message,
+      customer_name: snap.customer_name ?? quotation.customer_name,
+      kind_attn: snap.kind_attn ?? quotation.kind_attn,
+      phone: snap.phone ?? quotation.phone,
+      cell: snap.cell ?? quotation.cell,
+      email: snap.email ?? quotation.email,
+      gstin: snap.gstin ?? quotation.gstin,
+      customer_ref: snap.customer_ref ?? quotation.customer_ref,
+      subject: snap.subject ?? quotation.subject,
+      address: snap.address ?? quotation.address,
+      valid_until: snap.valid_until ?? quotation.valid_until,
+      validity_days: snap.validity_days ?? quotation.validity_days,
+      signatory_name: snap.signatory_name ?? quotation.signatory_name,
+      signatory_designation: snap.signatory_designation ?? quotation.signatory_designation,
+      signatory_email: snap.signatory_email ?? quotation.signatory_email,
+      signatory_phone: snap.signatory_phone ?? quotation.signatory_phone,
+      signatory_user: (snap.signatory_user as any) ?? quotation.signatory_user,
+      sales_person_name: snap.sales_person_name ?? quotation.sales_person_name,
+      sales_person_designation: snap.sales_person_designation ?? quotation.sales_person_designation,
+      sales_person_phone: snap.sales_person_phone ?? quotation.sales_person_phone,
+      sales_person_email: snap.sales_person_email ?? quotation.sales_person_email,
+      sales_person_user: (snap.sales_person_user as any) ?? quotation.sales_person_user,
+      bank_name: snap.bank_name ?? quotation.bank_name,
+      account_name: snap.account_name ?? quotation.account_name,
+      account_number: snap.account_number ?? quotation.account_number,
+      ifsc_code: snap.ifsc_code ?? quotation.ifsc_code,
+      branch_name: snap.branch_name ?? quotation.branch_name,
+      account_type: snap.account_type ?? quotation.account_type,
+      gst_enabled: snap.gst_enabled ?? quotation.gst_enabled,
+      is_historical_snapshot: true,
+    };
+  }, [quotation, isViewingArchive, selectedRevisionSnapshot]);
 
   if (!open || !quotation) return null;
 
@@ -75,11 +148,12 @@ export function QuotationViewModal({
     if (!doc) return;
 
     doc.open();
+    const docTitle = `Quotation_${displayedQuotation.ref_no || displayedQuotation.quotation_no || "Document"}${isViewingArchive ? `_v${displayedQuotation.version}` : ""}`;
     doc.write(`
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Quotation_${quotation.ref_no || quotation.quotation_no || "Document"}</title>
+          <title>${docTitle}</title>
           <style>
             @page {
               size: A4 portrait;
@@ -226,19 +300,62 @@ export function QuotationViewModal({
               <FileText className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                Quotation Preview: {quotation.ref_no || quotation.quotation_no}
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-                  quotation.approval_status === "approved" || quotation.status === "approved"
-                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                    : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                }`}>
-                  {quotation.approval_status || quotation.status}
-                </span>
-              </h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  Quotation Preview: {displayedQuotation.ref_no || displayedQuotation.quotation_no}
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                      displayedQuotation.approval_status === "approved" || displayedQuotation.status === "approved"
+                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                        : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                    }`}
+                  >
+                    {displayedQuotation.approval_status || displayedQuotation.status}
+                  </span>
+                  <span
+                    className={`rounded-md px-1.5 py-0.2 text-[10px] font-extrabold ${
+                      isViewingArchive
+                        ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300"
+                        : "bg-indigo-100 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-300"
+                    }`}
+                  >
+                    v{displayedQuotation.version || 1} {isViewingArchive ? "(Archived)" : ""}
+                  </span>
+                </h3>
+              </div>
               <p className="text-[11px] text-slate-500">
-                Official Letterhead format for {quotation.customer_name}
+                Official Letterhead format for {displayedQuotation.customer_name}
               </p>
+
+              {/* Version switcher pills */}
+              {availableVersions.length > 1 && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1 flex items-center gap-1">
+                    <History className="h-3 w-3" /> Version:
+                  </span>
+                  {availableVersions.map((v) => {
+                    const isCurrent = v === currentVersion;
+                    const isSelected = activeVersion === v;
+                    return (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setSelectedVersion(isCurrent ? null : v)}
+                        className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold transition-all cursor-pointer ${
+                          isSelected
+                            ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                            : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300"
+                        }`}
+                      >
+                        v{v}
+                        {isCurrent && (
+                          <span className="text-[9px] font-extrabold uppercase opacity-80">(Cur)</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
@@ -258,16 +375,17 @@ export function QuotationViewModal({
                   onClick={async () => {
                     const { buildQuotationPdf } = await import("./buildQuotationPdf");
                     const pdf = await buildQuotationPdf({
-                      quotation,
+                      quotation: displayedQuotation,
                       company: companyData as any,
                       portalLabel,
                       downloadedBy,
                     });
-                    pdf.save(`Quotation_${quotation.ref_no || quotation.quotation_no || "document"}.pdf`);
+                    const fileName = `Quotation_${displayedQuotation.ref_no || displayedQuotation.quotation_no || "document"}${isViewingArchive ? `_v${displayedQuotation.version}` : ""}.pdf`;
+                    pdf.save(fileName);
                   }}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
                 >
-                  Download PDF
+                  Download PDF (v{displayedQuotation.version || 1})
                 </button>
                 <button
                   type="button"
@@ -275,7 +393,7 @@ export function QuotationViewModal({
                   className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-hover cursor-pointer"
                 >
                   <Printer className="h-3.5 w-3.5" />
-                  Print
+                  Print (v{displayedQuotation.version || 1})
                 </button>
               </>
             )}
@@ -312,7 +430,7 @@ export function QuotationViewModal({
               className="w-full max-w-[794px] bg-white shadow-xl rounded-md overflow-hidden flex justify-center"
             >
               <QuotationPdfTemplate
-                quotation={quotation}
+                quotation={displayedQuotation}
                 portalLabel={portalLabel}
                 downloadedBy={downloadedBy}
               />

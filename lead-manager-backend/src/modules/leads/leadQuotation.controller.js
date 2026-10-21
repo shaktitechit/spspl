@@ -8,6 +8,8 @@ module.exports = {
   create: quotationController.create,
   list: quotationController.list,
   getById: quotationController.getById,
+  getVersionDetails: quotationController.getVersionDetails,
+  compareVersions: quotationController.compareVersions,
   update: quotationController.update,
   getDefaultTerms: quotationController.getDefaultTerms,
   remove: quotationController.remove,

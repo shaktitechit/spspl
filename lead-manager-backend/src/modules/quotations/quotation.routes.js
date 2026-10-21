@@ -33,6 +33,8 @@ router.post('/auto-expire', elevatedRoles, controller.triggerAutoExpiry);
 router.get('/', allSalesRoles, controller.list);
 router.post('/', elevatedRoles, controller.create);
 router.get('/:id', allSalesRoles, controller.getById);
+router.get('/:id/versions/:version', allSalesRoles, controller.getVersionDetails);
+router.get('/:id/compare', allSalesRoles, controller.compareVersions);
 router.patch('/:id', allSalesRoles, controller.update);
 router.put('/:id', allSalesRoles, controller.update);
 router.post('/:id/submit-for-approval', allSalesRoles, controller.submitForApproval);
