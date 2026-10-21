@@ -1,0 +1,244 @@
+# =============================================================================
+# Medica — nginx sites-available (HTTPS)
+#
+# DO NOT enable this file until certificates exist:
+#   ls /etc/letsencrypt/live/opms.medicaent.in/fullchain.pem
+#
+# Order of operations:
+#   1) Keep medica.http-bootstrap enabled (HTTP proxies + ACME webroot)
+#   2) Point DNS A/AAAA for all hosts at this server
+#   3) Issue multi-SAN or wildcard cert (see nginx/snippets/medica-ssl.conf)
+#   4) Install http{} helpers (REQUIRED — defines log_format opms_main + limit_req_zone):
+#        sudo cp nginx/snippets/* /etc/nginx/snippets/
+#        sudo cp nginx/conf.d/opms-http.conf /etc/nginx/conf.d/opms-http.conf
+#      (Ubuntu/Debian auto-includes conf.d from http{}. If your nginx.conf
+#       does not include conf.d, add once inside http{}:
+#        include /etc/nginx/snippets/logging.conf;)
+#   5) Then:
+#        sudo cp nginx/sites-available/medica /etc/nginx/sites-available/medica
+#        sudo ln -sfn /etc/nginx/sites-available/medica /etc/nginx/sites-enabled/medica
+#        sudo nginx -t && sudo systemctl reload nginx
+#   6) Optional hard 15-min IP ban (fail2ban):
+#        sudo cp nginx/fail2ban/filter.d/medica-auth-login.conf /etc/fail2ban/filter.d/
+#        sudo cp nginx/fail2ban/jail.d/medica-auth.conf /etc/fail2ban/jail.d/
+#        sudo fail2ban-client reload
+#
+# listen is "ssl" only (no http2 flag) to avoid
+# "protocol options redefined" warnings with other sites on :443.
+# =============================================================================
+
+upstream medica_opms_backend          { server 127.0.0.1:5001; keepalive 32; }
+upstream medica_opms_frontend         { server 127.0.0.1:5002; keepalive 16; }
+upstream medica_auth_service          { server 127.0.0.1:5003; keepalive 32; }
+upstream medica_user_manager_frontend { server 127.0.0.1:5004; keepalive 16; }
+upstream medica_product_service       { server 127.0.0.1:5005; keepalive 32; }
+upstream medica_party_service         { server 127.0.0.1:5006; keepalive 32; }
+upstream medica_work_planner_backend  { server 127.0.0.1:5007; keepalive 32; }
+upstream medica_work_planner_frontend { server 127.0.0.1:5008; keepalive 16; }
+upstream medica_lead_manager_backend  { server 127.0.0.1:5009; keepalive 32; }
+upstream medica_lead_manager_frontend { server 127.0.0.1:5010; keepalive 16; }
+upstream medica_notification_service  { server 127.0.0.1:5012; keepalive 32; }
+upstream medica_app_frontend          { server 127.0.0.1:5013; keepalive 16; }
+
+# -----------------------------------------------------------------------------
+# HTTP → HTTPS (+ ACME challenge)
+# -----------------------------------------------------------------------------
+server {
+    listen 80;
+    listen [::]:80;
+    server_name
+        opms.medicaent.in
+        app.medicaent.in
+        users.medicaent.in
+        plans.medicaent.in
+        leads.medicaent.in
+        api.medicaent.in
+        auth.medicaent.in
+        api-products.medicaent.in
+        api-parties.medicaent.in
+        api-plans.medicaent.in
+        api-leads.medicaent.in;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/html;
+        allow all;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# =============================================================================
+# Frontends
+# =============================================================================
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name app.medicaent.in;
+    include /etc/nginx/snippets/medica-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://medica_app_frontend;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name opms.medicaent.in;
+    include /etc/nginx/snippets/medica-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://medica_opms_frontend;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name users.medicaent.in;
+    include /etc/nginx/snippets/medica-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://medica_user_manager_frontend;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name plans.medicaent.in;
+    include /etc/nginx/snippets/medica-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://medica_work_planner_frontend;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name leads.medicaent.in;
+    include /etc/nginx/snippets/medica-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://medica_lead_manager_frontend;
+    }
+}
+
+# =============================================================================
+# APIs
+# =============================================================================
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name api.medicaent.in;
+    include /etc/nginx/snippets/medica-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://medica_opms_backend;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name auth.medicaent.in;
+    include /etc/nginx/snippets/medica-ssl.conf;
+    client_max_body_size 50m;
+    access_log /var/log/nginx/medica-auth.access.log opms_main;
+
+    # Requires http{} include of snippets/logging.conf (log_format + limit_req_zone)
+    include /etc/nginx/snippets/medica-auth-rate-limit.conf;
+
+    location ~ ^/api/notifications/stream {
+        include /etc/nginx/snippets/proxy-sse.conf;
+        proxy_pass http://medica_auth_service;
+    }
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://medica_auth_service;
+        proxy_read_timeout 120s;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name api-products.medicaent.in;
+    include /etc/nginx/snippets/medica-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://medica_product_service;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name api-parties.medicaent.in;
+    include /etc/nginx/snippets/medica-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://medica_party_service;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name api-plans.medicaent.in;
+    include /etc/nginx/snippets/medica-ssl.conf;
+    client_max_body_size 50m;
+
+    location ~ ^/api/notifications/stream {
+        include /etc/nginx/snippets/proxy-sse.conf;
+        proxy_pass http://medica_work_planner_backend;
+    }
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://medica_work_planner_backend;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name api-leads.medicaent.in;
+    include /etc/nginx/snippets/medica-ssl.conf;
+    client_max_body_size 50m;
+
+    location ~ ^/api/notifications/stream {
+        include /etc/nginx/snippets/proxy-sse.conf;
+        proxy_pass http://medica_lead_manager_backend;
+    }
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://medica_lead_manager_backend;
+        proxy_read_timeout 120s;
+    }
+}

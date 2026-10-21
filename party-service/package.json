@@ -1,0 +1,21 @@
+{
+  "name": "medica-party-service",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed:india-geo": "node scripts/seed-india-party-geo.js",
+    "backfill:party-geo": "node scripts/backfill-party-geo-from-text.js",
+    "backfill:party-zone": "node scripts/backfill-party-zone-id.js"
+  },
+  "dependencies": {
+    "axios": "^1.17.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.10.1"
+  }
+}

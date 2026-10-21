@@ -1,0 +1,78 @@
+/**
+ * Allowed transitions on canonical ORDER_STATUS values.
+ * Legacy statuses are normalized before lookup (see workflow.constants.js).
+ * @module modules/workflow/workflow.transitions
+ */
+
+const { ORDER_STATUS: S } = require('../orders/order.constants');
+
+module.exports = {
+  [S.DRAFT]: [S.SUBMITTED, S.CANCELLED],
+
+  [S.SUBMITTED]: [S.SALES_APPROVED, S.FINANCE_REVIEW, S.FINANCE_REJECTED, S.ON_HOLD, S.CANCELLED],
+
+  [S.SALES_APPROVED]: [S.FINANCE_REVIEW, S.FINANCE_REJECTED, S.ON_HOLD, S.CANCELLED],
+
+  [S.FINANCE_REVIEW]: [
+    S.FINANCE_APPROVED,
+    S.FINANCE_REJECTED,
+    S.ON_HOLD,
+    S.DISPATCH,
+    S.CANCELLED,
+  ],
+
+  [S.FINANCE_REJECTED]: [S.SUBMITTED, S.CANCELLED],
+
+  [S.ACCOUNT_REVIEW]: [
+    S.ACCOUNT_APPROVED,
+    S.ACCOUNT_REJECTED,
+    S.FINANCE_REJECTED,
+    S.ON_HOLD,
+    S.CANCELLED,
+  ],
+
+  [S.ACCOUNT_REJECTED]: [S.ACCOUNT_REVIEW, S.FINANCE_APPROVED, S.CANCELLED],
+
+  [S.DELIVERED]: [S.IN_TRANSIT, S.CANCELLED],
+
+  [S.DISPATCH]: [
+    S.IN_TRANSIT,
+    S.ON_HOLD,
+    S.FINANCE_REJECTED,
+    S.CANCELLED,
+  ],
+
+  [S.IN_TRANSIT]: [S.DELIVERED, S.ON_HOLD, S.CANCELLED],
+
+  [S.ACCOUNT_APPROVED]: [
+    S.DISPATCH,
+    S.ACCOUNT_REVIEW,
+    S.ON_HOLD,
+    S.FINANCE_REJECTED,
+    S.ACCOUNT_REJECTED,
+    S.CANCELLED,
+  ],
+
+  [S.FINANCE_APPROVED]: [
+    S.ACCOUNT_REVIEW,
+    S.DISPATCH,
+    S.ON_HOLD,
+    S.FINANCE_REJECTED,
+    S.CANCELLED,
+  ],
+
+  [S.ON_HOLD]: [
+    S.SUBMITTED,
+    S.SALES_APPROVED,
+    S.FINANCE_REVIEW,
+    S.FINANCE_APPROVED,
+    S.ACCOUNT_REVIEW,
+    S.ACCOUNT_APPROVED,
+    S.DISPATCH,
+    S.IN_TRANSIT,
+    S.FINANCE_REJECTED,
+    S.CANCELLED,
+  ],
+
+  [S.CANCELLED]: [],
+};

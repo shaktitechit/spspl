@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finance Approval Pending - Order #{{orderNo}}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #1e293b;
+      background-color: #f1f5f9;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .wrapper {
+      width: 100%;
+      background-color: #f1f5f9;
+      padding: 30px 15px;
+      box-sizing: border-box;
+    }
+
+    .letterhead-card {
+      max-width: 680px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e2e8f0;
+    }
+
+    /* ── Company Letterhead Header ── */
+    .letterhead-header {
+      padding: 28px 32px 16px 32px;
+      background-color: #ffffff;
+      text-align: center;
+    }
+
+    .header-logo {
+      max-height: 72px;
+      max-width: 180px;
+      display: block;
+      margin: 0 auto 12px auto;
+    }
+
+    .company-name {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 800;
+      color: #1e3a5f;
+      letter-spacing: -0.3px;
+      text-transform: uppercase;
+    }
+
+    .company-tagline {
+      font-size: 12px;
+      color: #64748b;
+      font-style: italic;
+      margin-top: 4px;
+    }
+
+    .header-divider {
+      height: 3px;
+      background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 70%, #bfdbfe 100%);
+      margin-top: 16px;
+      border-radius: 2px;
+    }
+
+    .doc-badge-wrap {
+      text-align: center;
+      padding: 12px 32px 0 32px;
+    }
+
+    .doc-badge {
+      display: inline-block;
+      background-color: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: #166534;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+
+    /* ── Content ── */
+    .content {
+      padding: 24px 32px;
+    }
+
+    .greeting {
+      font-size: 15px;
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 8px;
+    }
+
+    .intro-text {
+      font-size: 13.5px;
+      color: #475569;
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+
+    .order-info-card {
+      background-color: #f8fafc;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      border: 1px solid #e2e8f0;
+      border-left: 4px solid #16a34a;
+    }
+
+    .badge-pending {
+      background-color: #fef3c7;
+      color: #92400e;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .badge-priority-urgent {
+      background-color: #fee2e2;
+      color: #991b1b;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .badge-priority-high {
+      background-color: #ffedd5;
+      color: #9a3412;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .badge-priority-normal {
+      background-color: #f1f5f9;
+      color: #475569;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 20px 0 10px 0;
+      padding-bottom: 6px;
+      border-bottom: 2px solid #f1f5f9;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* ── Items Table (Strictly No Pricing) ── */
+    .items-table-container {
+      width: 100%;
+      overflow-x: auto;
+      margin-bottom: 20px;
+    }
+
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+      text-align: left;
+    }
+
+    .items-table th {
+      background-color: #166534;
+      color: #ffffff;
+      padding: 9px 8px;
+      font-weight: 600;
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .items-table td {
+      padding: 8px 8px;
+      border-bottom: 1px solid #e2e8f0;
+      color: #334155;
+    }
+
+    .items-table tr:nth-child(even) td {
+      background-color: #f8fafc;
+    }
+
+    .text-center {
+      text-align: center;
+    }
+
+    .font-semibold {
+      font-weight: 600;
+    }
+
+    .action-box {
+      background-color: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-left: 4px solid #16a34a;
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: #166534;
+      line-height: 1.5;
+    }
+
+    .action-title {
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    /* ── Company Letterhead Footer ── */
+    .letter-footer {
+      background-color: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+      padding: 20px 32px;
+      text-align: center;
+      font-size: 11.5px;
+      color: #64748b;
+      line-height: 1.7;
+    }
+
+    .letter-footer a {
+      color: #1e40af;
+      text-decoration: underline;
+    }
+
+    .letter-footer p {
+      margin: 3px 0;
+    }
+
+    .copyright-line {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrapper">
+    <div class="letterhead-card">
+
+      <!-- Company Letterhead Header -->
+      <div class="letterhead-header">
+        {{companyLogoHtml}}
+        <h1 class="company-name">{{companyName}}</h1>
+        <div class="company-tagline">{{companyTagline}}</div>
+        <div class="header-divider"></div>
+      </div>
+
+      <div class="doc-badge-wrap">
+        <span class="doc-badge">Finance Approval Pending Alert</span>
+      </div>
+
+      <!-- Content -->
+      <div class="content">
+        <div class="greeting">Hello {{financePersonName}},</div>
+        <div class="intro-text">
+          Order <strong>#{{orderNo}}</strong> for customer <strong>{{customerName}}</strong> is currently <span class="badge-pending">PENDING FINANCE APPROVAL</span>. Due sheet has been uploaded — below are the delivery schedule and priority details for your review.
+        </div>
+
+        <!-- Order Info Card -->
+        <div class="order-info-card">
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 4px 0; font-size: 13px; color: #64748b;">Order Number:</td>
+              <td style="padding: 4px 0; font-size: 13px; color: #0f172a; font-weight: 700; text-align: right;">#{{orderNo}}</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; font-size: 13px; color: #64748b;">Customer / Party:</td>
+              <td style="padding: 4px 0; font-size: 13px; color: #0f172a; font-weight: 600; text-align: right;">{{customerName}}</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; font-size: 13px; color: #64748b;">Order Date:</td>
+              <td style="padding: 4px 0; font-size: 13px; color: #0f172a; font-weight: 600; text-align: right;">{{orderDate}}</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; font-size: 13px; color: #64748b;">Expected Delivery Date:</td>
+              <td style="padding: 4px 0; font-size: 13px; color: #1e40af; font-weight: 700; text-align: right;">{{expectedDeliveryDate}}</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; font-size: 13px; color: #64748b;">Priority:</td>
+              <td style="padding: 4px 0; font-size: 13px; text-align: right;">{{priorityBadge}}</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; font-size: 13px; color: #64748b;">Approval Status:</td>
+              <td style="padding: 4px 0; font-size: 13px; color: #b45309; font-weight: 700; text-align: right;">Pending Finance Approval</td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Pending Orders Section -->
+        <div class="section-title">
+          <span>Other Orders Pending Finance Approval</span>
+          <span class="badge-pending">{{totalPendingCount}} Orders Pending</span>
+        </div>
+        <div class="items-table-container">
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th class="text-center" style="width: 6%;">#</th>
+                <th style="width: 22%;">Order No</th>
+                <th style="width: 32%;">Customer / Party</th>
+                <th class="text-center" style="width: 15%;">Order Date</th>
+                <th class="text-center" style="width: 15%;">Expected Delivery</th>
+                <th class="text-center" style="width: 10%;">Priority</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{pendingOrdersRows}}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Action Box -->
+        <div class="action-box">
+          <div class="action-title">📌 Finance Action Required</div>
+          <div>Please review the verified due sheet details in the finance portal and grant finance clearance.</div>
+        </div>
+      </div>
+
+      <!-- Company Letterhead Footer -->
+      <div class="letter-footer">
+        {{companyFooterHtml}}
+        <div class="copyright-line">&copy; {{year}} {{companyName}}. All rights reserved.</div>
+      </div>
+
+    </div>
+  </div>
+</body>
+
+</html>

@@ -1,0 +1,19 @@
+# syntax=docker/dockerfile:1.4
+FROM node:20-alpine
+
+WORKDIR /app
+
+ARG NEXT_PUBLIC_API_ORIGIN=http://localhost:5001
+ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY=
+ENV NEXT_PUBLIC_API_ORIGIN=$NEXT_PUBLIC_API_ORIGIN
+ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY --from=session_auth . ./session-auth-client
+COPY . .
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]

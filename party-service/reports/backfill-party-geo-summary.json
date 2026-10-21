@@ -1,0 +1,12 @@
+{
+  "scanned": 580,
+  "skipped_non_india": 0,
+  "skipped_already_complete": 0,
+  "skipped_no_state_text": 580,
+  "updated": 0,
+  "state_only": 0,
+  "full_geo": 0,
+  "topUnmatchedStates": [],
+  "topUnmatchedCities": [],
+  "dryRun": false
+}

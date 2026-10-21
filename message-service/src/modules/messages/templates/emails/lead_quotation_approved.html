@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{subject}}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #1e293b;
+      background-color: #f8fafc;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .wrapper {
+      width: 100%;
+      background-color: #f8fafc;
+      padding: 30px 15px;
+      box-sizing: border-box;
+    }
+
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+      border: 1px solid #e2e8f0;
+    }
+
+    .header {
+      background-color: #ecfdf5;
+      padding: 28px 24px;
+      text-align: center;
+      border-bottom: 1px solid #d1fae5;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 700;
+      color: #047857;
+      letter-spacing: -0.4px;
+    }
+
+    .header p {
+      margin: 6px 0 0 0;
+      font-size: 14px;
+      color: #059669;
+      font-weight: 500;
+    }
+
+    .content {
+      padding: 28px 24px;
+    }
+
+    .greeting {
+      font-size: 16px;
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 8px;
+    }
+
+    .intro-text {
+      font-size: 14px;
+      color: #475569;
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #ecfdf5;
+      color: #047857;
+      border: 1px solid #a7f3d0;
+    }
+
+    .info-card {
+      background-color: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-left: 4px solid #059669;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 22px;
+    }
+
+    .info-card table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .info-card td {
+      padding: 5px 0;
+      font-size: 13px;
+    }
+
+    .info-card td.label {
+      color: #64748b;
+      width: 40%;
+    }
+
+    .info-card td.value {
+      color: #0f172a;
+      font-weight: 600;
+      text-align: right;
+    }
+
+    .action-box {
+      background-color: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      border-left: 4px solid #059669;
+      border-radius: 6px;
+      padding: 14px 16px;
+      font-size: 13px;
+      color: #065f46;
+      line-height: 1.5;
+    }
+
+    .action-title {
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .footer {
+      background-color: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+      padding: 22px 24px;
+      text-align: center;
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    .footer p {
+      margin: 4px 0;
+    }
+
+    .footer a {
+      color: #1e40af;
+      text-decoration: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header">
+        {{companyLogoHtml}}
+        <h1>{{companyName}}</h1>
+        <p>Quotation Approved</p>
+      </div>
+
+      <div class="content">
+        <div class="greeting">Hello {{recipientName}},</div>
+        <div class="intro-text">
+          Quotation <strong>#{{quotationNo}}</strong> for <strong>{{customerName}}</strong> has been
+          <strong>approved</strong> by signatory <strong>{{actorName}}</strong>.
+          <span class="badge">APPROVED</span>
+        </div>
+
+        <div class="info-card">
+          <table>
+            <tr>
+              <td class="label">Quotation #</td>
+              <td class="value">#{{quotationNo}}</td>
+            </tr>
+            <tr>
+              <td class="label">Reference</td>
+              <td class="value">{{refNo}}</td>
+            </tr>
+            <tr>
+              <td class="label">Customer / Party</td>
+              <td class="value">{{customerName}}</td>
+            </tr>
+            <tr>
+              <td class="label">Subject</td>
+              <td class="value">{{quotationSubject}}</td>
+            </tr>
+            <tr>
+              <td class="label">Grand Total</td>
+              <td class="value">₹{{grandTotal}}</td>
+            </tr>
+            <tr>
+              <td class="label">Sales representative</td>
+              <td class="value">{{salesPersonName}}</td>
+            </tr>
+            <tr>
+              <td class="label">Approved by</td>
+              <td class="value">{{actorName}}</td>
+            </tr>
+            <tr>
+              <td class="label">Approved on</td>
+              <td class="value">{{decisionDate}}</td>
+            </tr>
+          </table>
+        </div>
+
+        <div class="action-box">
+          <div class="action-title">Next step</div>
+          <div>{{portalHint}}</div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>If you have questions, contact support at <a href="mailto:{{companyEmail}}">{{companyEmail}}</a>.</p>
+        <p>&copy; {{year}} {{companyName}}. All rights reserved.</p>
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>

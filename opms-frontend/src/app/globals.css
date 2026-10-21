@@ -1,0 +1,666 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Brand palette (from design swatch):
+ *   #3c467b  #50589c  #636ccb  #6e8cfb
+ */
+:root {
+  color-scheme: light;
+  /* System stacks — avoids Google Fonts fetch during Docker / offline builds */
+  --font-geist-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-geist-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+
+  --brand-50: #eef0f8;
+  --brand-100: #e0e4f5;
+  --brand-200: #c7cef0;
+  --brand-300: #a3b0e8;
+  --brand-400: #6e8cfb;
+  --brand-500: #636ccb;
+  --brand-600: #555ebd;
+  --brand-700: #50589c;
+  --brand-800: #3c467b;
+  --brand-900: #2f365f;
+  --brand-950: #252a4a;
+
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --surface-muted: #f1f5f9;
+  --primary: var(--brand-500);
+  --primary-hover: var(--brand-700);
+  --primary-muted: var(--brand-50);
+  --primary-foreground: #ffffff;
+  --ring: var(--brand-400);
+  --danger: #e11d48;
+  --danger-hover: #be123c;
+  --danger-muted: #fff1f2;
+  --danger-foreground: #ffffff;
+  --success: #059669;
+  --success-muted: #ecfdf5;
+  --warning: #d97706;
+  --warning-muted: #fffbeb;
+
+  /*
+   * Responsive type + density (mobile-first).
+   * Prefer text-2xs…text-8xl / spacing utilities over arbitrary values.
+   * Breakpoints align with Tailwind: sm 640 · md 768 · lg 1024 · xl 1280 · 2xl 1536
+   *
+   * Phone default (<640): base 12px
+   */
+  --app-spacing: 0.1875rem;
+  /* denser on phones */
+
+  --app-text-2xs: 0.5rem;
+  /* 8px */
+  --app-text-2xs--line-height: 0.75rem;
+  --app-text-xs: 0.5625rem;
+  /* 9px */
+  --app-text-xs--line-height: 0.875rem;
+  --app-text-sm: 0.6875rem;
+  /* 11px */
+  --app-text-sm--line-height: 1rem;
+  --app-text-base: 0.75rem;
+  /* 12px */
+  --app-text-base--line-height: 1.125rem;
+  --app-text-lg: 0.875rem;
+  /* 14px */
+  --app-text-lg--line-height: 1.25rem;
+  --app-text-xl: 0.9375rem;
+  /* 15px */
+  --app-text-xl--line-height: 1.375rem;
+  --app-text-2xl: 1.125rem;
+  /* 18px */
+  --app-text-2xl--line-height: 1.5rem;
+  --app-text-3xl: 1.375rem;
+  /* 22px */
+  --app-text-3xl--line-height: 1.75rem;
+  --app-text-4xl: 1.75rem;
+  /* 28px */
+  --app-text-4xl--line-height: 2rem;
+  --app-text-5xl: 2.25rem;
+  /* 36px */
+  --app-text-5xl--line-height: 1;
+  --app-text-6xl: 2.8125rem;
+  /* 45px */
+  --app-text-6xl--line-height: 1;
+  --app-text-7xl: 3.3125rem;
+  /* 53px */
+  --app-text-7xl--line-height: 1;
+  --app-text-8xl: 4.5rem;
+  /* 72px */
+  --app-text-8xl--line-height: 1;
+}
+
+/* Tablet portrait / large phones (sm): base 13px */
+@media (min-width: 640px) {
+  :root {
+    --app-spacing: 0.203125rem;
+
+    --app-text-2xs: 0.53125rem;
+    /* 8.5px */
+    --app-text-2xs--line-height: 0.75rem;
+    --app-text-xs: 0.625rem;
+    /* 10px */
+    --app-text-xs--line-height: 0.9375rem;
+    --app-text-sm: 0.71875rem;
+    /* 11.5px */
+    --app-text-sm--line-height: 1.0625rem;
+    --app-text-base: 0.8125rem;
+    /* 13px */
+    --app-text-base--line-height: 1.1875rem;
+    --app-text-lg: 0.9375rem;
+    /* 15px */
+    --app-text-lg--line-height: 1.375rem;
+    --app-text-xl: 1.0625rem;
+    /* 17px */
+    --app-text-xl--line-height: 1.5rem;
+    --app-text-2xl: 1.25rem;
+    /* 20px */
+    --app-text-2xl--line-height: 1.625rem;
+    --app-text-3xl: 1.5rem;
+    /* 24px */
+    --app-text-3xl--line-height: 1.875rem;
+    --app-text-4xl: 1.875rem;
+    /* 30px */
+    --app-text-4xl--line-height: 2.125rem;
+    --app-text-5xl: 2.4375rem;
+    /* 39px */
+    --app-text-5xl--line-height: 1;
+    --app-text-6xl: 3.0625rem;
+    /* 49px */
+    --app-text-6xl--line-height: 1;
+    --app-text-7xl: 3.625rem;
+    /* 58px */
+    --app-text-7xl--line-height: 1;
+    --app-text-8xl: 4.875rem;
+    /* 78px */
+    --app-text-8xl--line-height: 1;
+  }
+}
+
+/* Tablet landscape / small laptops (md): base 14px — primary app size */
+@media (min-width: 768px) {
+  :root {
+    --app-spacing: 0.21875rem;
+
+    --app-text-2xs: 0.5625rem;
+    /* 9px */
+    --app-text-2xs--line-height: 0.75rem;
+    --app-text-xs: 0.6875rem;
+    /* 11px */
+    --app-text-xs--line-height: 1rem;
+    --app-text-sm: 0.75rem;
+    /* 12px */
+    --app-text-sm--line-height: 1.125rem;
+    --app-text-base: 0.875rem;
+    /* 14px */
+    --app-text-base--line-height: 1.25rem;
+    --app-text-lg: 1rem;
+    /* 16px */
+    --app-text-lg--line-height: 1.5rem;
+    --app-text-xl: 1.125rem;
+    /* 18px */
+    --app-text-xl--line-height: 1.625rem;
+    --app-text-2xl: 1.3125rem;
+    /* 21px */
+    --app-text-2xl--line-height: 1.75rem;
+    --app-text-3xl: 1.625rem;
+    /* 26px */
+    --app-text-3xl--line-height: 2rem;
+    --app-text-4xl: 2rem;
+    /* 32px */
+    --app-text-4xl--line-height: 2.25rem;
+    --app-text-5xl: 2.625rem;
+    /* 42px */
+    --app-text-5xl--line-height: 1;
+    --app-text-6xl: 3.25rem;
+    /* 52px */
+    --app-text-6xl--line-height: 1;
+    --app-text-7xl: 3.9375rem;
+    /* 63px */
+    --app-text-7xl--line-height: 1;
+    --app-text-8xl: 5.25rem;
+    /* 84px */
+    --app-text-8xl--line-height: 1;
+  }
+}
+
+/* Desktop (lg): keep 14px base, slightly roomier display sizes */
+@media (min-width: 1024px) {
+  :root {
+    --app-spacing: 0.21875rem;
+
+    --app-text-2xs: 0.5625rem;
+    /* 9px */
+    --app-text-2xs--line-height: 0.75rem;
+    --app-text-xs: 0.6875rem;
+    /* 11px */
+    --app-text-xs--line-height: 1rem;
+    --app-text-sm: 0.75rem;
+    /* 12px */
+    --app-text-sm--line-height: 1.125rem;
+    --app-text-base: 0.875rem;
+    /* 14px */
+    --app-text-base--line-height: 1.25rem;
+    --app-text-lg: 1rem;
+    /* 16px */
+    --app-text-lg--line-height: 1.5rem;
+    --app-text-xl: 1.1875rem;
+    /* 19px */
+    --app-text-xl--line-height: 1.75rem;
+    --app-text-2xl: 1.375rem;
+    /* 22px */
+    --app-text-2xl--line-height: 1.875rem;
+    --app-text-3xl: 1.75rem;
+    /* 28px */
+    --app-text-3xl--line-height: 2.125rem;
+    --app-text-4xl: 2.125rem;
+    /* 34px */
+    --app-text-4xl--line-height: 2.375rem;
+    --app-text-5xl: 2.75rem;
+    /* 44px */
+    --app-text-5xl--line-height: 1;
+    --app-text-6xl: 3.5rem;
+    /* 56px */
+    --app-text-6xl--line-height: 1;
+    --app-text-7xl: 4.25rem;
+    /* 68px */
+    --app-text-7xl--line-height: 1;
+    --app-text-8xl: 5.5rem;
+    /* 88px */
+    --app-text-8xl--line-height: 1;
+  }
+}
+
+/* Large desktop (xl): base 15px */
+@media (min-width: 1280px) {
+  :root {
+    --app-spacing: 0.234375rem;
+
+    --app-text-2xs: 0.59375rem;
+    /* 9.5px */
+    --app-text-2xs--line-height: 0.8125rem;
+    --app-text-xs: 0.71875rem;
+    /* 11.5px */
+    --app-text-xs--line-height: 1.0625rem;
+    --app-text-sm: 0.8125rem;
+    /* 13px */
+    --app-text-sm--line-height: 1.1875rem;
+    --app-text-base: 0.9375rem;
+    /* 15px */
+    --app-text-base--line-height: 1.375rem;
+    --app-text-lg: 1.0625rem;
+    /* 17px */
+    --app-text-lg--line-height: 1.5625rem;
+    --app-text-xl: 1.25rem;
+    /* 20px */
+    --app-text-xl--line-height: 1.75rem;
+    --app-text-2xl: 1.5rem;
+    /* 24px */
+    --app-text-2xl--line-height: 2rem;
+    --app-text-3xl: 1.875rem;
+    /* 30px */
+    --app-text-3xl--line-height: 2.25rem;
+    --app-text-4xl: 2.25rem;
+    /* 36px */
+    --app-text-4xl--line-height: 2.5rem;
+    --app-text-5xl: 3rem;
+    /* 48px */
+    --app-text-5xl--line-height: 1;
+    --app-text-6xl: 3.75rem;
+    /* 60px */
+    --app-text-6xl--line-height: 1;
+    --app-text-7xl: 4.5rem;
+    /* 72px */
+    --app-text-7xl--line-height: 1;
+    --app-text-8xl: 6rem;
+    /* 96px */
+    --app-text-8xl--line-height: 1;
+  }
+}
+
+/* Wide / ultrawide (2xl): base 16px */
+@media (min-width: 1536px) {
+  :root {
+    --app-spacing: 0.25rem;
+
+    --app-text-2xs: 0.625rem;
+    /* 10px */
+    --app-text-2xs--line-height: 0.875rem;
+    --app-text-xs: 0.75rem;
+    /* 12px */
+    --app-text-xs--line-height: 1rem;
+    --app-text-sm: 0.875rem;
+    /* 14px */
+    --app-text-sm--line-height: 1.25rem;
+    --app-text-base: 1rem;
+    /* 16px */
+    --app-text-base--line-height: 1.5rem;
+    --app-text-lg: 1.125rem;
+    /* 18px */
+    --app-text-lg--line-height: 1.75rem;
+    --app-text-xl: 1.25rem;
+    /* 20px */
+    --app-text-xl--line-height: 1.75rem;
+    --app-text-2xl: 1.5rem;
+    /* 24px */
+    --app-text-2xl--line-height: 2rem;
+    --app-text-3xl: 1.875rem;
+    /* 30px */
+    --app-text-3xl--line-height: 2.25rem;
+    --app-text-4xl: 2.25rem;
+    /* 36px */
+    --app-text-4xl--line-height: 2.5rem;
+    --app-text-5xl: 3rem;
+    /* 48px */
+    --app-text-5xl--line-height: 1;
+    --app-text-6xl: 3.75rem;
+    /* 60px */
+    --app-text-6xl--line-height: 1;
+    --app-text-7xl: 4.5rem;
+    /* 72px */
+    --app-text-7xl--line-height: 1;
+    --app-text-8xl: 6rem;
+    /* 96px */
+    --app-text-8xl--line-height: 1;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-surface-muted: var(--surface-muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-muted: var(--primary-muted);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-muted: var(--danger-muted);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-success: var(--success);
+  --color-success-muted: var(--success-muted);
+  --color-warning: var(--warning);
+  --color-warning-muted: var(--warning-muted);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Custom palette colors used in the components */
+  --color-slate-105: #f8fafc;
+  --color-slate-150: #eef2f6;
+  --color-slate-205: #cbd5e1;
+  --color-slate-250: #94a3b8;
+  --color-slate-350: #8898aa;
+  --color-slate-355: #7b8e9f;
+  --color-slate-455: #64748b;
+  --color-slate-505: #475569;
+  --color-slate-650: #334155;
+  --color-slate-750: #1e293b;
+  --color-slate-905: #0f172a;
+  --color-slate-955: #020617;
+
+  --color-red-650: #e11d48;
+  --color-red-955: #450a0a;
+  --color-red-455: #f87171;
+
+  --color-rose-855: #9f1239;
+  --color-rose-955: #4c0519;
+  --color-rose-450: #f43f5e;
+  --color-rose-455: #fb7185;
+  --color-rose-655: #e11d48;
+  --color-rose-605: #e11d48;
+  --color-rose-445: #fda4af;
+  --color-rose-350: #fda4af;
+
+  /* Align default blue and indigo scales with dynamic brand theme palette */
+  --color-brand-50: var(--brand-50, #eef0f8);
+  --color-brand-100: var(--brand-100, #e0e4f5);
+  --color-brand-200: var(--brand-200, #c7cef0);
+  --color-brand-300: var(--brand-300, #a3b0e8);
+  --color-brand-400: var(--brand-400, #6e8cfb);
+  --color-brand-500: var(--brand-500, #636ccb);
+  --color-brand-600: var(--brand-600, #555ebd);
+  --color-brand-700: var(--brand-700, #50589c);
+  --color-brand-800: var(--brand-800, #3c467b);
+  --color-brand-900: var(--brand-900, #2f365f);
+  --color-brand-950: var(--brand-950, #252a4a);
+
+  --color-blue-50: var(--brand-50, #eef0f8);
+  --color-blue-100: var(--brand-100, #e0e4f5);
+  --color-blue-200: var(--brand-200, #c7cef0);
+  --color-blue-300: var(--brand-300, #a3b0e8);
+  --color-blue-400: var(--brand-400, #6e8cfb);
+  --color-blue-500: var(--brand-500, #636ccb);
+  --color-blue-600: var(--brand-500, #636ccb);
+  --color-blue-700: var(--brand-700, #50589c);
+  --color-blue-800: var(--brand-800, #3c467b);
+  --color-blue-900: var(--brand-900, #2f365f);
+  --color-blue-950: var(--brand-950, #252a4a);
+  --color-blue-855: var(--brand-700, #50589c);
+  --color-blue-955: var(--brand-800, #3c467b);
+  --color-blue-455: var(--brand-400, #6e8cfb);
+
+  --color-indigo-50: var(--brand-50, #eef0f8);
+  --color-indigo-100: var(--brand-100, #e0e4f5);
+  --color-indigo-200: var(--brand-200, #c7cef0);
+  --color-indigo-300: var(--brand-300, #a3b0e8);
+  --color-indigo-400: var(--brand-400, #6e8cfb);
+  --color-indigo-500: var(--brand-500, #636ccb);
+  --color-indigo-600: var(--brand-500, #636ccb);
+  --color-indigo-700: var(--brand-700, #50589c);
+  --color-indigo-800: var(--brand-800, #3c467b);
+  --color-indigo-900: var(--brand-900, #2f365f);
+  --color-indigo-950: var(--brand-950, #252a4a);
+
+  --color-violet-50: var(--brand-50, #eef0f8);
+  --color-violet-100: var(--brand-100, #e0e4f5);
+  --color-violet-200: var(--brand-200, #c7cef0);
+  --color-violet-300: var(--brand-300, #a3b0e8);
+  --color-violet-400: var(--brand-400, #6e8cfb);
+  --color-violet-500: var(--brand-500, #636ccb);
+  --color-violet-600: var(--brand-500, #636ccb);
+  --color-violet-700: var(--brand-700, #50589c);
+  --color-violet-800: var(--brand-800, #3c467b);
+  --color-violet-900: var(--brand-900, #2f365f);
+  --color-violet-950: var(--brand-950, #252a4a);
+  --color-violet-955: var(--brand-950, #252a4a);
+
+  --color-emerald-405: #34d399;
+  --color-emerald-455: #34d399;
+  --color-emerald-955: #064e3b;
+
+  --color-amber-655: #d97706;
+
+
+  /*
+   * Compact production density + type scale.
+   * Values live on :root (--app-*) so device breakpoints can override them.
+   * Tailwind v4 utilities read these tokens app-wide.
+   */
+  --spacing: var(--app-spacing);
+
+  /* App-wide type scale — values live on :root so breakpoints can override them. */
+  --text-2xs: var(--app-text-2xs);
+  --text-2xs--line-height: var(--app-text-2xs--line-height);
+  --text-xs: var(--app-text-xs);
+  --text-xs--line-height: var(--app-text-xs--line-height);
+  --text-sm: var(--app-text-sm);
+  --text-sm--line-height: var(--app-text-sm--line-height);
+  --text-base: var(--app-text-base);
+  --text-base--line-height: var(--app-text-base--line-height);
+  --text-lg: var(--app-text-lg);
+  --text-lg--line-height: var(--app-text-lg--line-height);
+  --text-xl: var(--app-text-xl);
+  --text-xl--line-height: var(--app-text-xl--line-height);
+  --text-2xl: var(--app-text-2xl);
+  --text-2xl--line-height: var(--app-text-2xl--line-height);
+  --text-3xl: var(--app-text-3xl);
+  --text-3xl--line-height: var(--app-text-3xl--line-height);
+  --text-4xl: var(--app-text-4xl);
+  --text-4xl--line-height: var(--app-text-4xl--line-height);
+  --text-5xl: var(--app-text-5xl);
+  --text-5xl--line-height: var(--app-text-5xl--line-height);
+  --text-6xl: var(--app-text-6xl);
+  --text-6xl--line-height: var(--app-text-6xl--line-height);
+  --text-7xl: var(--app-text-7xl);
+  --text-7xl--line-height: var(--app-text-7xl--line-height);
+  --text-8xl: var(--app-text-8xl);
+  --text-8xl--line-height: var(--app-text-8xl--line-height);
+}
+
+:root.dark {
+  color-scheme: dark;
+  --background: var(--dark-bg, #1a2234);
+  --foreground: #f8fafc;
+  --card: var(--dark-card, #232c42);
+  --muted: #94a3b8;
+  --border: var(--dark-border, rgba(255, 255, 255, 0.12));
+  --surface-muted: var(--dark-surface-muted, rgba(255, 255, 255, 0.08));
+  --primary: var(--dark-primary, var(--brand-400, #6e8cfb));
+  --primary-hover: var(--dark-primary-hover, var(--brand-300, #a3b0e8));
+  --primary-muted: var(--dark-primary-muted, rgba(110, 140, 251, 0.22));
+  --primary-foreground: #ffffff;
+  --ring: var(--dark-primary, var(--brand-400, #6e8cfb));
+  --danger: #fb7185;
+  --danger-hover: #fda4af;
+  --danger-muted: rgba(244, 63, 94, 0.12);
+  --danger-foreground: #ffffff;
+  --success: #34d399;
+  --success-muted: rgba(16, 185, 129, 0.12);
+  --warning: #fbbf24;
+  --warning-muted: rgba(245, 158, 11, 0.12);
+}
+
+body {
+  min-height: 100dvh;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: var(--text-base);
+  line-height: var(--text-base--line-height);
+  font-family:
+    var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+table {
+  font-size: var(--text-sm);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--primary) 28%, transparent);
+  color: var(--foreground);
+}
+
+/* ── Portal full-screen loader ───────────────────────────────────────────── */
+@keyframes portal-loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes portal-loader-spin-reverse {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes portal-loader-pulse {
+
+  0%,
+  100% {
+    transform: scale(0.92);
+    opacity: 0.75;
+  }
+
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes portal-loader-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.portal-fs-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+}
+
+.portal-fs-loader__backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--background) 72%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.dark .portal-fs-loader__backdrop {
+  background: color-mix(in srgb, var(--background) 78%, transparent);
+}
+
+.portal-fs-loader__panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem 2.5rem;
+  border-radius: 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  box-shadow:
+    0 24px 48px -12px color-mix(in srgb, #0f172a 22%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--primary) 8%, transparent);
+  animation: portal-loader-fade-in 0.28s ease-out both;
+}
+
+.portal-fs-loader__rings {
+  position: relative;
+  width: 4.5rem;
+  height: 4.5rem;
+}
+
+.portal-fs-loader__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+}
+
+.portal-fs-loader__ring--outer {
+  border-top-color: var(--primary);
+  border-right-color: color-mix(in srgb, var(--primary) 35%, transparent);
+  animation: portal-loader-spin 1.1s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
+}
+
+.portal-fs-loader__ring--middle {
+  inset: 0.55rem;
+  border-bottom-color: color-mix(in srgb, var(--primary) 70%, #60a5fa);
+  border-left-color: color-mix(in srgb, var(--primary) 25%, transparent);
+  animation: portal-loader-spin-reverse 0.85s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
+}
+
+.portal-fs-loader__ring--inner {
+  inset: 1.1rem;
+  border-top-color: color-mix(in srgb, var(--primary) 55%, transparent);
+  animation: portal-loader-spin 0.65s linear infinite;
+}
+
+.portal-fs-loader__core {
+  position: absolute;
+  inset: 1.65rem;
+  border-radius: 9999px;
+  background: linear-gradient(135deg,
+      var(--primary) 0%,
+      color-mix(in srgb, var(--primary) 65%, #93c5fd) 100%);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--primary) 45%, transparent);
+  animation: portal-loader-pulse 1.4s ease-in-out infinite;
+}
+
+.portal-fs-loader__message {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+  text-align: center;
+}
+
+.portal-fs-loader__sub {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-align: center;
+}

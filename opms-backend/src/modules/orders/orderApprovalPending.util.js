@@ -1,0 +1,605 @@
+/**
+ * @fileoverview Resolve admin/finance/account pending approval from OrderApproval batches.
+ * @module modules/orders/orderApprovalPending.util
+ */
+const mongoose = require('mongoose');
+const { ORDER_STATUS, ORDER_WORKFLOW_STAGE, APPROVAL_STATUS } = require('./order.constants');
+
+const PENDING_APPROVAL_STAGES = Object.freeze({
+  ADMIN: 'admin',
+  FINANCE: 'finance',
+  ACCOUNT: 'account',
+});
+
+const ADMIN_PENDING_STATUS_ALIASES = new Set([
+  'pending_review',
+  'admin_pending',
+  'admin_pending_approval',
+]);
+
+const FINANCE_PENDING_STATUS_ALIASES = new Set([
+  'pending_finance_review',
+  'finance_pending',
+  'finance_pending_approval',
+]);
+
+const ACCOUNT_PENDING_STATUS_ALIASES = new Set([
+  'pending_account_review',
+  'account_pending',
+  'account_pending_approval',
+]);
+
+function normalizePendingStage(value) {
+  const raw = String(value || '').toLowerCase();
+  if (ADMIN_PENDING_STATUS_ALIASES.has(raw)) return PENDING_APPROVAL_STAGES.ADMIN;
+  if (FINANCE_PENDING_STATUS_ALIASES.has(raw)) return PENDING_APPROVAL_STAGES.FINANCE;
+  if (ACCOUNT_PENDING_STATUS_ALIASES.has(raw)) return PENDING_APPROVAL_STAGES.ACCOUNT;
+  if (raw === PENDING_APPROVAL_STAGES.ADMIN) return PENDING_APPROVAL_STAGES.ADMIN;
+  if (raw === PENDING_APPROVAL_STAGES.FINANCE) return PENDING_APPROVAL_STAGES.FINANCE;
+  if (raw === PENDING_APPROVAL_STAGES.ACCOUNT) return PENDING_APPROVAL_STAGES.ACCOUNT;
+  return null;
+}
+
+function isApprovalRejected(doc) {
+  return Boolean(doc?.rejected_by || doc?.rejection_reason);
+}
+
+function buildApprovalPendingQuery(stage) {
+  const q = { deletedAt: null };
+  if (stage === PENDING_APPROVAL_STAGES.ADMIN) {
+    q.is_admin_approved = false;
+    return q;
+  }
+  if (stage === PENDING_APPROVAL_STAGES.FINANCE) {
+    q.is_finance_approved = false;
+    return q;
+  }
+  if (stage === PENDING_APPROVAL_STAGES.ACCOUNT) {
+    q.is_account_approved = false;
+    return q;
+  }
+  return null;
+}
+
+async function findOrderIdsWithPendingApproval(stage, models) {
+  const pendingStage = normalizePendingStage(stage);
+  if (!pendingStage) return [];
+
+  const { Order, OrderApproval } = models;
+  const approvalQuery = buildApprovalPendingQuery(pendingStage);
+  const fromApprovals = await OrderApproval.distinct('order', approvalQuery);
+
+  if (pendingStage !== PENDING_APPROVAL_STAGES.ADMIN) {
+    return fromApprovals.map((id) => String(id));
+  }
+
+  const submittedIds = await Order.distinct('_id', {
+    deletedAt: null,
+    status: ORDER_STATUS.SUBMITTED,
+    $or: [
+      { workflow_stage: ORDER_WORKFLOW_STAGE.ADMIN_REVIEW },
+      { workflow_stage: ORDER_WORKFLOW_STAGE.SALES },
+      { admin_approval_status: APPROVAL_STATUS.PENDING },
+    ],
+  });
+
+  const merged = new Set([
+    ...fromApprovals.map((id) => String(id)),
+    ...submittedIds.map((id) => String(id)),
+  ]);
+  return [...merged];
+}
+
+async function findOrderIdsWithAnyPendingApproval(models) {
+  const stages = [
+    PENDING_APPROVAL_STAGES.ADMIN,
+    PENDING_APPROVAL_STAGES.FINANCE,
+    PENDING_APPROVAL_STAGES.ACCOUNT,
+  ];
+  const idSets = await Promise.all(
+    stages.map((stage) => findOrderIdsWithPendingApproval(stage, models)),
+  );
+  return [...new Set(idSets.flat())];
+}
+
+/**
+ * Due-sheet pending: order is in finance review and OrderApproval
+ * does not yet have is_due_sheet_uploaded = true.
+ */
+async function findOrderIdsWithDueSheetPending(models) {
+  const { Order, OrderApproval } = models;
+
+  const notUploadedIds = await OrderApproval.distinct('order', {
+    deletedAt: null,
+    $or: [
+      { is_due_sheet_uploaded: false },
+      { is_due_sheet_uploaded: { $exists: false } },
+      { is_due_sheet_uploaded: null },
+    ],
+  });
+  if (!notUploadedIds.length) return [];
+
+  const orderIds = await Order.distinct('_id', {
+    _id: { $in: notUploadedIds },
+    deletedAt: null,
+    $or: [
+      { workflow_stage: ORDER_WORKFLOW_STAGE.FINANCE_REVIEW },
+      { status: ORDER_STATUS.FINANCE_REVIEW },
+    ],
+  });
+
+  return orderIds.map((id) => String(id));
+}
+
+/**
+ * Finance pending: order is in finance review and OrderApproval
+ * has is_due_sheet_uploaded = true (ready for finance approval).
+ */
+async function findOrderIdsWithFinancePending(models) {
+  const { Order, OrderApproval } = models;
+
+  const uploadedIds = await OrderApproval.distinct('order', {
+    deletedAt: null,
+    is_due_sheet_uploaded: true,
+    is_finance_approved: false,
+  });
+  if (!uploadedIds.length) return [];
+
+  const orderIds = await Order.distinct('_id', {
+    _id: { $in: uploadedIds },
+    deletedAt: null,
+    $or: [
+      { workflow_stage: ORDER_WORKFLOW_STAGE.FINANCE_REVIEW },
+      { status: ORDER_STATUS.FINANCE_REVIEW },
+    ],
+  });
+
+  return orderIds.map((id) => String(id));
+}
+
+/**
+ * Account pending (workflow-aligned):
+ * - status finance_approved / account_review
+ * - owned by account queue (or transitional post-finance dispatch ownership)
+ * - latest non-rejected OrderApproval has is_finance_approved true and
+ *   is_account_approved !== true
+ */
+async function findOrderIdsWithAccountPending(models) {
+  const { Order, OrderApproval } = models;
+
+  const stageOrderIds = await Order.distinct('_id', {
+    deletedAt: null,
+    status: {
+      $in: [ORDER_STATUS.FINANCE_APPROVED, ORDER_STATUS.ACCOUNT_REVIEW],
+    },
+    workflow_stage: {
+      $nin: [
+        ORDER_WORKFLOW_STAGE.CANCELLED,
+        ORDER_WORKFLOW_STAGE.COMPLETED,
+        ORDER_WORKFLOW_STAGE.ON_HOLD,
+      ],
+    },
+    $or: [
+      { workflow_stage: ORDER_WORKFLOW_STAGE.ACCOUNT_REVIEW },
+      { pending_with_role: 'account' },
+      { current_department: 'account' },
+      // Transitional rows from older finance→dispatch mapping.
+      {
+        status: ORDER_STATUS.FINANCE_APPROVED,
+        workflow_stage: ORDER_WORKFLOW_STAGE.DISPATCH,
+        pending_with_role: 'dispatch',
+        current_department: 'dispatch',
+      },
+    ],
+  });
+  if (!stageOrderIds.length) return [];
+
+  // Latest approval per order must be finance-approved and not yet account-approved.
+  const pending = await OrderApproval.aggregate([
+    {
+      $match: {
+        order: { $in: stageOrderIds },
+        deletedAt: null,
+      },
+    },
+    { $sort: { revision_number: -1, createdAt: -1, _id: -1 } },
+    {
+      $group: {
+        _id: '$order',
+        is_finance_approved: { $first: '$is_finance_approved' },
+        is_account_approved: { $first: '$is_account_approved' },
+        rejected_by: { $first: '$rejected_by' },
+        rejection_reason: { $first: '$rejection_reason' },
+      },
+    },
+    {
+      $match: {
+        is_finance_approved: true,
+        is_account_approved: { $ne: true },
+        $and: [
+          {
+            $or: [
+              { rejected_by: null },
+              { rejected_by: { $exists: false } },
+            ],
+          },
+          {
+            $or: [
+              { rejection_reason: null },
+              { rejection_reason: '' },
+              { rejection_reason: { $exists: false } },
+            ],
+          },
+        ],
+      },
+    },
+  ]);
+
+  return pending.map((row) => String(row._id));
+}
+
+function isAnyPendingApprovalStatus(value) {
+  const raw = String(value || '').toLowerCase();
+  return raw === 'pending_approval' || raw === 'pending_approvals';
+}
+
+function resolveOrderApprovalPending(approvalDocs = [], order = {}) {
+  const active = (approvalDocs || []).filter((doc) => !isApprovalRejected(doc));
+
+  const status = String(order.status || '');
+  const adminApprovalStatus = String(order.admin_approval_status || APPROVAL_STATUS.PENDING);
+
+  const adminStatusCleared =
+    adminApprovalStatus === APPROVAL_STATUS.APPROVED
+    || adminApprovalStatus === APPROVAL_STATUS.FULL;
+
+  const adminPendingFromApprovals = active.some((doc) => !doc.is_admin_approved);
+  const adminPendingFromOrder =
+    status === ORDER_STATUS.SUBMITTED
+    || adminApprovalStatus === APPROVAL_STATUS.PENDING
+    || adminApprovalStatus === APPROVAL_STATUS.PARTIAL;
+
+  // Exclusive sequential stages: admin → finance → account.
+  const adminPending = adminStatusCleared
+    ? false
+    : (adminPendingFromApprovals || adminPendingFromOrder);
+
+  const financePending = !adminPending && active.some((doc) => !doc.is_finance_approved);
+  const accountPending =
+    !adminPending
+    && !financePending
+    && active.some((doc) => !doc.is_account_approved);
+
+  let stage = null;
+  if (adminPending) stage = PENDING_APPROVAL_STAGES.ADMIN;
+  else if (financePending) stage = PENDING_APPROVAL_STAGES.FINANCE;
+  else if (accountPending) stage = PENDING_APPROVAL_STAGES.ACCOUNT;
+
+  return {
+    admin: Boolean(adminPending),
+    finance: Boolean(financePending),
+    account: Boolean(accountPending),
+    stage,
+  };
+}
+
+function isTruthyFlag(value) {
+  return value === true || value === 'true' || value === 1 || value === '1';
+}
+
+async function enrichOrdersWithApprovalPending(rows, models) {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+
+  const orderIds = rows
+    .map((row) => row?._id)
+    .filter((id) => id && mongoose.Types.ObjectId.isValid(String(id)));
+
+  if (orderIds.length === 0) {
+    return rows.map((row) => ({
+      ...row,
+      approval_pending: resolveOrderApprovalPending([], row),
+      is_due_sheet_uploaded: false,
+    }));
+  }
+
+  const objectIds = orderIds.map((id) => new mongoose.Types.ObjectId(String(id)));
+
+  const approvals = await models.OrderApproval.find({
+    order: { $in: orderIds },
+    deletedAt: null,
+  })
+    .select(
+      'order is_admin_approved is_finance_approved is_account_approved rejection_reason rejected_by is_due_sheet_uploaded',
+    )
+    .lean();
+
+  // Native collection read so a stale/cached schema path cannot hide the flag.
+  const flaggedOrderIds = new Set(
+    (
+      await models.OrderApproval.collection.distinct('order', {
+        order: { $in: objectIds },
+        deletedAt: null,
+        is_due_sheet_uploaded: true,
+      })
+    ).map((id) => String(id)),
+  );
+
+  const byOrder = new Map();
+  for (const doc of approvals) {
+    const key = String(doc.order);
+    const list = byOrder.get(key) || [];
+    list.push(doc);
+    byOrder.set(key, list);
+  }
+
+  return rows.map((row) => {
+    const orderKey = String(row._id);
+    const docs = byOrder.get(orderKey) || [];
+    // Do not require non-rejected — leftover rejection_reason must not hide the flag.
+    const fromDocs = docs.some((doc) => isTruthyFlag(doc.is_due_sheet_uploaded));
+    return {
+      ...row,
+      approval_pending: resolveOrderApprovalPending(docs, row),
+      is_due_sheet_uploaded: fromDocs || flaggedOrderIds.has(orderKey),
+    };
+  });
+}
+
+async function enrichOrdersWithDueSheetStatus(rows, models) {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+
+  const orderIds = rows
+    .map((row) => row?._id)
+    .filter((id) => id && mongoose.Types.ObjectId.isValid(String(id)));
+
+  if (orderIds.length === 0) {
+    return rows.map((row) => ({
+      ...row,
+      due_sheet_uploaded: false,
+    }));
+  }
+
+  const activeDueSheets = await models.OrderDueSheet.find({
+    order: { $in: orderIds },
+    is_current: true,
+    status: 'active',
+    deletedAt: null,
+  })
+    .select('order')
+    .lean();
+
+  const uploadedOrderIds = new Set(activeDueSheets.map((ds) => String(ds.order)));
+
+  return rows.map((row) => {
+    const uploaded =
+      uploadedOrderIds.has(String(row._id)) || isTruthyFlag(row.is_due_sheet_uploaded);
+    return {
+      ...row,
+      // Keep list tabs / badges in sync: physical sheet OR approval DB flag.
+      due_sheet_uploaded: uploaded,
+      is_due_sheet_uploaded: uploaded || isTruthyFlag(row.is_due_sheet_uploaded),
+    };
+  });
+}
+
+async function enrichOrdersWithFlagStatus(rows, models) {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+
+  const orderIds = rows
+    .map((row) => row?._id)
+    .filter((id) => id && mongoose.Types.ObjectId.isValid(String(id)));
+
+  if (orderIds.length === 0) {
+    return rows.map((row) => ({
+      ...row,
+      flag_status: 'none',
+    }));
+  }
+
+  const flags = await models.OrderFlag.find({
+    order: { $in: orderIds },
+  })
+    .select('order status')
+    .lean();
+
+  const flagsByOrder = new Map();
+  for (const flag of flags) {
+    const key = String(flag.order);
+    const list = flagsByOrder.get(key) || [];
+    list.push(flag);
+    flagsByOrder.set(key, list);
+  }
+
+  return rows.map((row) => {
+    const orderFlags = flagsByOrder.get(String(row._id)) || [];
+    let flag_status = 'none';
+    if (orderFlags.length > 0) {
+      const hasUnresolved = orderFlags.some(
+        (f) => f.status === 'open' || f.status === 'in_progress'
+      );
+      flag_status = hasUnresolved ? 'unresolved' : 'resolved';
+    }
+    return {
+      ...row,
+      flag_status,
+    };
+  });
+}
+
+/**
+ * Parallel enrichment pipeline for listed orders:
+ * Fetches approvals, due sheets, flags, and active transports concurrently in Promise.all
+ * and merges them in a single synchronous pass.
+ */
+async function enrichOrdersParallel(rows, models) {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+
+  const orderIds = rows
+    .map((row) => row?._id)
+    .filter((id) => id && mongoose.Types.ObjectId.isValid(String(id)));
+
+  if (orderIds.length === 0) {
+    return rows.map((row) => ({
+      ...row,
+      approval_pending: resolveOrderApprovalPending([], row),
+      is_due_sheet_uploaded: false,
+      due_sheet_uploaded: false,
+      flag_status: 'none',
+      active_transport: null,
+    }));
+  }
+
+  const objectIds = orderIds.map((id) => new mongoose.Types.ObjectId(String(id)));
+
+  const [
+    approvals,
+    flaggedOrderIdsList,
+    activeDueSheets,
+    flags,
+    transportShipments,
+  ] = await Promise.all([
+    models.OrderApproval
+      ? models.OrderApproval.find({
+          order: { $in: orderIds },
+          deletedAt: null,
+        })
+          .select(
+            'order is_admin_approved is_finance_approved is_account_approved rejection_reason rejected_by is_due_sheet_uploaded'
+          )
+          .lean()
+      : Promise.resolve([]),
+
+    models.OrderApproval?.collection
+      ? models.OrderApproval.collection
+          .distinct('order', {
+            order: { $in: objectIds },
+            deletedAt: null,
+            is_due_sheet_uploaded: true,
+          })
+          .catch(() => [])
+      : Promise.resolve([]),
+
+    models.OrderDueSheet
+      ? models.OrderDueSheet.find({
+          order: { $in: orderIds },
+          is_current: true,
+          status: 'active',
+          deletedAt: null,
+        })
+          .select('order')
+          .lean()
+      : Promise.resolve([]),
+
+    models.OrderFlag
+      ? models.OrderFlag.find({
+          order: { $in: orderIds },
+        })
+          .select('order status')
+          .lean()
+      : Promise.resolve([]),
+
+    models.TransportShipment
+      ? models.TransportShipment.find({
+          order: { $in: orderIds },
+          deletedAt: null,
+          shipment_status: { $nin: ['cancelled', 'returned'] },
+        })
+          .select('order transport_agent dispatch_date expected_delivery_date shipment_status status')
+          .populate('transport_agent', 'agent_name agent_code')
+          .sort({ createdAt: -1 })
+          .lean()
+      : Promise.resolve([]),
+  ]);
+
+  const flaggedOrderIds = new Set((flaggedOrderIdsList || []).map((id) => String(id)));
+  const uploadedDueSheetOrderIds = new Set(
+    (activeDueSheets || []).map((ds) => String(ds.order))
+  );
+
+  const approvalsByOrder = new Map();
+  for (const doc of approvals || []) {
+    const key = String(doc.order);
+    const list = approvalsByOrder.get(key) || [];
+    list.push(doc);
+    approvalsByOrder.set(key, list);
+  }
+
+  const flagsByOrder = new Map();
+  for (const flag of flags || []) {
+    const key = String(flag.order);
+    const list = flagsByOrder.get(key) || [];
+    list.push(flag);
+    flagsByOrder.set(key, list);
+  }
+
+  const transportByOrder = new Map();
+  for (const ts of transportShipments || []) {
+    const key = String(ts.order);
+    if (!transportByOrder.has(key)) {
+      const agent = ts.transport_agent;
+      const agentName = agent
+        ? typeof agent === 'object'
+          ? agent.agent_name || agent.agent_code || ''
+          : String(agent)
+        : '';
+      const scheduledDate = ts.dispatch_date || ts.expected_delivery_date || null;
+      if (agentName || scheduledDate) {
+        transportByOrder.set(key, {
+          agent_name: agentName || undefined,
+          scheduled_date: scheduledDate ? String(scheduledDate) : undefined,
+        });
+      }
+    }
+  }
+
+  return rows.map((row) => {
+    const orderKey = String(row._id);
+    const appDocs = approvalsByOrder.get(orderKey) || [];
+    const fromDocs = appDocs.some((doc) => isTruthyFlag(doc.is_due_sheet_uploaded));
+    const isDueSheetUploaded =
+      fromDocs ||
+      flaggedOrderIds.has(orderKey) ||
+      uploadedDueSheetOrderIds.has(orderKey) ||
+      isTruthyFlag(row.is_due_sheet_uploaded);
+
+    const orderFlags = flagsByOrder.get(orderKey) || [];
+    let flag_status = 'none';
+    if (orderFlags.length > 0) {
+      const hasUnresolved = orderFlags.some(
+        (f) => f.status === 'open' || f.status === 'in_progress'
+      );
+      flag_status = hasUnresolved ? 'unresolved' : 'resolved';
+    }
+
+    return {
+      ...row,
+      approval_pending: resolveOrderApprovalPending(appDocs, row),
+      is_due_sheet_uploaded: isDueSheetUploaded,
+      due_sheet_uploaded: isDueSheetUploaded,
+      flag_status,
+      active_transport: transportByOrder.get(orderKey) || null,
+    };
+  });
+}
+
+module.exports = {
+  PENDING_APPROVAL_STAGES,
+  ADMIN_PENDING_STATUS_ALIASES,
+  FINANCE_PENDING_STATUS_ALIASES,
+  ACCOUNT_PENDING_STATUS_ALIASES,
+  normalizePendingStage,
+  buildApprovalPendingQuery,
+  findOrderIdsWithPendingApproval,
+  findOrderIdsWithAnyPendingApproval,
+  findOrderIdsWithDueSheetPending,
+  findOrderIdsWithFinancePending,
+  findOrderIdsWithAccountPending,
+  isAnyPendingApprovalStatus,
+  resolveOrderApprovalPending,
+  enrichOrdersWithApprovalPending,
+  enrichOrdersWithDueSheetStatus,
+  enrichOrdersWithFlagStatus,
+  enrichOrdersParallel,
+};
+
+

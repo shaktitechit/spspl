@@ -1,0 +1,716 @@
+"use client";
+
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { RefreshCw, Save, X } from "lucide-react";
+import { toast } from "@/lib/toast";
+import {
+  useListDriversQuery,
+  useListTransportAgentsQuery,
+  useListVehiclesQuery,
+} from "@/store/api";
+import {
+  buildReleaseSettlePayload,
+  idFromRef,
+} from "@/components/portal/shared/orders/detail/accountDispatchAvailability";
+import {
+  NamedOption,
+  refId,
+  toDateInput,
+  formatDateOnly,
+} from "./utils";
+
+type OrderTransportsFormProps = {
+  order: any;
+  dispatches: any[];
+  transports: any[];
+  /** Approval batches — used to attach kit-aware settle payload on create. */
+  approvals?: Record<string, unknown>[];
+  users: NamedOption[];
+  saving: boolean;
+  onClose: () => void;
+  onCreate: (payload: Record<string, any>) => Promise<void>;
+  onSave: (transportId: string, payload: Record<string, any>) => Promise<void>;
+};
+
+function pickList(raw: unknown): Record<string, any>[] {
+  if (Array.isArray(raw)) return raw as Record<string, any>[];
+  if (raw && typeof raw === "object") {
+    const o = raw as Record<string, any>;
+    if (Array.isArray(o.items)) return o.items as Record<string, any>[];
+    if (Array.isArray(o.data)) return o.data as Record<string, any>[];
+  }
+  return [];
+}
+
+function optionalWholeNumber(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return Math.floor(n);
+}
+
+export function OrderTransportsForm({
+  order,
+  dispatches,
+  transports,
+  approvals = [],
+  users,
+  saving,
+  onClose,
+  onCreate,
+  onSave,
+}: OrderTransportsFormProps) {
+  const orderId = refId(order._id || order.id);
+  const orderItems = (order.order_items || []) as Record<string, unknown>[];
+  const sortedTransports = useMemo(
+    () =>
+      [...transports].sort((a, b) => {
+        return String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? ""));
+      }),
+    [transports],
+  );
+
+  /** Only one transport for this wizard — create when none exist, otherwise edit. */
+  const isCreateMode = sortedTransports.length === 0;
+
+  const [selectedId, setSelectedId] = useState(() =>
+    sortedTransports[0] ? refId(sortedTransports[0]._id || sortedTransports[0].id) : "new"
+  );
+
+  useEffect(() => {
+    if (isCreateMode) {
+      setSelectedId("new");
+      return;
+    }
+    const firstId = refId(sortedTransports[0]._id || sortedTransports[0].id);
+    if (
+      selectedId === "new" ||
+      !sortedTransports.some((t) => refId(t._id || t.id) === selectedId)
+    ) {
+      setSelectedId(firstId);
+    }
+  }, [isCreateMode, sortedTransports, selectedId]);
+
+  const transportAgentsQ = useListTransportAgentsQuery({ is_active: "true" });
+  const driversQ = useListDriversQuery({});
+  const vehiclesQ = useListVehiclesQuery({});
+
+  const transportAgents = useMemo(() => pickList(transportAgentsQ.data), [transportAgentsQ.data]);
+  const drivers = useMemo(() => pickList(driversQ.data), [driversQ.data]);
+  const vehicles = useMemo(() => pickList(vehiclesQ.data), [vehiclesQ.data]);
+
+  const selectedTransport = useMemo(
+    () =>
+      selectedId !== "new"
+        ? sortedTransports.find((t) => refId(t._id || t.id) === selectedId) || null
+        : null,
+    [sortedTransports, selectedId],
+  );
+
+  // Form states
+  const [dispatchId, setDispatchId] = useState("");
+  const [transportAgentId, setTransportAgentId] = useState("");
+  const [transporterName, setTransporterName] = useState("");
+  const [transporterPhone, setTransporterPhone] = useState("");
+  const [vehicleId, setVehicleId] = useState("");
+  const [driverId, setDriverId] = useState("");
+  const [vehicleNo, setVehicleNo] = useState("");
+  const [driverName, setDriverName] = useState("");
+  const [driverPhone, setDriverPhone] = useState("");
+  const [sourceLocation, setSourceLocation] = useState("");
+  const [destinationLocation, setDestinationLocation] = useState("");
+  const [routeDetails, setRouteDetails] = useState("");
+  const [dispatchDate, setDispatchDate] = useState("");
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
+  const [lrNumber, setLrNumber] = useState("");
+  const [ewayBillNo, setEwayBillNo] = useState("");
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [weight, setWeight] = useState("");
+  const [weightUnit, setWeightUnit] = useState("Kg");
+  const [packedBoxes, setPackedBoxes] = useState("");
+  const [openBoxes, setOpenBoxes] = useState("");
+  const [totalQuantity, setTotalQuantity] = useState("");
+  const [remarks, setRemarks] = useState("");
+  const [shipmentStatus, setShipmentStatus] = useState("pending");
+
+  const selectedTransportAgent = useMemo(() => {
+    if (!transportAgentId) return null;
+    return transportAgents.find((a: any) => refId(a._id || a.id) === transportAgentId) ?? null;
+  }, [transportAgentId, transportAgents]);
+
+  const transportAgentType = String(selectedTransportAgent?.agent_type ?? "third_party");
+  const isInternalFleet = transportAgentType === "internal_fleet";
+
+  const filteredVehicles = useMemo(() => {
+    if (!transportAgentId) return [];
+    return vehicles.filter((v: any) => refId(v.transport_agent) === transportAgentId);
+  }, [vehicles, transportAgentId]);
+
+  const filteredDrivers = useMemo(() => {
+    if (!transportAgentId) return [];
+    return drivers.filter((d: any) => refId(d.transport_agent) === transportAgentId);
+  }, [drivers, transportAgentId]);
+
+  const resetForm = useCallback(() => {
+    setDispatchId(dispatches[0] ? refId(dispatches[0]._id || dispatches[0].id) : "");
+    setTransportAgentId("");
+    setTransporterName("");
+    setTransporterPhone("");
+    setVehicleId("");
+    setDriverId("");
+    setVehicleNo("");
+    setDriverName("");
+    setDriverPhone("");
+    setSourceLocation("");
+    setDestinationLocation("");
+    setRouteDetails("");
+    setDispatchDate(new Date().toISOString().split("T")[0]);
+    setExpectedDeliveryDate("");
+    setLrNumber("");
+    setEwayBillNo("");
+    setTrackingNumber("");
+    setWeight("");
+    setWeightUnit("Kg");
+    setPackedBoxes("");
+    setOpenBoxes("");
+    setTotalQuantity("");
+    setRemarks("");
+    setShipmentStatus("pending");
+  }, [dispatches]);
+
+  // Load selected transport details
+  useEffect(() => {
+    if (selectedId === "new") {
+      resetForm();
+      return;
+    }
+    if (!selectedTransport) return;
+
+    setDispatchId(refId(selectedTransport.dispatch));
+    setTransportAgentId(refId(selectedTransport.transport_agent));
+    setTransporterName(selectedTransport.transporter_name || "");
+    setTransporterPhone(selectedTransport.transporter_phone || "");
+    setVehicleId(refId(selectedTransport.vehicle));
+    setDriverId(refId(selectedTransport.driver));
+    setVehicleNo(selectedTransport.vehicle_no || "");
+    setDriverName(selectedTransport.driver_name || "");
+    setDriverPhone(selectedTransport.driver_phone || "");
+    setSourceLocation(selectedTransport.source_location || "");
+    setDestinationLocation(selectedTransport.destination_location || "");
+    setRouteDetails(selectedTransport.route_details || "");
+    setDispatchDate(toDateInput(selectedTransport.dispatch_date));
+    setExpectedDeliveryDate(toDateInput(selectedTransport.expected_delivery_date));
+    setLrNumber(selectedTransport.lr_number || "");
+    setEwayBillNo(selectedTransport.eway_bill_no || "");
+    setTrackingNumber(selectedTransport.tracking_number || "");
+    setWeight(selectedTransport.weight != null ? String(selectedTransport.weight) : "");
+    setWeightUnit(selectedTransport.weight_unit || "Kg");
+    setPackedBoxes(selectedTransport.packed_boxes != null ? String(selectedTransport.packed_boxes) : "");
+    setOpenBoxes(selectedTransport.open_boxes != null ? String(selectedTransport.open_boxes) : "");
+    setTotalQuantity(selectedTransport.total_quantity != null ? String(selectedTransport.total_quantity) : "");
+    setRemarks(selectedTransport.remarks || "");
+    setShipmentStatus(selectedTransport.shipment_status || "pending");
+  }, [selectedId, selectedTransport, resetForm]);
+
+  // Auto-fill transporter name and phone if third-party agent changes
+  useEffect(() => {
+    if (selectedTransportAgent && !isInternalFleet) {
+      setTransporterName(selectedTransportAgent.agent_name || "");
+      setTransporterPhone(selectedTransportAgent.mobile || "");
+    }
+  }, [selectedTransportAgent, isInternalFleet]);
+
+  // Auto-fill driver / vehicle details if selected from list
+  useEffect(() => {
+    if (vehicleId) {
+      const vObj = vehicles.find((v) => refId(v._id || v.id) === vehicleId);
+      if (vObj) setVehicleNo(vObj.vehicle_no || "");
+    }
+  }, [vehicleId, vehicles]);
+
+  useEffect(() => {
+    if (driverId) {
+      const dObj = drivers.find((d) => refId(d._id || d.id) === driverId);
+      if (dObj) {
+        setDriverName(dObj.driver_name || "");
+        setDriverPhone(dObj.mobile || "");
+      }
+    }
+  }, [driverId, drivers]);
+
+  const releaseApproval = useMemo(() => {
+    if (!dispatchId) return null;
+    const disp = dispatches.find(
+      (d: any) => refId(d._id || d.id) === dispatchId,
+    ) as Record<string, unknown> | undefined;
+    if (!disp) return null;
+    const approvalRef = disp.finance_approval;
+    const approvalId =
+      typeof approvalRef === "object" && approvalRef !== null
+        ? idFromRef(
+            (approvalRef as Record<string, unknown>)._id ??
+              (approvalRef as Record<string, unknown>).id,
+          )
+        : idFromRef(approvalRef);
+    if (!approvalId) return null;
+    return (
+      approvals.find((a) => idFromRef(a._id ?? a.id) === approvalId) ?? null
+    );
+  }, [dispatchId, dispatches, approvals]);
+
+  const settlePayload = useMemo(
+    () =>
+      buildReleaseSettlePayload(
+        releaseApproval,
+        orderItems,
+        dispatches as Record<string, unknown>[],
+      ),
+    [releaseApproval, orderItems, dispatches],
+  );
+
+  const handleSave = async () => {
+    if (selectedId === "new" && !isCreateMode) {
+      toast.error("A transport already exists for this order.");
+      return;
+    }
+    if (!dispatchId) {
+      toast.error("Linked dispatch reference is required");
+      return;
+    }
+    if (!transportAgentId) {
+      toast.error("Transport agent is required");
+      return;
+    }
+    if (!lrNumber.trim()) {
+      toast.error("LR number is required");
+      return;
+    }
+
+    const payload: Record<string, any> = {
+      order: orderId,
+      dispatch: dispatchId,
+      transport_agent: transportAgentId,
+      transporter_type: isInternalFleet ? "internal" : "external",
+      transporter_name: transporterName.trim() || undefined,
+      transporter_phone: transporterPhone.trim() || undefined,
+      source_location: sourceLocation.trim() || undefined,
+      destination_location: destinationLocation.trim() || undefined,
+      route_details: routeDetails.trim() || undefined,
+      dispatch_date: dispatchDate ? new Date(dispatchDate).toISOString() : undefined,
+      expected_delivery_date: expectedDeliveryDate ? new Date(expectedDeliveryDate).toISOString() : undefined,
+      remarks: remarks.trim() || undefined,
+      lr_number: lrNumber.trim() || undefined,
+      eway_bill_no: ewayBillNo.trim() || undefined,
+      tracking_number: trackingNumber.trim() || undefined,
+      weight: weight ? Number(weight) : undefined,
+      weight_unit: weightUnit || undefined,
+      packed_boxes: optionalWholeNumber(packedBoxes),
+      open_boxes: optionalWholeNumber(openBoxes),
+      total_quantity: optionalWholeNumber(totalQuantity),
+      shipment_status: shipmentStatus,
+    };
+
+    if (isInternalFleet) {
+      payload.vehicle = vehicleId || undefined;
+      payload.driver = driverId || undefined;
+      payload.vehicle_no = vehicleNo || undefined;
+      payload.driver_name = driverName || undefined;
+      payload.driver_phone = driverPhone || undefined;
+    }
+
+    if (selectedId === "new") {
+      // Match CreateTransportModal: kit-aware settle (buckets amend; unbilled = shells).
+      if (settlePayload.hasSettleWork) {
+        payload.settle_approval_items = settlePayload.approvalItems;
+        payload.settle_rest_items = settlePayload.settledRestItems;
+      }
+      await onCreate(payload);
+    } else {
+      await onSave(selectedId, payload);
+    }
+  };
+
+  const inputClass =
+    "w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1.5 text-xs outline-none focus:border-amber-500";
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4">
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/40 dark:bg-amber-950/40">
+          <div>
+            <h3 className="text-sm font-bold text-amber-950 dark:text-amber-100">
+              Order Transports — {order.order_no || orderId}
+            </h3>
+            <p className="text-2xs text-amber-800/80 dark:text-amber-200/70">
+              Create one transport for this order. Creating transport auto-settles remaining
+              clearance on that release to the Unbilled Order.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 hover:bg-black/5 dark:hover:bg-white/10"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-auto p-4 space-y-4 font-sans">
+          {!isCreateMode && sortedTransports[0] ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
+              Editing transport{" "}
+              <span className="font-semibold text-slate-800 dark:text-slate-100">
+                {String(sortedTransports[0].lr_number || "").trim() ||
+                  formatDateOnly(sortedTransports[0].createdAt)}
+              </span>
+              {" · "}status{" "}
+              <span className="font-mono">
+                {String(sortedTransports[0].shipment_status || "pending")}
+              </span>
+            </div>
+          ) : null}
+
+          {isCreateMode ? (
+            <div className="rounded-lg border border-amber-200/80 bg-amber-50/70 px-3 py-2 text-2xs text-amber-900 dark:border-amber-900/30 dark:bg-amber-950/20 dark:text-amber-200">
+              Creating transport will settle any remaining clearance on this release
+              (approval + order) and move the rest to the Unbilled Order — same as account
+              transport create.
+            </div>
+          ) : null}
+
+          {dispatches.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-amber-300 px-4 py-8 text-center text-sm text-amber-800 bg-amber-50/50">
+              No dispatch batch available. Create a dispatch before arranging transport.
+            </div>
+          ) : (
+
+          <div className="rounded-xl border border-slate-200 p-4 space-y-4 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+            <div className="grid gap-4 sm:grid-cols-4">
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Linked Dispatch Batch *
+                </label>
+                <select
+                  value={dispatchId}
+                  onChange={(e) => setDispatchId(e.target.value)}
+                  className={inputClass}
+                  required
+                  disabled={!isCreateMode}
+                >
+                  <option value="">— Select Dispatch —</option>
+                  {dispatches.map((d) => (
+                    <option key={refId(d._id || d.id)} value={refId(d._id || d.id)}>
+                      {String(d.dispatch_no || d.bill_number || "Draft")}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Transport Agent *
+                </label>
+                <select
+                  value={transportAgentId}
+                  onChange={(e) => setTransportAgentId(e.target.value)}
+                  className={inputClass}
+                  required
+                >
+                  <option value="">— Select Agent —</option>
+                  {transportAgents.map((a) => (
+                    <option key={refId(a._id || a.id)} value={refId(a._id || a.id)}>
+                      {a.agent_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Shipment Status
+                </label>
+                <select
+                  value={shipmentStatus}
+                  onChange={(e) => setShipmentStatus(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="pending">pending</option>
+                  <option value="in_transit">in_transit</option>
+                  <option value="out_for_delivery">out_for_delivery</option>
+                  <option value="delivered">delivered</option>
+                  <option value="returned">returned</option>
+                  <option value="cancelled">cancelled</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  LR Number *
+                </label>
+                <input
+                  type="text"
+                  value={lrNumber}
+                  onChange={(e) => setLrNumber(e.target.value)}
+                  className={inputClass}
+                  placeholder="LR-XXXX"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Transporter Name
+                </label>
+                <input
+                  type="text"
+                  value={transporterName}
+                  onChange={(e) => setTransporterName(e.target.value)}
+                  className={inputClass}
+                  disabled={isInternalFleet}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Transporter Phone
+                </label>
+                <input
+                  type="text"
+                  value={transporterPhone}
+                  onChange={(e) => setTransporterPhone(e.target.value)}
+                  className={inputClass}
+                  disabled={isInternalFleet}
+                />
+              </div>
+
+              {isInternalFleet && (
+                <>
+                  <div>
+                    <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                      Vehicle
+                    </label>
+                    <select
+                      value={vehicleId}
+                      onChange={(e) => setVehicleId(e.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">— Select Vehicle —</option>
+                      {filteredVehicles.map((v) => (
+                        <option key={refId(v._id || v.id)} value={refId(v._id || v.id)}>
+                          {v.vehicle_no} ({v.model || "Default"})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                      Driver
+                    </label>
+                    <select
+                      value={driverId}
+                      onChange={(e) => setDriverId(e.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">— Select Driver —</option>
+                      {filteredDrivers.map((d) => (
+                        <option key={refId(d._id || d.id)} value={refId(d._id || d.id)}>
+                          {d.driver_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  E-Way Bill No
+                </label>
+                <input
+                  type="text"
+                  value={ewayBillNo}
+                  onChange={(e) => setEwayBillNo(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Tracking Number
+                </label>
+                <input
+                  type="text"
+                  value={trackingNumber}
+                  onChange={(e) => setTrackingNumber(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Dispatch Date
+                </label>
+                <input
+                  type="date"
+                  value={dispatchDate}
+                  onChange={(e) => setDispatchDate(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Expected Delivery Date
+                </label>
+                <input
+                  type="date"
+                  value={expectedDeliveryDate}
+                  onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Source Location
+                </label>
+                <input
+                  type="text"
+                  value={sourceLocation}
+                  onChange={(e) => setSourceLocation(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Destination Location
+                </label>
+                <input
+                  type="text"
+                  value={destinationLocation}
+                  onChange={(e) => setDestinationLocation(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Route Details
+                </label>
+                <input
+                  type="text"
+                  value={routeDetails}
+                  onChange={(e) => setRouteDetails(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Weight
+                </label>
+                <input
+                  type="number"
+                  value={weight}
+                  onChange={(e) => setWeight(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Weight Unit
+                </label>
+                <select
+                  value={weightUnit}
+                  onChange={(e) => setWeightUnit(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="Kg">Kg</option>
+                  <option value="Ton">Ton</option>
+                  <option value="Gram">Gram</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Packed Boxes
+                </label>
+                <input
+                  type="number"
+                  value={packedBoxes}
+                  onChange={(e) => setPackedBoxes(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Open Boxes
+                </label>
+                <input
+                  type="number"
+                  value={openBoxes}
+                  onChange={(e) => setOpenBoxes(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Total Quantity
+                </label>
+                <input
+                  type="number"
+                  value={totalQuantity}
+                  onChange={(e) => setTotalQuantity(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              <div className="sm:col-span-4">
+                <label className="mb-1 block text-2xs font-semibold text-slate-500 uppercase">
+                  Remarks / Notes
+                </label>
+                <input
+                  type="text"
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+          </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3 shrink-0 dark:border-slate-800 dark:bg-slate-900">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/15 dark:bg-slate-950 dark:text-slate-355 dark:hover:bg-white/5"
+          >
+            Close
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={saving || dispatches.length === 0}
+              onClick={() => void handleSave()}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-60"
+            >
+              {saving ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Save className="h-3.5 w-3.5" />
+              )}
+              {isCreateMode ? "Create transport (auto-settle)" : "Save transport"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

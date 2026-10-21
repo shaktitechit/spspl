@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{subject}}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #1e293b;
+      background-color: #f8fafc;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .wrapper {
+      width: 100%;
+      background-color: #f8fafc;
+      padding: 30px 15px;
+      box-sizing: border-box;
+    }
+
+    .container {
+      max-width: 760px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+      border: 1px solid #e2e8f0;
+    }
+
+    .header {
+      background-color: #f1f5f9;
+      color: #1e40af;
+      padding: 28px 24px;
+      text-align: center;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .header-logo {
+      max-height: 72px;
+      width: auto;
+      margin-bottom: 10px;
+      display: inline-block;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 700;
+      color: #1e40af;
+      letter-spacing: -0.4px;
+    }
+
+    .header p {
+      margin: 6px 0 0 0;
+      font-size: 14px;
+      color: #2563eb;
+      font-weight: 500;
+    }
+
+    .header.overdue h1 {
+      color: #be123c;
+    }
+
+    .header.overdue p {
+      color: #e11d48;
+    }
+
+    .content {
+      padding: 28px 24px;
+    }
+
+    .greeting {
+      font-size: 16px;
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 8px;
+    }
+
+    .intro-text {
+      font-size: 14px;
+      color: #475569;
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .badge-today {
+      background: #ecfdf5;
+      color: #047857;
+      border: 1px solid #a7f3d0;
+    }
+
+    .badge-overdue {
+      background: #fff1f2;
+      color: #be123c;
+      border: 1px solid #fecdd3;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 8px 0 12px 0;
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .items-table-container {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 22px;
+    }
+
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .items-table th {
+      background: #f8fafc;
+      color: #64748b;
+      font-weight: 700;
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid #e2e8f0;
+      white-space: nowrap;
+    }
+
+    .items-table td {
+      padding: 11px 12px;
+      border-bottom: 1px solid #f1f5f9;
+      color: #0f172a;
+      vertical-align: top;
+    }
+
+    .items-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .items-table tr:nth-child(even) td {
+      background-color: #f8fafc;
+    }
+
+    .muted {
+      color: #64748b;
+    }
+
+    .party {
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .req {
+      color: #334155;
+      line-height: 1.45;
+    }
+
+    .action-box {
+      background-color: #eff6ff;
+      border: 1px solid #dbeafe;
+      border-left: 4px solid #1e40af;
+      border-radius: 6px;
+      padding: 14px 16px;
+      font-size: 13px;
+      color: #1e3a8a;
+      line-height: 1.5;
+    }
+
+    .action-box.overdue {
+      background-color: #fff1f2;
+      border-color: #fecdd3;
+      border-left-color: #e11d48;
+      color: #9f1239;
+    }
+
+    .action-title {
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .footer {
+      background-color: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+      padding: 22px 24px;
+      text-align: center;
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    .footer p {
+      margin: 4px 0;
+    }
+
+    .footer a {
+      color: #1e40af;
+      text-decoration: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header {{headerVariant}}">
+        {{companyLogoHtml}}
+        <h1>{{companyName}}</h1>
+        <p>{{digestSubtitle}}</p>
+      </div>
+
+      <div class="content">
+        <div class="greeting">Hello {{recipientName}},</div>
+        <div class="intro-text">
+          {{introText}}
+          <span class="badge {{badgeClass}}">{{badgeLabel}}</span>
+        </div>
+
+        <div class="section-title">
+          <span>{{tableTitle}}</span>
+          <span class="badge {{badgeClass}}">{{count}} item(s)</span>
+        </div>
+
+        <div class="items-table-container">
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="width: 4%;">#</th>
+                <th style="width: 11%;">Lead</th>
+                <th style="width: 16%;">Party</th>
+                <th style="width: 22%;">Requirements</th>
+                <th style="width: 8%;">Type</th>
+                <th style="width: 11%;">When</th>
+                <th style="width: 12%;">Sales rep</th>
+                <th style="width: 16%;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+{{followUpsRows}}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="action-box {{actionVariant}}">
+          <div class="action-title">{{actionTitle}}</div>
+          <div>{{actionText}}</div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>Open Lead Manager → Follow-ups to complete or reschedule these items.</p>
+        <p>If you have questions, contact support at <a href="mailto:{{companyEmail}}">{{companyEmail}}</a>.</p>
+        <p>&copy; {{year}} {{companyName}}. All rights reserved.</p>
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>

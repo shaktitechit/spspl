@@ -1,0 +1,158 @@
+# OPMS production-oriented compose overlay / standalone subset.
+#
+# Prefer the full stack in docker-compose.yml for local/dev.
+# For production hosts:
+#   cp .env.docker.example .env.docker
+#   # Set JWT_SECRET, MONGO_URI, API_PUBLIC_BASE_URL, NEXT_PUBLIC_* to public HTTPS URLs
+#   docker compose --env-file .env.docker -f docker-compose.prod.yml up --build -d
+#
+# All secrets and public origins come from `.env.docker` — nothing sensitive here.
+
+name: ${COMPOSE_PROJECT_NAME:-opms}
+
+x-env-file: &env_file
+  - path: ${ENV_FILE:-.env.docker}
+    required: false
+  - path: .env
+    required: false
+
+services:
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-7014}:6379"
+    command: [ "redis-server", "--requirepass", "${REDIS_PASSWORD:-changeme}" ]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  work-planner-backend:
+    build:
+      context: ./work-planner-backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${WORK_PLANNER_BACKEND_PORT:-7007}:${WORK_PLANNER_BACKEND_PORT:-7007}"
+    env_file: *env_file
+    environment:
+      NODE_ENV: production
+      PORT: ${WORK_PLANNER_BACKEND_PORT:-7007}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+      MESSAGE_SERVICE_URL: ${MESSAGE_SERVICE_URL:-http://message-service:7011}
+      NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL:-http://notification-service:7012}
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:${WORK_PLANNER_BACKEND_PORT:-7007}/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  lead-manager-backend:
+    build:
+      context: ./lead-manager-backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${LEAD_MANAGER_BACKEND_PORT:-7009}:${LEAD_MANAGER_BACKEND_PORT:-7009}"
+    env_file: *env_file
+    environment:
+      NODE_ENV: production
+      PORT: ${LEAD_MANAGER_BACKEND_PORT:-7009}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+      MESSAGE_SERVICE_URL: ${MESSAGE_SERVICE_URL:-http://message-service:7011}
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:${LEAD_MANAGER_BACKEND_PORT:-7009}/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  message-service:
+    build:
+      context: ./message-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${MESSAGE_SERVICE_PORT:-7011}:${MESSAGE_SERVICE_PORT:-7011}"
+    env_file: *env_file
+    environment:
+      NODE_ENV: production
+      PORT: ${MESSAGE_SERVICE_PORT:-7011}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:${MESSAGE_SERVICE_PORT:-7011}/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  opms-backend:
+    build:
+      context: ./opms-backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${OPMS_BACKEND_PORT:-7001}:${OPMS_BACKEND_PORT:-7001}"
+    env_file: *env_file
+    environment:
+      NODE_ENV: production
+      PORT: ${OPMS_BACKEND_PORT:-7001}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+      PRODUCT_SERVICE_URL: ${PRODUCT_SERVICE_URL:-http://product-service:7005}
+      PARTY_SERVICE_URL: ${PARTY_SERVICE_URL:-http://party-service:7006}
+      MESSAGE_SERVICE_URL: ${MESSAGE_SERVICE_URL:-http://message-service:7011}
+      NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL:-http://notification-service:7012}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:${OPMS_BACKEND_PORT:-7001}/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  opms-frontend:
+    build:
+      context: ./opms-frontend
+      dockerfile: Dockerfile
+      additional_contexts:
+        session_auth: ./session-auth-client
+      args:
+        NEXT_PUBLIC_API_ORIGIN: ${NEXT_PUBLIC_API_ORIGIN}
+        NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+        NEXT_PUBLIC_AUTH_ORIGIN: ${NEXT_PUBLIC_AUTH_ORIGIN:-http://localhost:7003}
+        NEXT_PUBLIC_PRODUCT_SERVICE_URL: ${NEXT_PUBLIC_PRODUCT_SERVICE_URL:-}
+        NEXT_PUBLIC_PARTY_SERVICE_URL: ${NEXT_PUBLIC_PARTY_SERVICE_URL:-}
+        NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+        NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-}
+    restart: unless-stopped
+    ports:
+      - "${OPMS_FRONTEND_PORT:-7002}:3000"
+    environment:
+      NEXT_PUBLIC_API_ORIGIN: ${NEXT_PUBLIC_API_ORIGIN}
+      NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+      NEXT_PUBLIC_AUTH_ORIGIN: ${NEXT_PUBLIC_AUTH_ORIGIN:-http://localhost:7003}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+      NEXT_PUBLIC_PRODUCT_SERVICE_URL: ${NEXT_PUBLIC_PRODUCT_SERVICE_URL:-}
+      NEXT_PUBLIC_PARTY_SERVICE_URL: ${NEXT_PUBLIC_PARTY_SERVICE_URL:-}
+      NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+      NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+      NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-}
+    depends_on:
+      opms-backend:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+
+volumes:
+  redis_data:

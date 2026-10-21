@@ -1,0 +1,278 @@
+# =============================================================================
+# OPMS — nginx sites-available (HTTPS)
+#
+# DO NOT enable this file until certificates exist:
+#   ls /etc/letsencrypt/live/opms.spspl.com/fullchain.pem
+#
+# Order of operations:
+#   1) Keep opms.http-bootstrap enabled (HTTP proxies + ACME webroot)
+#   2) Point DNS A/AAAA for all hosts at this server
+#   3) Issue one multi-SAN cert (see nginx/snippets/opms-ssl.conf)
+#   4) Install http{} helpers (REQUIRED — defines log_format opms_main + limit_req_zone):
+#        sudo cp nginx/snippets/* /etc/nginx/snippets/
+#        sudo cp nginx/conf.d/opms-http.conf /etc/nginx/conf.d/opms-http.conf
+#      (Ubuntu/Debian auto-includes conf.d from http{}. If your nginx.conf
+#       does not include conf.d, add once inside http{}:
+#        include /etc/nginx/snippets/logging.conf;)
+#   5) Then:
+#        sudo cp nginx/sites-available/opms /etc/nginx/sites-available/opms
+#        sudo nginx -t && sudo systemctl reload nginx
+#   6) Optional hard 15-min IP ban (fail2ban):
+#        sudo cp nginx/fail2ban/filter.d/opms-auth-login.conf /etc/fail2ban/filter.d/
+#        sudo cp nginx/fail2ban/jail.d/opms-auth.conf /etc/fail2ban/jail.d/
+#        sudo fail2ban-client reload
+#
+# listen is "ssl" only (no http2 flag) to avoid
+# "protocol options redefined" warnings with other sites on :443.
+# =============================================================================
+
+upstream opms_backend          { server 127.0.0.1:7001; keepalive 32; }
+upstream opms_frontend         { server 127.0.0.1:7002; keepalive 16; }
+upstream auth_service          { server 127.0.0.1:7003; keepalive 32; }
+upstream user_manager_frontend { server 127.0.0.1:7004; keepalive 16; }
+upstream product_service       { server 127.0.0.1:7005; keepalive 32; }
+upstream party_service         { server 127.0.0.1:7006; keepalive 32; }
+upstream work_planner_backend  { server 127.0.0.1:7007; keepalive 32; }
+upstream work_planner_frontend { server 127.0.0.1:7008; keepalive 16; }
+upstream lead_manager_backend  { server 127.0.0.1:7009; keepalive 32; }
+upstream lead_manager_frontend { server 127.0.0.1:7010; keepalive 16; }
+upstream message_service       { server 127.0.0.1:7011; keepalive 32; }
+upstream notification_service  { server 127.0.0.1:7012; keepalive 32; }
+upstream app_frontend          { server 127.0.0.1:7013; keepalive 16; }
+
+# -----------------------------------------------------------------------------
+# HTTP → HTTPS (+ ACME challenge)
+# -----------------------------------------------------------------------------
+server {
+    listen 80;
+    listen [::]:80;
+    server_name
+        opms.spspl.com
+        app.spspl.com
+        users.spspl.com
+        plans.spspl.com
+        leads.spspl.com
+        api-opms.spspl.com
+        auth.spspl.com
+        api-products.spspl.com
+        api-parties.spspl.com
+        api-plans.spspl.com
+        api-leads.spspl.com
+        api-message.spspl.com
+        api-notification.spspl.com;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/html;
+        allow all;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# =============================================================================
+# Frontends
+# =============================================================================
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name app.spspl.com;
+    include /etc/nginx/snippets/opms-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://app_frontend;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name opms.spspl.com;
+    include /etc/nginx/snippets/opms-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://opms_frontend;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name users.spspl.com;
+    include /etc/nginx/snippets/opms-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://user_manager_frontend;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name plans.spspl.com;
+    include /etc/nginx/snippets/opms-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://work_planner_frontend;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name leads.spspl.com;
+    include /etc/nginx/snippets/opms-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://lead_manager_frontend;
+    }
+}
+
+# =============================================================================
+# APIs
+# =============================================================================
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name api-opms.spspl.com;
+    include /etc/nginx/snippets/opms-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://opms_backend;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name auth.spspl.com;
+    include /etc/nginx/snippets/opms-ssl.conf;
+    client_max_body_size 50m;
+    access_log /var/log/nginx/auth.access.log opms_main;
+
+    # Requires http{} include of snippets/logging.conf (log_format + limit_req_zone)
+    include /etc/nginx/snippets/auth-rate-limit.conf;
+
+    location ~ ^/api/notifications/stream {
+        include /etc/nginx/snippets/proxy-sse.conf;
+        proxy_pass http://auth_service;
+    }
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://auth_service;
+        proxy_read_timeout 120s;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name api-products.spspl.com;
+    include /etc/nginx/snippets/opms-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://product_service;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name api-parties.spspl.com;
+    include /etc/nginx/snippets/opms-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://party_service;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name api-plans.spspl.com;
+    include /etc/nginx/snippets/opms-ssl.conf;
+    client_max_body_size 50m;
+
+    location ~ ^/api/notifications/stream {
+        include /etc/nginx/snippets/proxy-sse.conf;
+        proxy_pass http://work_planner_backend;
+    }
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://work_planner_backend;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name api-leads.spspl.com;
+    include /etc/nginx/snippets/opms-ssl.conf;
+    client_max_body_size 50m;
+
+    location ~ ^/api/notifications/stream {
+        include /etc/nginx/snippets/proxy-sse.conf;
+        proxy_pass http://lead_manager_backend;
+    }
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://lead_manager_backend;
+        proxy_read_timeout 120s;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name api-message.spspl.com;
+    include /etc/nginx/snippets/opms-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://message_service;
+        proxy_read_timeout 120s;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name api-notification.spspl.com;
+    include /etc/nginx/snippets/opms-ssl.conf;
+    client_max_body_size 10m;
+
+    location ~ ^/api/notifications/stream {
+        include /etc/nginx/snippets/proxy-sse.conf;
+        proxy_pass http://notification_service;
+    }
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://notification_service;
+    }
+}

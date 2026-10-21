@@ -1,0 +1,153 @@
+/**
+ * @fileoverview Orders: HTTP handlers (thin controllers).
+ * @module modules/orders/order.controller
+ */
+const asyncHandler = require('../../utils/asyncHandler');
+const service = require('./order.service');
+const approvalService = require('../approvals/approval.service');
+const { ApiError } = require('../../utils/ApiError');
+const validation = require('./order.validation');
+const {
+  hasAnyOpmsRole,
+  hasOpmsRole,
+  isOpmsAdmin,
+} = require('../../middlewares/opmsAuth.middleware');
+const ROLES = require('../../constants/roles');
+
+exports.list = asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await service.list(req.query, req.user) });
+});
+
+exports.getWorkflowStats = asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await service.getWorkflowStats(req.query, req.user) });
+});
+
+exports.getWorkflowContext = asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await service.getWorkflowContext(req.query, req.user) });
+});
+
+exports.get = asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await service.getById(req.params.id, req.user) });
+});
+
+exports.create = asyncHandler(async (req, res) => {
+  if (
+    !hasAnyOpmsRole(req.user, [
+      ROLES.SALES,
+      ROLES.ADMIN,
+      ROLES.FINANCE,
+      ROLES.ACCOUNT,
+      ROLES.SUPER_ADMIN,
+    ])
+  ) {
+    throw new ApiError(403, 'Only sales, admin, finance, or account can create orders');
+  }
+  res.status(201).json({ success: true, data: await service.create(req.body, req.user) });
+});
+
+exports.update = asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await service.update(req.params.id, req.body, req.user) });
+});
+
+
+exports.closeAfterFullDelivery = asyncHandler(async (req, res) => {
+  if (
+    !hasAnyOpmsRole(req.user, [
+      ROLES.DISPATCH,
+      ROLES.ACCOUNT,
+      ROLES.ADMIN,
+      ROLES.SUPER_ADMIN,
+    ])
+  ) {
+    throw new ApiError(403, 'Not authorized to close order after delivery');
+  }
+  res.json({
+    success: true,
+    data: await service.closeAfterFullDelivery(req.params.id, req.body || {}, req.user),
+  });
+});
+
+exports.transition = asyncHandler(async (req, res) => {
+  validation.assertTransition(req.body || {});
+  const { remarks, rejection_reason } = req.body || {};
+  const meta = {
+    ip: req.ip,
+    ua: req.get('User-Agent'),
+  };
+  const data = await service.transition(
+    req.params.id,
+    { next_status: req.body.next_status, remarks, rejection_reason },
+    req.user,
+    meta
+  );
+  res.json({ success: true, data });
+});
+
+exports.history = asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await service.history(req.params.id, req.user) });
+});
+
+exports.fulfillment = asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await service.fulfillment(req.params.id, req.user) });
+});
+
+exports.approvals = asyncHandler(async (req, res) => {
+  await service.getById(req.params.id, req.user);
+  res.json({ success: true, data: await approvalService.listByOrder(req.params.id) });
+});
+
+exports.assignees = asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await service.assignees(req.params.id, req.user) });
+});
+
+exports.listDeleted = asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await service.listDeleted(req.query, req.user) });
+});
+
+exports.softDelete = asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await service.softDelete(req.params.id, req.user) });
+});
+
+exports.restore = asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await service.restore(req.params.id, req.user) });
+});
+
+exports.submit = asyncHandler(async (req, res) => {
+  if (
+    !hasAnyOpmsRole(req.user, [ROLES.SALES, ROLES.ADMIN, ROLES.FINANCE, ROLES.ACCOUNT]) &&
+    !isOpmsAdmin(req.user)
+  ) {
+    throw new ApiError(403, 'Only sales, admin, finance, or account can submit orders');
+  }
+  const data = await service.submitOrder(
+    req.params.id,
+    req.body || {},
+    req.user,
+    {
+      ip: req.ip,
+      ua: req.get('User-Agent'),
+    }
+  );
+  res.json({ success: true, data });
+});
+
+exports.googleSheetWebhook = asyncHandler(async (req, res) => {
+  const secret = req.query.secret || req.headers['x-webhook-secret'] || req.headers['x-api-key'];
+  const expectedSecret = process.env.GOOGLE_SHEET_WEBHOOK_SECRET || 'medica-gsheet-sync-secret';
+
+  if (!secret || secret !== expectedSecret) {
+    throw new ApiError(401, 'Unauthorized: Invalid secret key');
+  }
+
+  const data = await service.syncFromGoogleSheet(req.body);
+  res.json({ success: true, data });
+});
+
+/** Super-admin live sheet bypass — skips workflow transition rules. */
+exports.superSheetUpdate = asyncHandler(async (req, res) => {
+  if (!req.user || !hasOpmsRole(req.user, ROLES.SUPER_ADMIN)) {
+    throw new ApiError(403, 'Only super_admin can use the orders sheet bypass');
+  }
+  const data = await service.superSheetUpdate(req.params.id, req.body || {}, req.user);
+  res.json({ success: true, data });
+});

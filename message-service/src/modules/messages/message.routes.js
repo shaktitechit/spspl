@@ -1,0 +1,20 @@
+/**
+ * @fileoverview Messages: log listing + WhatsApp webhook + sending.
+ * @module modules/messages/message.routes
+ */
+const { Router } = require('express');
+const router = Router();
+const { requireAuth } = require('../../middlewares/auth.middleware');
+const controller = require('./message.controller');
+
+// Public Webhook routes (no Auth middleware)
+router.get('/webhook', controller.verifyWebhook);
+router.post('/webhook', controller.receiveWebhook);
+
+router.use(requireAuth);
+
+router.get('/', controller.list);
+router.post('/send', controller.send);
+router.get('/:id', controller.getById);
+
+module.exports = router;

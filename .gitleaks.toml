@@ -1,0 +1,15 @@
+# Local gitleaks config (optional). CI uses defaults + this allowlist if present.
+title = "OPMS gitleaks"
+
+[allowlist]
+  description = "False positives / placeholders"
+  paths = [
+    '''docs/''',
+    '''\.env\.docker\.example$''',
+    '''.*\.md$''',
+  ]
+  regexes = [
+    '''replace-with-''',
+    '''change-me''',
+    '''example\.com''',
+  ]

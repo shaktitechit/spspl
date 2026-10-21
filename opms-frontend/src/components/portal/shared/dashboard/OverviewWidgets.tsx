@@ -1,0 +1,412 @@
+"use client";
+
+import { useMemo } from "react";
+import {
+  Ban,
+  LayoutGrid,
+  PackageCheck,
+  PauseCircle,
+  Truck,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
+
+import OrderQuickAccess from "@/components/portal/shared/orders/list/OrderQuickAccess";
+import type { OrderQuickAccessRole } from "@/components/portal/shared/orders/list/orderQuickAccessConfig";
+import {
+  computeOrderWorkflowTabStats,
+  type OrderWorkflowCategoryOptions,
+  type OrderWorkflowTabCategory,
+  type OrderWorkflowTabStat,
+  type OrderWorkflowTabStats,
+} from "@/components/portal/shared/orders/list/orderWorkflowTabs";
+import PeriodHeadingCaption from "./PeriodHeadingCaption";
+import ReportDownloadButton from "./ReportDownloadButton";
+import { formatPeriodLabel } from "./periodFilterUtils";
+import { downloadCsvFile, reportFilename } from "./reportDownloadUtils";
+
+import type { QtyBasis } from "./leaderboardUtils";
+
+interface OverviewWidgetsProps {
+  orders?: any[];
+  filteredOrders?: any[];
+  tabStats?: Record<string, OrderWorkflowTabStat>;
+  queueCounts?: Record<string, number>;
+  isOrdersFetching: boolean;
+  categoryOptions?: OrderWorkflowCategoryOptions;
+  role: OrderQuickAccessRole;
+  portalHome?: string;
+  selectedYears: number[];
+  selectedMonths?: number[];
+  dateFilter?: string;
+  customDateFrom?: string;
+  customDateTo?: string;
+  qtyBasis?: QtyBasis;
+}
+
+const APPROVAL_PENDING_PIPELINE_TABS: OrderWorkflowTabCategory[] = [
+  "pending_admin_approval",
+  "due_sheet_pending",
+  "pending_finance_approval",
+  "pending_account_approval",
+];
+
+const EMPTY_STAT: OrderWorkflowTabStat = {
+  count: 0,
+  quantity: 0,
+  kitQuantity: 0,
+  amount: 0,
+};
+
+function formatMoney(v: number): string {
+  return v.toLocaleString("en-IN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatQty(v: number): string {
+  return v.toLocaleString("en-IN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
+function sumStats(stats: OrderWorkflowTabStat[]): OrderWorkflowTabStat {
+  return stats.reduce(
+    (acc, row) => ({
+      count: acc.count + row.count,
+      quantity: acc.quantity + row.quantity,
+      kitQuantity: acc.kitQuantity + row.kitQuantity,
+      amount: acc.amount + row.amount,
+    }),
+    { ...EMPTY_STAT },
+  );
+}
+
+export default function OverviewWidgets({
+  filteredOrders = [],
+  tabStats: tabStatsProp,
+  queueCounts,
+  isOrdersFetching,
+  categoryOptions,
+  role,
+  portalHome,
+  selectedYears,
+  selectedMonths,
+  dateFilter,
+  customDateFrom,
+  customDateTo,
+  qtyBasis = "approved",
+}: OverviewWidgetsProps) {
+  const tabStats = useMemo(
+    () =>
+      (tabStatsProp as OrderWorkflowTabStats | undefined) ??
+      computeOrderWorkflowTabStats(filteredOrders, categoryOptions, qtyBasis),
+    [tabStatsProp, filteredOrders, categoryOptions, qtyBasis],
+  );
+
+  const kpis = useMemo(() => {
+    const delivered = tabStats.closed_delivered ?? EMPTY_STAT;
+    const approvalPending = sumStats(
+      APPROVAL_PENDING_PIPELINE_TABS.map((id) => tabStats[id] ?? EMPTY_STAT),
+    );
+    const dispatchPending = tabStats.open_dispatched ?? EMPTY_STAT;
+    const transportPending = tabStats.transport_pending ?? EMPTY_STAT;
+    const inTransit = tabStats.in_transit ?? EMPTY_STAT;
+    const cancelled = tabStats.cancelled ?? EMPTY_STAT;
+    const rejected = tabStats.rejected ?? EMPTY_STAT;
+    const onHold = tabStats.on_hold ?? EMPTY_STAT;
+    const all = tabStats.all ?? EMPTY_STAT;
+
+    // Same scope as Product/Party/Sales leaderboards (shouldIncludeOrder):
+    // all non-draft orders except cancelled / rejected / on-hold.
+    // Uses line commercial volume (approved qty × rate), not grand_total.
+    const orderVolume: OrderWorkflowTabStat = {
+      count: Math.max(
+        0,
+        all.count - cancelled.count - rejected.count - onHold.count,
+      ),
+      quantity: Math.max(
+        0,
+        all.quantity - cancelled.quantity - rejected.quantity - onHold.quantity,
+      ),
+      kitQuantity: Math.max(
+        0,
+        all.kitQuantity -
+          cancelled.kitQuantity -
+          rejected.kitQuantity -
+          onHold.kitQuantity,
+      ),
+      amount: Math.max(
+        0,
+        all.amount - cancelled.amount - rejected.amount - onHold.amount,
+      ),
+    };
+
+    return {
+      orderVolume,
+      delivered,
+      approvalPending,
+      dispatchPending,
+      transportPending,
+      inTransit,
+      cancelled,
+      rejected,
+      onHold,
+    };
+  }, [tabStats]);
+
+  const cards = useMemo(() => {
+    const isSales = role === "sales";
+    return [
+      {
+        key: "order_volume",
+        label: isSales ? "Order Quantity" : "Order Volume",
+        ...kpis.orderVolume,
+        hint: "Active orders excl. cancelled / rejected / on-hold · approved qty × rate (incl. GST)",
+        accent: "bg-slate-500",
+        iconWrap: "bg-slate-50 dark:bg-slate-950/30",
+        iconTone: "text-slate-600 dark:text-slate-400",
+        Icon: LayoutGrid,
+      },
+      {
+        key: "delivered",
+        label: isSales ? "Delivered Quantity" : "Delivered Volume",
+        ...kpis.delivered,
+        hint: "Closed / delivered · approved qty × rate (incl. GST)",
+        accent: "bg-emerald-500",
+        iconWrap: "bg-emerald-50 dark:bg-emerald-950/30",
+        iconTone: "text-emerald-600 dark:text-emerald-400",
+        Icon: PackageCheck,
+      },
+      {
+        key: "approval_pending",
+        label: isSales ? "Approval Pending Qty" : "Approval Pending",
+        ...kpis.approvalPending,
+        hint: "Admin, due sheet, finance & account pending",
+        accent: "bg-amber-500",
+        iconWrap: "bg-amber-50 dark:bg-amber-950/30",
+        iconTone: "text-amber-600 dark:text-amber-400",
+        Icon: PauseCircle,
+      },
+      {
+        key: "dispatch_pending",
+        label: isSales ? "Dispatch Pending Qty" : "Dispatch Pending",
+        ...kpis.dispatchPending,
+        hint: "Dispatch pending",
+        accent: "bg-indigo-500",
+        iconWrap: "bg-indigo-50 dark:bg-indigo-950/30",
+        iconTone: "text-indigo-600 dark:text-indigo-400",
+        Icon: LayoutGrid,
+      },
+      {
+        key: "transport_pending",
+        label: isSales ? "Transport Pending Qty" : "Transport Pending",
+        ...kpis.transportPending,
+        hint: "Transport pending",
+        accent: "bg-blue-500",
+        iconWrap: "bg-blue-50 dark:bg-blue-950/30",
+        iconTone: "text-blue-600 dark:text-blue-400",
+        Icon: Truck,
+      },
+      {
+        key: "in_transit",
+        label: isSales ? "In Transit Quantity" : "In Transit",
+        ...kpis.inTransit,
+        hint: "In transit orders",
+        accent: "bg-sky-500",
+        iconWrap: "bg-sky-50 dark:bg-sky-950/30",
+        iconTone: "text-sky-600 dark:text-sky-400",
+        Icon: Truck,
+      },
+      {
+        key: "cancelled",
+        label: isSales ? "Cancelled Quantity" : "Cancelled Volume",
+        ...kpis.cancelled,
+        hint: "Cancelled orders",
+        accent: "bg-rose-500",
+        iconWrap: "bg-rose-50 dark:bg-rose-950/30",
+        iconTone: "text-rose-600 dark:text-rose-400",
+        Icon: Ban,
+      },
+      {
+        key: "rejected",
+        label: isSales ? "Rejected Quantity" : "Rejected Volume",
+        ...kpis.rejected,
+        hint: "Rejected orders",
+        accent: "bg-red-500",
+        iconWrap: "bg-red-50 dark:bg-red-950/30",
+        iconTone: "text-red-600 dark:text-red-400",
+        Icon: XCircle,
+      },
+      {
+        key: "on_hold",
+        label: isSales ? "On Hold Quantity" : "On Hold Volume",
+        ...kpis.onHold,
+        hint: "On-hold orders",
+        accent: "bg-orange-500",
+        iconWrap: "bg-orange-50 dark:bg-orange-950/30",
+        iconTone: "text-orange-600 dark:text-orange-400",
+        Icon: PauseCircle,
+      },
+    ] as Array<{
+      key: string;
+      label: string;
+      amount: number;
+      quantity: number;
+      kitQuantity: number;
+      count: number;
+      hint: string;
+      accent: string;
+      iconWrap: string;
+      iconTone: string;
+      Icon: LucideIcon;
+    }>;
+  }, [kpis, role]);
+
+  const handleDownload = () => {
+    const isSales = role === "sales";
+    const headers = isSales
+      ? ["Metric Category", "Quantity (Items)", "Kit Quantity", "Order Count"]
+      : [
+          "Metric Category",
+          "Amount (INR)",
+          "Quantity (Items)",
+          "Kit Quantity",
+          "Order Count",
+        ];
+
+    const rows = cards.map((card) =>
+      isSales
+        ? [
+            card.label,
+            formatQty(card.quantity),
+            formatQty(card.kitQuantity),
+            card.count.toLocaleString("en-IN"),
+          ]
+        : [
+            card.label,
+            `₹${formatMoney(card.amount)}`,
+            formatQty(card.quantity),
+            formatQty(card.kitQuantity),
+            card.count.toLocaleString("en-IN"),
+          ],
+    );
+
+    downloadCsvFile(
+      reportFilename(`overview_widgets_${role}`, selectedYears, selectedMonths),
+      headers,
+      rows,
+      [
+        `Report: Overview Widgets (${role.toUpperCase()})`,
+        `Period: ${formatPeriodLabel(selectedYears, selectedMonths)}`,
+      ],
+    );
+  };
+
+  return (
+    <div className="w-full space-y-6 font-sans">
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              KPI
+            </h3>
+            <PeriodHeadingCaption
+              selectedYears={selectedYears}
+              selectedMonths={selectedMonths}
+              dateFilter={dateFilter}
+              customDateFrom={customDateFrom}
+              customDateTo={customDateTo}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <ReportDownloadButton
+              onDownload={handleDownload}
+              disabled={isOrdersFetching}
+              label="Export"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {cards.map((card) => {
+            const { Icon } = card;
+            const isSales = role === "sales";
+            const orderLabel = `${card.count.toLocaleString("en-IN")} ${
+              card.count === 1 ? "order" : "orders"
+            }`;
+            const kitLabel =
+              card.kitQuantity > 0
+                ? `${formatQty(card.kitQuantity)} ${
+                    card.kitQuantity === 1 ? "kit" : "kits"
+                  }`
+                : null;
+            return (
+              <div
+                key={card.key}
+                className="relative overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900"
+              >
+                <div className={`absolute top-0 left-0 h-1 w-full ${card.accent}`} />
+                <div className="flex items-start justify-between">
+                  <span className="text-2xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    {card.label}
+                  </span>
+                  <div className={`shrink-0 rounded p-1 ${card.iconWrap}`}>
+                    <Icon className={`h-4 w-4 ${card.iconTone}`} />
+                  </div>
+                </div>
+                <div className="mt-2.5">
+                  <h3 className="font-sans text-xl font-bold text-slate-900 dark:text-slate-100">
+                    {isOrdersFetching ? (
+                      <span className="inline-block h-6 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-800" />
+                    ) : isSales ? (
+                      formatQty(card.quantity)
+                    ) : (
+                      `₹${formatMoney(card.amount)}`
+                    )}
+                  </h3>
+                  <p className="mt-1 text-2xs font-medium text-slate-500 dark:text-slate-400">
+                    {isOrdersFetching ? (
+                      <span className="inline-block h-3 w-28 animate-pulse rounded bg-slate-200 dark:bg-slate-800" />
+                    ) : isSales ? (
+                      <>
+                        {orderLabel}
+                        {kitLabel ? (
+                          <span className="ml-1 text-violet-600 dark:text-violet-400">
+                            · {kitLabel}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        {formatQty(card.quantity)} items
+                        {kitLabel ? (
+                          <span className="text-violet-600 dark:text-violet-400">
+                            {" "}
+                            · {kitLabel}
+                          </span>
+                        ) : null}
+                        {" · "}
+                        {orderLabel}
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <OrderQuickAccess
+        counts={queueCounts}
+        isOrdersFetching={isOrdersFetching}
+        categoryOptions={categoryOptions}
+        role={role}
+        portalHome={portalHome}
+      />
+    </div>
+  );
+}

@@ -1,0 +1,258 @@
+import { useEffect, useRef, useState } from "react";
+import { Check, ChevronDown } from "lucide-react";
+import {
+  ALL_MONTHS,
+  MONTH_OPTIONS,
+  formatMultiSelectLabel,
+} from "./periodFilterUtils";
+import { DATE_FILTER_OPTIONS } from "../orders/list/orderListDateFilter";
+
+import type { DashboardDataType } from "./periodFilterUtils";
+
+interface PeriodFilterProps {
+  availableYears: number[];
+  selectedYears: number[];
+  selectedMonths: number[];
+  onYearsChange: (years: number[]) => void;
+  onMonthsChange: (months: number[]) => void;
+  dateFilter?: string;
+  onDateFilterChange?: (value: string) => void;
+  customDateFrom?: string;
+  onCustomDateFromChange?: (value: string) => void;
+  customDateTo?: string;
+  onCustomDateToChange?: (value: string) => void;
+  dataType?: DashboardDataType;
+  onDataTypeChange?: (value: DashboardDataType) => void;
+  /** Visual density for leaderboard headers vs KPI row */
+  size?: "sm" | "md";
+}
+
+function MultiSelectMenu({
+  label,
+  buttonLabel,
+  options,
+  selected,
+  onToggle,
+  size,
+}: {
+  label: string;
+  buttonLabel: string;
+  options: { value: number; label: string }[];
+  selected: number[];
+  onToggle: (value: number) => void;
+  size: "sm" | "md";
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [open]);
+
+  const btnClass =
+    size === "sm"
+      ? "flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-2xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+      : "flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 cursor-pointer";
+
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setOpen((o) => !o)} className={btnClass}>
+        <span className="text-slate-500 dark:text-slate-400 font-medium">{label}</span>
+        <span>{buttonLabel}</span>
+        <ChevronDown
+          className={`h-3.5 w-3.5 text-slate-400 transition ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 z-[500] mt-1.5 w-40 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-white/10 dark:bg-slate-900">
+          <div className="border-b border-slate-100 px-3 py-2 text-2xs font-semibold uppercase tracking-wide text-slate-400 dark:border-white/5">
+            Select {label.toLowerCase()}
+          </div>
+          <ul className="max-h-56 overflow-y-auto py-1">
+            {options.map((opt) => {
+              const checked = selected.includes(opt.value);
+              return (
+                <li key={opt.value}>
+                  <button
+                    type="button"
+                    onClick={() => onToggle(opt.value)}
+                    className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/5 cursor-pointer"
+                  >
+                    <span>{opt.label}</span>
+                    {checked ? (
+                      <Check className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                    ) : (
+                      <span className="h-3.5 w-3.5 rounded border border-slate-300 dark:border-slate-600" />
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function PeriodFilter({
+  availableYears,
+  selectedYears,
+  selectedMonths,
+  onYearsChange,
+  onMonthsChange,
+  dateFilter,
+  onDateFilterChange,
+  customDateFrom,
+  onCustomDateFromChange,
+  customDateTo,
+  onCustomDateToChange,
+  dataType,
+  onDataTypeChange,
+  size = "md",
+}: PeriodFilterProps) {
+  const toggleYear = (year: number) => {
+    if (selectedYears.includes(year)) {
+      if (selectedYears.length === 1) return;
+      onYearsChange(selectedYears.filter((y) => y !== year));
+      return;
+    }
+    onYearsChange([...selectedYears, year].sort((a, b) => b - a));
+  };
+
+  const toggleMonth = (month: number) => {
+    if (selectedMonths.includes(month)) {
+      if (selectedMonths.length === 1) return;
+      onMonthsChange(selectedMonths.filter((m) => m !== month).sort((a, b) => a - b));
+      return;
+    }
+    onMonthsChange([...selectedMonths, month].sort((a, b) => a - b));
+  };
+
+  const yearLabel = formatMultiSelectLabel(
+    selectedYears,
+    availableYears.length,
+    "year",
+    "years",
+  );
+
+  const monthLabel = formatMultiSelectLabel(
+    selectedMonths,
+    ALL_MONTHS.length,
+    "month",
+    "months",
+    (value) => MONTH_OPTIONS.find((m) => m.value === value)?.label ?? String(value),
+  );
+
+  const yearOptions = availableYears.map((y) => ({ value: y, label: String(y) }));
+  const monthOptions = MONTH_OPTIONS.map((m) => ({ value: m.value, label: m.label }));
+
+  const selectClass =
+    size === "sm"
+      ? "rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-2xs font-semibold text-slate-700 shadow-sm outline-none transition focus:border-blue-500 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
+      : "rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm outline-none transition focus:border-blue-500 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 cursor-pointer";
+
+  const inputClass =
+    size === "sm"
+      ? "rounded-lg border border-slate-200 bg-white px-2 py-1 text-2xs text-slate-700 shadow-sm outline-none focus:border-blue-500 dark:border-white/10 dark:bg-slate-800 dark:text-slate-250"
+      : "rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 shadow-sm outline-none focus:border-blue-500 dark:border-white/10 dark:bg-slate-800 dark:text-slate-250";
+
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      {dataType !== undefined && onDataTypeChange !== undefined && (
+        <div className="flex items-center rounded-lg border border-slate-200 bg-slate-100 p-0.5 dark:border-white/10 dark:bg-slate-900">
+          <button
+            type="button"
+            onClick={() => onDataTypeChange("approved")}
+            className={`rounded-md px-2.5 py-1 text-xs font-bold transition cursor-pointer ${
+              dataType === "approved"
+                ? "bg-white text-blue-600 shadow-sm dark:bg-slate-800 dark:text-blue-400"
+                : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+            }`}
+          >
+            Approved Data
+          </button>
+          <button
+            type="button"
+            onClick={() => onDataTypeChange("billed")}
+            className={`rounded-md px-2.5 py-1 text-xs font-bold transition cursor-pointer ${
+              dataType === "billed"
+                ? "bg-white text-blue-600 shadow-sm dark:bg-slate-800 dark:text-blue-400"
+                : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+            }`}
+          >
+            Billed Data
+          </button>
+        </div>
+      )}
+      {dateFilter !== undefined && onDateFilterChange !== undefined && (
+        <div className="flex items-center gap-2">
+          <span
+            className={
+              size === "sm"
+                ? "text-2xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+                : "text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+            }
+          >
+            Date Range
+          </span>
+
+          <select
+            value={dateFilter}
+            onChange={(e) => onDateFilterChange(e.target.value)}
+            className={selectClass}
+          >
+            {DATE_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {dateFilter === "custom" && onCustomDateFromChange !== undefined && onCustomDateToChange !== undefined && (
+        <div className="flex items-center gap-1">
+          <input
+            type="date"
+            value={customDateFrom || ""}
+            onChange={(e) => onCustomDateFromChange(e.target.value)}
+            className={inputClass}
+          />
+          <span className="text-xs text-slate-400 dark:text-slate-505">—</span>
+          <input
+            type="date"
+            value={customDateTo || ""}
+            onChange={(e) => onCustomDateToChange(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <MultiSelectMenu
+          label="Year"
+          buttonLabel={yearLabel}
+          options={yearOptions}
+          selected={selectedYears}
+          onToggle={toggleYear}
+          size={size}
+        />
+        <MultiSelectMenu
+          label="Month"
+          buttonLabel={monthLabel}
+          options={monthOptions}
+          selected={selectedMonths}
+          onToggle={toggleMonth}
+          size={size}
+        />
+      </div>
+    </div>
+  );
+}

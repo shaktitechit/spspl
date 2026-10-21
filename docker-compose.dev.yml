@@ -1,0 +1,262 @@
+# Development overrides: bind-mount source + hot reload (no production image rebuild).
+#
+#   docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# Public URLs / secrets come from `.env.docker` (see base compose). This file only
+# switches Dockerfiles, mounts source, and sets NODE_ENV=development.
+
+name: opms
+
+services:
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile.dev
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./auth-service/src:/app/src:ro
+    command: ["node", "--watch", "src/server.js"]
+    healthcheck:
+      start_period: 30s
+
+  product-service:
+    build:
+      context: ./product-service
+      dockerfile: Dockerfile.dev
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./product-service/src:/app/src:ro
+    command: ["node", "--watch", "src/server.js"]
+    healthcheck:
+      start_period: 30s
+
+  party-service:
+    build:
+      context: ./party-service
+      dockerfile: Dockerfile.dev
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./party-service/src:/app/src:ro
+    command: ["node", "--watch", "src/server.js"]
+    healthcheck:
+      start_period: 30s
+
+  work-planner-backend:
+    build:
+      context: ./work-planner-backend
+      dockerfile: Dockerfile.dev
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./work-planner-backend/src:/app/src:ro
+    command: ["node", "--watch", "src/server.js"]
+    healthcheck:
+      start_period: 30s
+
+  lead-manager-backend:
+    build:
+      context: ./lead-manager-backend
+      dockerfile: Dockerfile.dev
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./lead-manager-backend/src:/app/src:ro
+    command: ["node", "--watch", "src/server.js"]
+    healthcheck:
+      start_period: 30s
+
+  message-service:
+    build:
+      context: ./message-service
+      dockerfile: Dockerfile.dev
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./message-service/src:/app/src:ro
+    command: ["node", "--watch", "src/server.js"]
+    healthcheck:
+      start_period: 30s
+
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile.dev
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./notification-service/src:/app/src:ro
+    command: ["node", "--watch", "src/server.js"]
+    healthcheck:
+      start_period: 30s
+
+  opms-backend:
+    build:
+      context: ./opms-backend
+      dockerfile: Dockerfile.dev
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./opms-backend/src:/app/src:ro
+      - ./opms-backend/scripts:/app/scripts:ro
+    command: ["node", "--watch", "src/server.js"]
+    healthcheck:
+      start_period: 90s
+
+  opms-frontend:
+    build:
+      context: ./opms-frontend
+      dockerfile: Dockerfile.dev
+      additional_contexts:
+        session_auth: ./session-auth-client
+      args:
+        NEXT_PUBLIC_API_ORIGIN: ${NEXT_PUBLIC_API_ORIGIN:-http://localhost:7001}
+        NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+        NEXT_PUBLIC_AUTH_ORIGIN: ${NEXT_PUBLIC_AUTH_ORIGIN:-http://localhost:7003}
+        NEXT_PUBLIC_PRODUCT_SERVICE_URL: ${NEXT_PUBLIC_PRODUCT_SERVICE_URL:-http://localhost:7005}
+        NEXT_PUBLIC_PARTY_SERVICE_URL: ${NEXT_PUBLIC_PARTY_SERVICE_URL:-http://localhost:7006}
+        NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+        NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-}
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"
+      NEXT_PUBLIC_API_ORIGIN: ${NEXT_PUBLIC_API_ORIGIN:-http://localhost:7001}
+      NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+      NEXT_PUBLIC_AUTH_ORIGIN: ${NEXT_PUBLIC_AUTH_ORIGIN:-http://localhost:7003}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+      NEXT_PUBLIC_PRODUCT_SERVICE_URL: ${NEXT_PUBLIC_PRODUCT_SERVICE_URL:-http://localhost:7005}
+      NEXT_PUBLIC_PARTY_SERVICE_URL: ${NEXT_PUBLIC_PARTY_SERVICE_URL:-http://localhost:7006}
+      NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+      NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+      NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-}
+    volumes:
+      - ./opms-frontend/src:/app/src:ro
+      - ./opms-frontend/public:/app/public:ro
+      - ./session-auth-client:/app/session-auth-client:ro
+    command: ["npm", "run", "dev"]
+    depends_on:
+      auth-service:
+        condition: service_started
+    healthcheck:
+      disable: true
+
+  user-manager-frontend:
+    build:
+      context: ./user-manager-frontend
+      dockerfile: Dockerfile.dev
+      additional_contexts:
+        session_auth: ./session-auth-client
+      args:
+        NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+        NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+        NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"
+      NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+      NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+      NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+    volumes:
+      - ./user-manager-frontend/src:/app/src:ro
+      - ./user-manager-frontend/public:/app/public:ro
+      - ./session-auth-client:/app/session-auth-client:ro
+    command: ["npm", "run", "dev"]
+    healthcheck:
+      disable: true
+
+  work-planner-frontend:
+    build:
+      context: ./work-planner-frontend
+      dockerfile: Dockerfile.dev
+      additional_contexts:
+        session_auth: ./session-auth-client
+      args:
+        NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+        NEXT_PUBLIC_WORK_PLANNER_SERVICE_URL: ${NEXT_PUBLIC_WORK_PLANNER_SERVICE_URL:-http://localhost:7007}
+        NEXT_PUBLIC_PARTY_SERVICE_URL: ${NEXT_PUBLIC_PARTY_SERVICE_URL:-http://localhost:7006}
+        NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+        NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"
+      NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+      NEXT_PUBLIC_WORK_PLANNER_SERVICE_URL: ${NEXT_PUBLIC_WORK_PLANNER_SERVICE_URL:-http://localhost:7007}
+      NEXT_PUBLIC_PARTY_SERVICE_URL: ${NEXT_PUBLIC_PARTY_SERVICE_URL:-http://localhost:7006}
+      NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+      NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+    volumes:
+      - ./work-planner-frontend/src:/app/src:ro
+      - ./work-planner-frontend/public:/app/public:ro
+      - ./session-auth-client:/app/session-auth-client:ro
+    command: ["npm", "run", "dev"]
+    healthcheck:
+      disable: true
+
+  lead-manager-frontend:
+    build:
+      context: ./lead-manager-frontend
+      dockerfile: Dockerfile.dev
+      additional_contexts:
+        session_auth: ./session-auth-client
+      args:
+        NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+        NEXT_PUBLIC_LEAD_MANAGER_SERVICE_URL: ${NEXT_PUBLIC_LEAD_MANAGER_SERVICE_URL:-http://localhost:7009}
+        NEXT_PUBLIC_PRODUCT_SERVICE_URL: ${NEXT_PUBLIC_PRODUCT_SERVICE_URL:-http://localhost:7005}
+        NEXT_PUBLIC_PARTY_SERVICE_URL: ${NEXT_PUBLIC_PARTY_SERVICE_URL:-http://localhost:7006}
+        NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+        NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"
+      NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+      NEXT_PUBLIC_LEAD_MANAGER_SERVICE_URL: ${NEXT_PUBLIC_LEAD_MANAGER_SERVICE_URL:-http://localhost:7009}
+      NEXT_PUBLIC_PRODUCT_SERVICE_URL: ${NEXT_PUBLIC_PRODUCT_SERVICE_URL:-http://localhost:7005}
+      NEXT_PUBLIC_PARTY_SERVICE_URL: ${NEXT_PUBLIC_PARTY_SERVICE_URL:-http://localhost:7006}
+      NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+      NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+    volumes:
+      - ./lead-manager-frontend/src:/app/src:ro
+      - ./lead-manager-frontend/public:/app/public:ro
+      - ./session-auth-client:/app/session-auth-client:ro
+    command: ["npm", "run", "dev"]
+    healthcheck:
+      disable: true
+
+  app-frontend:
+    build:
+      context: ./app-frontend
+      dockerfile: Dockerfile.dev
+      additional_contexts:
+        session_auth: ./session-auth-client
+      args:
+        NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+        NEXT_PUBLIC_OPMS_URL: ${NEXT_PUBLIC_OPMS_URL:-http://localhost:7002}
+        NEXT_PUBLIC_USER_MANAGER_URL: ${NEXT_PUBLIC_USER_MANAGER_URL:-http://localhost:7004/dashboard}
+        NEXT_PUBLIC_WORK_PLANNER_URL: ${NEXT_PUBLIC_WORK_PLANNER_URL:-http://localhost:7008/dashboard}
+        NEXT_PUBLIC_LEAD_MANAGER_URL: ${NEXT_PUBLIC_LEAD_MANAGER_URL:-http://localhost:7010/dashboard}
+        NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+        NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"
+      NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+      NEXT_PUBLIC_OPMS_URL: ${NEXT_PUBLIC_OPMS_URL:-http://localhost:7002}
+      NEXT_PUBLIC_USER_MANAGER_URL: ${NEXT_PUBLIC_USER_MANAGER_URL:-http://localhost:7004/dashboard}
+      NEXT_PUBLIC_WORK_PLANNER_URL: ${NEXT_PUBLIC_WORK_PLANNER_URL:-http://localhost:7008/dashboard}
+      NEXT_PUBLIC_LEAD_MANAGER_URL: ${NEXT_PUBLIC_LEAD_MANAGER_URL:-http://localhost:7010/dashboard}
+      NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+      NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+    volumes:
+      - ./session-auth-client:/app/session-auth-client:ro
+      - ./app-frontend/src:/app/src:ro
+      - ./app-frontend/public:/app/public:ro
+    command: ["npm", "run", "dev"]
+    healthcheck:
+      disable: true

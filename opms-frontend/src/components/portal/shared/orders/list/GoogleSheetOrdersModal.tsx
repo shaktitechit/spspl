@@ -1,0 +1,1554 @@
+"use client";
+
+import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import {
+  X,
+  Search,
+  Download,
+  Info,
+  SlidersHorizontal,
+  RefreshCw,
+  Cloud,
+  Copy,
+  Check,
+  Link2,
+  ExternalLink,
+} from "lucide-react";
+import { resolveOrderCounterparty, pickList } from "@/components/portal/sales/partyDisplay";
+import { SALES_ORDER_TABS } from "@/components/portal/sales/orderUtils";
+import { deriveOrderWorkflowStatus } from "@/components/portal/shared/orders/lib/orderLifecycle";
+import { LargeModalPortal } from "@/components/portal/shared/ui/modals/LargeModalPortal";
+import { pickOrders } from "@/components/portal/shared/lib/pickOrders";
+import { publicApiOrigin } from "@/lib/env";
+import { toast } from "@/lib/toast";
+import {
+  useListPartiesQuery,
+  useListUsersQuery,
+  useListTransportsQuery,
+  useListOrderDeliveriesQuery,
+} from "@/store/api";
+
+import { OrderListSheetProcessFilters } from "./OrderListSheetProcessFilters";
+import {
+  buildOrderListTabCounts,
+  filterListOrders,
+} from "./filterListOrders";
+import type {
+  ListOrdersPageConfig,
+  ListOrdersTabId,
+} from "./listOrdersPageConfig";
+import {
+  formatDateShort,
+  formatMoney,
+  orderKey,
+} from "./orderListDisplay";
+import {
+  ORDER_WORKFLOW_TABS,
+  type OrderWorkflowCategoryOptions,
+} from "./orderWorkflowTabs";
+
+export type GoogleSheetOrdersModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  partyNameById: Map<string, string>;
+  /** Portal list config — accents + sheet portal identity. */
+  config: ListOrdersPageConfig;
+  /** Same non-draft order pool as ListOrdersPage. */
+  orders: unknown[];
+  /** Same transport/dispatch category options as ListOrdersPage. */
+  categoryOptions: OrderWorkflowCategoryOptions;
+  isOrdersFetching?: boolean;
+  onRefetchOrders?: () => void;
+  /** Shared list URL / strip state — changing these updates ListOrdersPage. */
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+  activeTab: ListOrdersTabId;
+  onActiveTabChange: (tab: ListOrdersTabId) => void;
+  priorityFilter: string;
+  onPriorityFilterChange: (value: string) => void;
+  dateFilter: string;
+  customDateFrom: string;
+  customDateTo: string;
+  showReset?: boolean;
+  onResetFilters?: () => void;
+};
+
+type OrderItemRow = {
+  name: string;
+  qty: number;
+};
+
+type FlattenedOrder = {
+  _id: string;
+  order_no: string;
+  party_name: string;
+  grand_total: number;
+  priority: string;
+  status: string;
+  order_date: string;
+  expected_delivery_date: string;
+  party_type: string;
+  party_city: string;
+  sales_person: string;
+  /** Plain-text for search / CSV export */
+  items_list: string;
+  /** Structured rows for nested cell table */
+  items_rows: OrderItemRow[];
+  party_sra: string;
+  actual_delivery_date: string;
+  total_quantity: number;
+  raw_order_date: Date | null;
+  raw: any;
+};
+
+type SelectedCell = {
+  orderId: string;
+  colKey: keyof FlattenedOrder;
+} | null;
+
+const COLUMNS: { key: keyof FlattenedOrder; label: string; headerLetter: string; type: "text" | "number" }[] = [
+  { key: "_id", label: "Order ID", headerLetter: "A", type: "text" },
+  { key: "order_no", label: "Order Number", headerLetter: "B", type: "text" },
+  { key: "party_name", label: "Party Name", headerLetter: "C", type: "text" },
+  { key: "grand_total", label: "Grand Total (₹)", headerLetter: "D", type: "number" },
+  { key: "priority", label: "Priority", headerLetter: "E", type: "text" },
+  { key: "status", label: "Status", headerLetter: "F", type: "text" },
+  { key: "order_date", label: "Order Date", headerLetter: "G", type: "text" },
+  { key: "expected_delivery_date", label: "Expected Delivery Date", headerLetter: "H", type: "text" },
+  { key: "party_type", label: "Party Type", headerLetter: "I", type: "text" },
+  { key: "party_city", label: "City", headerLetter: "J", type: "text" },
+  { key: "sales_person", label: "Sales Person", headerLetter: "K", type: "text" },
+  { key: "items_list", label: "Items List", headerLetter: "L", type: "text" },
+  { key: "party_sra", label: "SRA", headerLetter: "M", type: "text" },
+  { key: "actual_delivery_date", label: "Actual Delivery Date", headerLetter: "N", type: "text" },
+];
+
+function parseDate(v: unknown): Date | null {
+  if (v == null || v === "") return null;
+  const d = v instanceof Date ? v : new Date(String(v));
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
+}
+
+/** Nested Item | Qty table rendered inside the Items List spreadsheet cell. */
+function ItemsListNestedTable({ items }: { items: OrderItemRow[] }) {
+  if (!items.length) {
+    return <span className="px-1.5 text-slate-400">—</span>;
+  }
+
+  return (
+    <table className="w-full border-collapse text-2xs leading-tight">
+      <thead>
+        <tr className="bg-slate-50 dark:bg-slate-950/80 text-slate-500 dark:text-slate-400">
+          <th className="border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 text-left font-semibold">
+            Item
+          </th>
+          <th className="border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 text-right font-semibold w-12">
+            Qty
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.map((line, idx) => (
+          <tr
+            key={`${line.name}-${idx}`}
+            className="bg-white dark:bg-slate-900 even:bg-slate-50/80 dark:even:bg-slate-950/40"
+          >
+            <td
+              className="border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 text-left text-slate-800 dark:text-slate-200 font-sans font-medium max-w-[180px] truncate"
+              title={line.name}
+            >
+              {line.name}
+            </td>
+            <td className="border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 text-right tabular-nums text-slate-700 dark:text-slate-300 font-semibold">
+              {line.qty}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+export function GoogleSheetOrdersModal({
+  isOpen,
+  onClose,
+  partyNameById,
+  config,
+  orders,
+  categoryOptions,
+  isOrdersFetching = false,
+  onRefetchOrders,
+  searchQuery,
+  onSearchQueryChange,
+  activeTab: listActiveTab,
+  onActiveTabChange,
+  priorityFilter,
+  onPriorityFilterChange,
+  dateFilter,
+  customDateFrom,
+  customDateTo,
+  showReset = false,
+  onResetFilters,
+}: GoogleSheetOrdersModalProps) {
+  const { accents } = config;
+  const [activeTab, setActiveTab] = useState<"virtual" | "real">("virtual");
+  const [selectedCell, setSelectedCell] = useState<SelectedCell>(null);
+  const [realSheetUrl, setRealSheetUrl] = useState("");
+  const [copiedScript, setCopiedScript] = useState(false);
+
+  // Column Resizing State
+  const [colWidths, setColWidths] = useState<Record<string, number>>({
+    _id: 110,
+    order_no: 130,
+    party_name: 200,
+    grand_total: 120,
+    priority: 90,
+    status: 130,
+    order_date: 120,
+    expected_delivery_date: 150,
+    party_type: 110,
+    party_city: 110,
+    sales_person: 140,
+    items_list: 280,
+    party_sra: 80,
+    actual_delivery_date: 150,
+  });
+
+  // Sheet-only advanced filters (workflow tab / priority / date come from list page)
+  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterCounterparty, setFilterCounterparty] = useState<string>("all");
+  const [filterPartyNameQuery, setFilterPartyNameQuery] = useState("");
+  const [filterSra, setFilterSra] = useState<string>("all");
+  const [filterDatePreset, setFilterDatePreset] = useState<string>("all");
+  const [filterStartDate, setFilterStartDate] = useState<string>("");
+  const [filterEndDate, setFilterEndDate] = useState<string>("");
+  const [filterMinQty, setFilterMinQty] = useState<string>("");
+  const [filterMaxQty, setFilterMaxQty] = useState<string>("");
+  const [filterMinAmount, setFilterMinAmount] = useState<string>("");
+  const [filterMaxAmount, setFilterMaxAmount] = useState<string>("");
+  const [filterCity, setFilterCity] = useState<string>("all");
+  const [filterSalesPerson, setFilterSalesPerson] = useState<string>("all");
+
+  // Same filter + tab counts as ListOrdersPage (`filterListOrders`).
+  const listFilteredOrders = useMemo(
+    () =>
+      filterListOrders({
+        orders,
+        activeTab: listActiveTab,
+        searchQuery,
+        priorityFilter,
+        dateFilter,
+        customDateFrom,
+        customDateTo,
+        categoryOptions,
+        partyNameById,
+        includeDraftTab: false,
+      }),
+    [
+      orders,
+      listActiveTab,
+      searchQuery,
+      priorityFilter,
+      dateFilter,
+      customDateFrom,
+      customDateTo,
+      categoryOptions,
+      partyNameById,
+    ],
+  );
+
+  const tabCounts = useMemo(
+    () => buildOrderListTabCounts(orders, categoryOptions, false),
+    [orders, categoryOptions],
+  );
+
+  // Enrichment only (party/user/delivery columns).
+  const partiesQ = useListPartiesQuery({}, { skip: !isOpen });
+  const usersQ = useListUsersQuery({}, { skip: !isOpen });
+
+  const partiesList = useMemo(() => {
+    return pickOrders(partiesQ.data) || [];
+  }, [partiesQ.data]);
+
+  const usersList = useMemo(() => {
+    return pickOrders(usersQ.data) || [];
+  }, [usersQ.data]);
+
+  const partyMap = useMemo(() => {
+    const map = new Map<string, any>();
+    partiesList.forEach((p: any) => {
+      const id = p._id || p.id || "";
+      if (id) map.set(id, p);
+    });
+    return map;
+  }, [partiesList]);
+
+  const userMap = useMemo(() => {
+    const map = new Map<string, any>();
+    usersList.forEach((u: any) => {
+      const id = u._id || u.id || "";
+      if (id) map.set(id, u);
+    });
+    return map;
+  }, [usersList]);
+
+  const transportsQ = useListTransportsQuery({}, { skip: !isOpen });
+  const deliveriesQ = useListOrderDeliveriesQuery({}, { skip: !isOpen });
+
+  const transportsList = useMemo(() => {
+    return pickList(transportsQ.data);
+  }, [transportsQ.data]);
+
+  const deliveriesList = useMemo(() => {
+    return pickList(deliveriesQ.data);
+  }, [deliveriesQ.data]);
+
+  const orderDeliveryDateMap = useMemo(() => {
+    const map = new Map<string, string>();
+    transportsList.forEach((tr: any) => {
+      const orderId = typeof tr.order === "string" 
+        ? tr.order 
+        : (tr.order && typeof tr.order === "object") 
+          ? String(tr.order._id || tr.order.id || "") 
+          : "";
+      if (!orderId) return;
+      const dateVal = tr.actual_delivery_date || tr.delivered_at;
+      if (dateVal) {
+        const existing = map.get(orderId);
+        if (!existing || new Date(dateVal) > new Date(existing)) {
+          map.set(orderId, String(dateVal));
+        }
+      }
+    });
+    deliveriesList.forEach((del: any) => {
+      const orderId = typeof del.order === "string" 
+        ? del.order 
+        : (del.order && typeof del.order === "object") 
+          ? String(del.order._id || del.order.id || "") 
+          : "";
+      if (!orderId) return;
+      const dateVal = del.actual_delivery_date || del.delivered_at;
+      if (dateVal) {
+        const existing = map.get(orderId);
+        if (!existing || new Date(dateVal) > new Date(existing)) {
+          map.set(orderId, String(dateVal));
+        }
+      }
+    });
+    return map;
+  }, [transportsList, deliveriesList]);
+
+  const dragStartRef = useRef<{ colKey: string; startWidth: number; startX: number } | null>(null);
+
+  const localRows = useMemo<FlattenedOrder[]>(() => {
+    return listFilteredOrders.map((o) => {
+      const item = o as any;
+      const id = orderKey(item) || "";
+      const ref = item.order_no || item.order_number || id || "—";
+      const total = Number(item.grand_total ?? item.total ?? 0);
+      const pri = typeof item.priority === "string" ? item.priority : "normal";
+      const partyName = resolveOrderCounterparty(item as Record<string, unknown>, partyNameById);
+      const statusRaw = deriveOrderWorkflowStatus(item) || "draft";
+      const orderDateStr = formatDateShort(item.order_date ?? item.created_at ?? item.createdAt);
+      const expectedDeliveryStr = formatDateShort(item.expected_delivery_date);
+
+      const partyId = typeof item.party === "string" 
+        ? item.party 
+        : (item.party && typeof item.party === "object") 
+          ? String(item.party._id || item.party.id || "") 
+          : "";
+
+      const partyObj = partyId ? partyMap.get(partyId) : null;
+      const partyType = partyObj?.party_type || (item.party && typeof item.party === "object" ? item.party.party_type : "") || "—";
+      const partyCity = partyObj?.billing_address?.city || partyObj?.shipping_address?.city || (item.party && typeof item.party === "object" ? (item.party.billing_address?.city || item.party.shipping_address?.city) : "") || "—";
+
+      const hasSra = partyObj?.sra === true || (item.party && typeof item.party === "object" && (item.party as any).sra === true);
+      const partySra = hasSra ? "Yes" : "No";
+
+      const resolvedDeliveryDate = orderDeliveryDateMap.get(id) || item.actual_delivery_date || item.delivered_at || (item.delivery && typeof item.delivery === "object" ? ((item.delivery as any).actual_delivery_date || (item.delivery as any).delivered_at) : "");
+      const actualDeliveryDateStr = formatDateShort(resolvedDeliveryDate);
+
+      const salesUserId = typeof item.assigned_sales_user === "string"
+        ? item.assigned_sales_user
+        : (item.assigned_sales_user && typeof item.assigned_sales_user === "object")
+          ? String(item.assigned_sales_user._id || item.assigned_sales_user.id || "")
+          : "";
+
+      const salesUserObj = salesUserId ? userMap.get(salesUserId) : null;
+      const salesPersonName = salesUserObj?.name || (item.assigned_sales_user && typeof item.assigned_sales_user === "object" ? item.assigned_sales_user.name : "") || "—";
+
+      const itemsList = Array.isArray(item.order_items) ? item.order_items : [];
+      const itemsRows: OrderItemRow[] = itemsList.map((line: any) => {
+        const name =
+          line.product_name ||
+          line.name ||
+          (line.product && typeof line.product === "object"
+            ? line.product.product_name || line.product.name
+            : "") ||
+          "Item";
+        const qty = Number(line.ordered_quantity ?? line.quantity ?? 0);
+        return { name: String(name), qty: Number.isFinite(qty) ? qty : 0 };
+      });
+      const itemsText =
+        itemsRows.map((line) => `${line.name}\t${line.qty}`).join("\n") || "—";
+
+      const totalQty = itemsRows.reduce((sum, line) => sum + line.qty, 0);
+      const rawDate = item.order_date ?? item.created_at ?? item.createdAt;
+      const parsedOrderDate = parseDate(rawDate);
+
+      return {
+        _id: id,
+        order_no: ref,
+        party_name: partyName,
+        grand_total: total,
+        priority: pri,
+        status: statusRaw,
+        order_date: orderDateStr,
+        expected_delivery_date: expectedDeliveryStr,
+        party_type: partyType,
+        party_city: partyCity,
+        sales_person: salesPersonName,
+        items_list: itemsText,
+        items_rows: itemsRows,
+        party_sra: partySra,
+        actual_delivery_date: actualDeliveryDateStr,
+        total_quantity: totalQty,
+        raw_order_date: parsedOrderDate,
+        raw: o
+      };
+    });
+  }, [listFilteredOrders, partyNameById, partyMap, userMap, orderDeliveryDateMap]);
+
+  // Compute filters metadata
+  const uniqueStatuses = useMemo(() => {
+    const statuses = new Set<string>();
+    localRows.forEach(r => {
+      if (r.status) statuses.add(r.status);
+    });
+    return Array.from(statuses).sort();
+  }, [localRows]);
+
+  const uniquePriorities = useMemo(() => {
+    const priorities = new Set<string>();
+    localRows.forEach(r => {
+      if (r.priority) priorities.add(r.priority.toLowerCase());
+    });
+    return Array.from(priorities).sort();
+  }, [localRows]);
+
+  const uniqueCounterparties = useMemo(() => {
+    const parties = new Set<string>();
+    localRows.forEach(r => {
+      if (r.party_name) {
+        const p = r.party_name.trim();
+        if (p) parties.add(p);
+      }
+    });
+    return Array.from(parties).sort();
+  }, [localRows]);
+
+  const uniqueCities = useMemo(() => {
+    const cities = new Set<string>();
+    localRows.forEach(r => {
+      if (r.party_city && r.party_city !== "—" && r.party_city.trim() !== "") {
+        cities.add(r.party_city.trim());
+      }
+    });
+    return Array.from(cities).sort();
+  }, [localRows]);
+
+  const uniqueSalesPersons = useMemo(() => {
+    const names = new Set<string>();
+    localRows.forEach(r => {
+      if (r.sales_person && r.sales_person !== "—" && r.sales_person.trim() !== "") {
+        names.add(r.sales_person.trim());
+      }
+    });
+    return Array.from(names).sort();
+  }, [localRows]);
+
+  const hasActiveFilters = useMemo(() => {
+    return (
+      filterStatus !== "all" ||
+      filterCounterparty !== "all" ||
+      filterPartyNameQuery.trim() !== "" ||
+      filterSra !== "all" ||
+      filterDatePreset !== "all" ||
+      filterMinQty !== "" ||
+      filterMaxQty !== "" ||
+      filterMinAmount !== "" ||
+      filterMaxAmount !== "" ||
+      filterCity !== "all" ||
+      filterSalesPerson !== "all"
+    );
+  }, [
+    filterStatus,
+    filterCounterparty,
+    filterPartyNameQuery,
+    filterSra,
+    filterDatePreset,
+    filterMinQty,
+    filterMaxQty,
+    filterMinAmount,
+    filterMaxAmount,
+    filterCity,
+    filterSalesPerson,
+  ]);
+
+  const handleClearFilters = () => {
+    setFilterStatus("all");
+    setFilterCounterparty("all");
+    setFilterPartyNameQuery("");
+    setFilterSra("all");
+    setFilterDatePreset("all");
+    setFilterStartDate("");
+    setFilterEndDate("");
+    setFilterMinQty("");
+    setFilterMaxQty("");
+    setFilterMinAmount("");
+    setFilterMaxAmount("");
+    setFilterCity("all");
+    setFilterSalesPerson("all");
+  };
+
+  // listFilteredOrders already applied shared orderList filters; sheet-only extras next.
+  const filteredRows = useMemo(() => {
+    let rows = localRows;
+
+    if (filterStatus !== "all") {
+      rows = rows.filter(r => r.status === filterStatus);
+    }
+
+    // 4. Counterparty Dropdown Filter
+    if (filterCounterparty !== "all") {
+      rows = rows.filter(r => r.party_name.trim() === filterCounterparty);
+    }
+
+    // 5. Party Name Search Filter
+    if (filterPartyNameQuery.trim()) {
+      const pQuery = filterPartyNameQuery.toLowerCase().trim();
+      rows = rows.filter(r => r.party_name.toLowerCase().includes(pQuery));
+    }
+
+    // 6. SRA Filter
+    if (filterSra !== "all") {
+      rows = rows.filter(r => {
+        if (filterSra === "sra") return r.party_sra === "Yes";
+        if (filterSra === "non_sra") return r.party_sra === "No";
+        return true;
+      });
+    }
+
+    // 7. Date Preset / Range Filter
+    if (filterDatePreset !== "all") {
+      rows = rows.filter(r => {
+        if (!r.raw_order_date) return false;
+        const d = r.raw_order_date;
+        const today = new Date();
+        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        
+        if (filterDatePreset === "today") {
+          return d >= startOfToday;
+        }
+        
+        if (filterDatePreset === "yesterday") {
+          const startOfYesterday = new Date(startOfToday);
+          startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+          return d >= startOfYesterday && d < startOfToday;
+        }
+        
+        if (filterDatePreset === "last_7") {
+          const sevenDaysAgo = new Date(startOfToday);
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+          return d >= sevenDaysAgo;
+        }
+        
+        if (filterDatePreset === "last_30") {
+          const thirtyDaysAgo = new Date(startOfToday);
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          return d >= thirtyDaysAgo;
+        }
+        
+        if (filterDatePreset === "custom") {
+          if (filterStartDate) {
+            const start = new Date(filterStartDate);
+            if (!isNaN(start.getTime()) && d < start) return false;
+          }
+          if (filterEndDate) {
+            const end = new Date(filterEndDate);
+            if (!isNaN(end.getTime())) {
+              const endOfDay = new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59, 999);
+              if (d > endOfDay) return false;
+            }
+          }
+        }
+        return true;
+      });
+    }
+
+    // 8. Quantity Range Filter
+    if (filterMinQty !== "") {
+      const min = Number(filterMinQty);
+      if (!isNaN(min)) {
+        rows = rows.filter(r => r.total_quantity >= min);
+      }
+    }
+    if (filterMaxQty !== "") {
+      const max = Number(filterMaxQty);
+      if (!isNaN(max)) {
+        rows = rows.filter(r => r.total_quantity <= max);
+      }
+    }
+
+    // 9. Order Volume Range Filter
+    if (filterMinAmount !== "") {
+      const min = Number(filterMinAmount);
+      if (!isNaN(min)) {
+        rows = rows.filter(r => r.grand_total >= min);
+      }
+    }
+    if (filterMaxAmount !== "") {
+      const max = Number(filterMaxAmount);
+      if (!isNaN(max)) {
+        rows = rows.filter(r => r.grand_total <= max);
+      }
+    }
+
+    // 10. City Filter
+    if (filterCity !== "all") {
+      rows = rows.filter(r => r.party_city.trim() === filterCity);
+    }
+
+    // 11. Sales Person Filter
+    if (filterSalesPerson !== "all") {
+      rows = rows.filter(r => r.sales_person.trim() === filterSalesPerson);
+    }
+
+    return rows;
+  }, [
+    localRows,
+    filterStatus,
+    filterCounterparty,
+    filterPartyNameQuery,
+    filterSra,
+    filterDatePreset,
+    filterStartDate,
+    filterEndDate,
+    filterMinQty,
+    filterMaxQty,
+    filterMinAmount,
+    filterMaxAmount,
+    filterCity,
+    filterSalesPerson,
+  ]);
+
+  // Export CSV
+  const exportToCSV = () => {
+    const sumGrandTotal = filteredRows.reduce((acc, r) => acc + r.grand_total, 0);
+    const sumQty = filteredRows.reduce((acc, r) => acc + r.total_quantity, 0);
+    const orderCount = filteredRows.length;
+
+    // Build a blank row and a summary row aligned to the column positions
+    const blankRow = COLUMNS.map(() => "").join(",");
+
+    // Summary row: label in col A, grand total in col C (index 2), qty in col K (index 10)
+    const summaryRow = COLUMNS.map((col, idx) => {
+      if (idx === 0) return `"SUMMARY (${orderCount} orders)"`;
+      if (col.key === "grand_total") return sumGrandTotal.toFixed(2);
+      if (col.key === "total_quantity") return sumQty;
+      if (col.key === "items_list") return `"Total Items Qty: ${sumQty}"`;
+      return "";
+    }).join(",");
+
+    const exportedAt = `"Exported: ${new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}"`;
+    const metaRow = [exportedAt, ...COLUMNS.slice(1).map(() => "")].join(",");
+
+    const headers = COLUMNS.map(c => `"${c.label}"`).join(",");
+    const csvContent = [
+      headers,
+      ...filteredRows.map(row => {
+        return COLUMNS.map(col => {
+          let val: string | number = row[col.key] as string | number;
+          if (col.key === "items_list") {
+            val =
+              row.items_rows.length > 0
+                ? row.items_rows.map((line) => `${line.name} | ${line.qty}`).join("\n")
+                : "—";
+          }
+          if (typeof val === "string" && (val.includes(",") || val.includes('"') || val.includes("\n"))) {
+            return `"${val.replace(/"/g, '""')}"`;
+          }
+          return val;
+        }).join(",");
+      }),
+      blankRow,
+      summaryRow,
+      metaRow,
+    ].join("\n");
+
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `orders_export_${new Date().toISOString().slice(0,10)}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Resizing mouse/drag listeners
+  const handleResizeStart = (colKey: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    dragStartRef.current = {
+      colKey,
+      startWidth: colWidths[colKey] || 120,
+      startX: e.clientX,
+    };
+    document.addEventListener("mousemove", handleResizeMove);
+    document.addEventListener("mouseup", handleResizeEnd);
+  };
+
+  const handleResizeMove = useCallback((e: MouseEvent) => {
+    if (!dragStartRef.current) return;
+    const { colKey, startWidth, startX } = dragStartRef.current;
+    const delta = e.clientX - startX;
+    const newWidth = Math.max(70, startWidth + delta);
+    setColWidths(prev => ({ ...prev, [colKey]: newWidth }));
+  }, []);
+
+  const handleResizeEnd = useCallback(() => {
+    dragStartRef.current = null;
+    document.removeEventListener("mousemove", handleResizeMove);
+    document.removeEventListener("mouseup", handleResizeEnd);
+  }, [handleResizeMove]);
+
+  // Dynamic table layout total width
+  const totalWidth = useMemo(() => {
+    const columnsSum = COLUMNS.reduce((sum, col) => sum + (colWidths[col.key] || 120), 0);
+    return 48 + columnsSum; // 48px row numbers
+  }, [colWidths]);
+
+  // Clean mouse listeners on unmount
+  useEffect(() => {
+    return () => {
+      document.removeEventListener("mousemove", handleResizeMove);
+      document.removeEventListener("mouseup", handleResizeEnd);
+    };
+  }, [handleResizeMove, handleResizeEnd]);
+
+  // Load linked Google Sheet URL from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("medica_linked_google_sheet_orders_url") || "";
+      setRealSheetUrl(saved);
+    }
+  }, []);
+
+  const handleSaveRealSheetUrl = (url: string) => {
+    setRealSheetUrl(url);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("medica_linked_google_sheet_orders_url", url);
+    }
+    toast.success("Google Sheet URL updated!");
+  };
+
+  const googleSheetEmbedUrl = useMemo(() => {
+    if (!realSheetUrl) return null;
+    const match = realSheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    if (match && match[1]) {
+      return `https://docs.google.com/spreadsheets/d/${match[1]}/htmlembed?widget=true&headers=false`;
+    }
+    return null;
+  }, [realSheetUrl]);
+
+  const ordersWebhookUrl = `${publicApiOrigin()}/api/orders/google-sheet-webhook?secret=medica-gsheet-sync-secret`;
+
+  const appsScriptPreview = [
+    "function onEdit(e) {",
+    "  var sheet = e.source.getActiveSheet();",
+    "  var range = e.range;",
+    "  var row = range.getRow();",
+    "  if (row === 1) return;",
+    "",
+    "  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];",
+    "  var rowData = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];",
+    "",
+    "  var payload = {};",
+    "  for (var i = 0; i < headers.length; i++) {",
+    '    var key = headers[i].toString().trim().toLowerCase()',
+    '      .replace(/\\*/g, "").replace(/[^a-z0-9_]/g, "_").replace(/__+/g, "_").trim();',
+    '    if (key === "order_id" || key === "id") key = "_id";',
+    '    if (key === "order_number") key = "order_no";',
+    '    if (key === "expected_delivery" || key === "edd") key = "expected_delivery_date";',
+    '    if (key === "notes") key = "remarks";',
+    '    if (key === "party") key = "party_name";',
+    "    payload[key] = rowData[i];",
+    "  }",
+    "",
+    `  UrlFetchApp.fetch("${ordersWebhookUrl}", {`,
+    '    method: "post",',
+    '    contentType: "application/json",',
+    "    payload: JSON.stringify(payload),",
+    "    muteHttpExceptions: true",
+    "  });",
+    "}",
+  ].join("\n");
+
+  const copyScriptCode = () => {
+    const code = `/**
+ * Google Sheets App Script for OPMS Orders Live-Sync
+ * Paste this inside Extensions -> Apps Script in your Google Sheet.
+ *
+ * Syncs edits on existing order rows (lookup by Order ID or Order Number).
+ * Editable: priority, order_date, expected_delivery_date, remarks, payment_status, party_name.
+ * Status / workflow columns are ignored (use the app for transitions).
+ */
+
+var BACKEND_WEBHOOK_URL = "${ordersWebhookUrl}";
+
+function onEdit(e) {
+  var sheet = e.source.getActiveSheet();
+  var range = e.range;
+  var row = range.getRow();
+
+  // Skip header row
+  if (row === 1) return;
+
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var rowData = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  var payload = {};
+  for (var i = 0; i < headers.length; i++) {
+    var rawHeader = headers[i].toString().trim().toLowerCase();
+    var key = rawHeader
+      .replace(/\\*/g, "")
+      .replace(/[^a-z0-9_]/g, "_")
+      .replace(/__+/g, "_")
+      .trim();
+
+    if (key === "order_id" || key === "id" || key === "mongo_id") key = "_id";
+    if (key === "order_number" || key === "order_ref") key = "order_no";
+    if (key === "expected_delivery" || key === "edd") key = "expected_delivery_date";
+    if (key === "notes") key = "remarks";
+    if (key === "party" || key === "counterparty") key = "party_name";
+    if (key === "payment") key = "payment_status";
+
+    payload[key] = rowData[i];
+  }
+
+  var options = {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  try {
+    var response = UrlFetchApp.fetch(BACKEND_WEBHOOK_URL, options);
+    var statusCode = response.getResponseCode();
+    if (statusCode !== 200 && statusCode !== 201) {
+      Logger.log("Orders sync failed (" + statusCode + "): " + response.getContentText());
+    }
+  } catch (err) {
+    Logger.log("Orders sync error: " + err.toString());
+  }
+}`;
+    navigator.clipboard.writeText(code);
+    setCopiedScript(true);
+    setTimeout(() => setCopiedScript(false), 2000);
+    toast.success("Script copied to clipboard!");
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <LargeModalPortal>
+      <div className="fixed inset-0 z-[100] flex flex-col bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans">
+        
+        {/* Top Header Section */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 px-6 py-4 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-100 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400">
+              📋
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>Order Spreadsheet Registry</span>
+                {activeTab === "virtual" ? (
+                  <span className="rounded-full bg-slate-200/60 dark:bg-slate-800 px-2 py-0.5 text-2xs font-bold text-slate-600 dark:text-slate-400">
+                    Read Only Grid
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100/80 dark:bg-emerald-950/40 px-2 py-0.5 text-2xs font-bold text-emerald-700 dark:text-emerald-400">
+                    <Cloud className="h-3 w-3" />
+                    Live Sync
+                  </span>
+                )}
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {activeTab === "virtual"
+                  ? `Interactive spreadsheet viewer for orders, filtered to ${filteredRows.length} matching rows.`
+                  : "Connect a real Google Sheet — edits sync to MongoDB via Apps Script webhook."}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="flex rounded-lg bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => setActiveTab("virtual")}
+                className={`rounded-md px-3.5 py-1 text-xs font-semibold transition ${
+                  activeTab === "virtual"
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+                }`}
+              >
+                Virtual Sheet
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("real")}
+                className={`rounded-md px-3.5 py-1 text-xs font-semibold transition ${
+                  activeTab === "real"
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+                }`}
+              >
+                Real Google Sheet Connection
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-slate-200 hover:border-slate-350 p-2 text-slate-400 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-850 hover:text-slate-700 dark:hover:text-slate-255 transition"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+      {activeTab === "virtual" ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+        {/* Toolbar Container */}
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-4 py-2 shrink-0">
+          
+          {/* Export action */}
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={exportToCSV}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 transition"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>Export CSV</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onRefetchOrders?.()}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 transition"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isOrdersFetching ? "animate-spin" : ""}`} />
+              <span>Reload</span>
+            </button>
+          </div>
+
+          {/* Search and Filters panel toggle */}
+          <div className="flex items-center gap-2 relative">
+            <div className="relative w-60">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 text-slate-400 dark:text-slate-555 pointer-events-none">
+                <Search className="h-3.5 w-3.5" />
+              </span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => onSearchQueryChange(e.target.value)}
+                placeholder="Search values in sheet..."
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 pl-8 pr-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 outline-none transition focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500/30"
+              />
+            </div>
+
+            {/* Filters Toggle Button */}
+            <button
+              onClick={() => setIsFilterPanelOpen(prev => !prev)}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition relative ${
+                isFilterPanelOpen || hasActiveFilters
+                  ? "border-emerald-500 bg-emerald-50/10 text-emerald-600 dark:text-emerald-400"
+                  : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              <span>Filters</span>
+              {hasActiveFilters && (
+                <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900" />
+              )}
+            </button>
+
+            {/* Clear Filters helper */}
+            {hasActiveFilters && (
+              <button
+                onClick={handleClearFilters}
+                className="text-xs font-semibold text-rose-500 hover:text-rose-600 px-1 py-1.5 transition"
+                title="Clear all active filters"
+              >
+                Clear
+              </button>
+            )}
+
+            {/* Filter Panel Dropdown Popover */}
+            {isFilterPanelOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsFilterPanelOpen(false)}
+                />
+                <div className="absolute right-0 top-full mt-2 w-96 max-h-[75vh] overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl p-4 z-50 space-y-4 text-xs scrollbar-thin">
+                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                    <span className="font-bold text-slate-900 dark:text-slate-100">Sheet Filters</span>
+                    <button
+                      onClick={handleClearFilters}
+                      disabled={!hasActiveFilters}
+                      className="text-2xs text-slate-400 hover:text-emerald-500 disabled:opacity-50 transition font-semibold"
+                    >
+                      Reset All
+                    </button>
+                  </div>
+
+                  {/* Filter Fields */}
+                  <div className="space-y-3.5 select-none">
+                    {/* Status select */}
+                    <div>
+                      <label className="block font-semibold text-slate-550 dark:text-slate-400 mb-1">Order Status</label>
+                      <select
+                        value={filterStatus}
+                        onChange={e => setFilterStatus(e.target.value)}
+                        className="w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-2.5 py-1.5 text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                      >
+                        <option value="all">All statuses</option>
+                        {uniqueStatuses.map(st => (
+                          <option key={st} value={st}>{st}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Priority select — shared with list page bottom strip */}
+                    <div>
+                      <label className="block font-semibold text-slate-550 dark:text-slate-400 mb-1">Priority</label>
+                      <select
+                        value={priorityFilter}
+                        onChange={(e) => onPriorityFilterChange(e.target.value)}
+                        className="w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-2.5 py-1.5 text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                      >
+                        <option value="all">All priorities</option>
+                        {uniquePriorities.map(pr => (
+                          <option key={pr} value={pr} className="capitalize">{pr}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Counterparty select */}
+                    <div>
+                      <label className="block font-semibold text-slate-550 dark:text-slate-400 mb-1">Select Party Name (Dropdown)</label>
+                      <select
+                        value={filterCounterparty}
+                        onChange={e => setFilterCounterparty(e.target.value)}
+                        className="w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-2.5 py-1.5 text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                      >
+                        <option value="all">All parties</option>
+                        {uniqueCounterparties.map(p => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Specific Party Search Input */}
+                    <div>
+                      <label className="block font-semibold text-slate-550 dark:text-slate-400 mb-1">Search Party Name (Text)</label>
+                      <input
+                        type="text"
+                        value={filterPartyNameQuery}
+                        onChange={e => setFilterPartyNameQuery(e.target.value)}
+                        placeholder="Type to filter party name..."
+                        className="w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-2.5 py-1.5 text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    {/* City Select */}
+                    <div>
+                      <label className="block font-semibold text-slate-550 dark:text-slate-400 mb-1">City</label>
+                      <select
+                        value={filterCity}
+                        onChange={e => setFilterCity(e.target.value)}
+                        className="w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-2.5 py-1.5 text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                      >
+                        <option value="all">All cities</option>
+                        {uniqueCities.map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Sales Person Select */}
+                    <div>
+                      <label className="block font-semibold text-slate-550 dark:text-slate-400 mb-1">Sales Person</label>
+                      <select
+                        value={filterSalesPerson}
+                        onChange={e => setFilterSalesPerson(e.target.value)}
+                        className="w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-2.5 py-1.5 text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                      >
+                        <option value="all">All sales persons</option>
+                        {uniqueSalesPersons.map(sp => (
+                          <option key={sp} value={sp}>{sp}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* SRA Filter */}
+                    <div>
+                      <label className="block font-semibold text-slate-550 dark:text-slate-400 mb-1">SRA Status</label>
+                      <select
+                        value={filterSra}
+                        onChange={e => setFilterSra(e.target.value)}
+                        className="w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-2.5 py-1.5 text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                      >
+                        <option value="all">All parties</option>
+                        <option value="sra">SRA Parties Only</option>
+                        <option value="non_sra">Non-SRA Parties Only</option>
+                      </select>
+                    </div>
+
+                    {/* Date Preset Filter */}
+                    <div>
+                      <label className="block font-semibold text-slate-550 dark:text-slate-400 mb-1">Order Date Range</label>
+                      <select
+                        value={filterDatePreset}
+                        onChange={e => setFilterDatePreset(e.target.value)}
+                        className="w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-2.5 py-1.5 text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500 mb-1.5"
+                      >
+                        <option value="all">All Time</option>
+                        <option value="today">Today</option>
+                        <option value="yesterday">Yesterday</option>
+                        <option value="last_7">Last 7 Days</option>
+                        <option value="last_30">Last 30 Days</option>
+                        <option value="custom">Custom Range</option>
+                      </select>
+
+                      {filterDatePreset === "custom" && (
+                        <div className="grid grid-cols-2 gap-2 mt-1.5 animate-fadeIn">
+                          <div>
+                            <label className="block text-2xs font-semibold text-slate-400 mb-1">Start Date</label>
+                            <input
+                              type="date"
+                              value={filterStartDate}
+                              onChange={e => setFilterStartDate(e.target.value)}
+                              className="w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-2 py-1 text-xs text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-2xs font-semibold text-slate-400 mb-1">End Date</label>
+                            <input
+                              type="date"
+                              value={filterEndDate}
+                              onChange={e => setFilterEndDate(e.target.value)}
+                              className="w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-2 py-1 text-xs text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Quantity Range */}
+                    <div>
+                      <label className="block font-semibold text-slate-550 dark:text-slate-400 mb-1">Total Quantity Range</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="number"
+                          value={filterMinQty}
+                          onChange={e => setFilterMinQty(e.target.value)}
+                          placeholder="Min Qty"
+                          className="w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-2.5 py-1.5 text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                        />
+                        <input
+                          type="number"
+                          value={filterMaxQty}
+                          onChange={e => setFilterMaxQty(e.target.value)}
+                          placeholder="Max Qty"
+                          className="w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-2.5 py-1.5 text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Amount Range */}
+                    <div>
+                      <label className="block font-semibold text-slate-550 dark:text-slate-400 mb-1">Order Volume Range (₹)</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="number"
+                          value={filterMinAmount}
+                          onChange={e => setFilterMinAmount(e.target.value)}
+                          placeholder="Min (₹)"
+                          className="w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-2.5 py-1.5 text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                        />
+                        <input
+                          type="number"
+                          value={filterMaxAmount}
+                          onChange={e => setFilterMaxAmount(e.target.value)}
+                          placeholder="Max (₹)"
+                          className="w-full rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-2.5 py-1.5 text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Read-Only Formula Indicator */}
+        <div className="flex items-center border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-4 py-1.5 text-xs select-none shrink-0 font-mono">
+          <span className="text-slate-450 dark:text-slate-555 font-semibold select-none pr-3">fx</span>
+          <span className="text-slate-300 dark:text-slate-700 px-1 border-r border-slate-200 dark:border-slate-700 mr-3">|</span>
+          <span className="text-slate-400 dark:text-slate-600 italic select-none">
+            {selectedCell
+              ? `${COLUMNS.find(c => c.key === selectedCell.colKey)?.label}: ${
+                  filteredRows.find(r => r._id === selectedCell.orderId)?.[selectedCell.colKey] ?? ""
+                }`
+              : "Select a cell to view its value (Double-click/Editing is disabled)"}
+          </span>
+        </div>
+
+        {/* Summary Bar */}
+        {filteredRows.length > 0 && (() => {
+          const sumGrandTotal = filteredRows.reduce((acc, r) => acc + r.grand_total, 0);
+          const sumQty = filteredRows.reduce((acc, r) => acc + r.total_quantity, 0);
+          const orderCount = filteredRows.length;
+          return (
+            <div className="flex items-center gap-0 border-b border-slate-200 dark:border-slate-800 bg-gradient-to-r from-emerald-50/80 via-white to-purple-50/60 dark:from-emerald-950/30 dark:via-slate-900 dark:to-purple-950/20 px-4 py-2 shrink-0 select-none text-xs">
+              <span className="text-slate-400 dark:text-slate-600 font-semibold mr-4 text-2xs uppercase tracking-wide">∑ Summary</span>
+              {/* Orders count */}
+              <div className="flex items-center gap-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 mr-3">
+                <span className="h-2 w-2 rounded-full bg-slate-400 dark:bg-slate-500 shrink-0" />
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Orders</span>
+                <span className="font-bold text-slate-800 dark:text-slate-100 ml-1 font-mono">{orderCount.toLocaleString("en-IN")}</span>
+              </div>
+              {/* Grand total sum */}
+              <div className="flex items-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-3 py-1 mr-3">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                <span className="text-emerald-700 dark:text-emerald-400 font-medium">Grand Total</span>
+                <span className="font-bold text-emerald-800 dark:text-emerald-200 ml-1 font-mono">₹{formatMoney(sumGrandTotal)}</span>
+              </div>
+              {/* Items quantity sum */}
+              <div className="flex items-center gap-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 px-3 py-1 mr-3">
+                <span className="h-2 w-2 rounded-full bg-purple-500 shrink-0" />
+                <span className="text-purple-700 dark:text-purple-400 font-medium">Total Items Qty</span>
+                <span className="font-bold text-purple-800 dark:text-purple-200 ml-1 font-mono">{sumQty.toLocaleString("en-IN")}</span>
+              </div>
+              <span className="ml-auto text-2xs text-slate-400 dark:text-slate-600 italic">Showing totals for filtered rows</span>
+            </div>
+          );
+        })()}
+
+        {/* Spreadsheet Area */}
+        <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-950 relative">
+          {/* Busy Loading Overlay */}
+          {(isOrdersFetching || partiesQ.isLoading || usersQ.isLoading) && (
+            <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex items-center justify-center z-40 backdrop-blur-[1px]">
+              <div className="flex flex-col items-center gap-2.5 bg-white dark:bg-slate-850 p-4 rounded-xl shadow-lg border border-slate-200 dark:border-slate-800">
+                <RefreshCw className="h-5 w-5 animate-spin text-emerald-600 dark:text-emerald-400" />
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">Loading sheet data...</span>
+              </div>
+            </div>
+          )}
+          <div
+            className="relative"
+            style={{ width: `${totalWidth}px` }}
+          >
+            <table className="table-fixed border-collapse text-xs select-none">
+              <thead>
+                <tr className="bg-slate-100 dark:bg-slate-900">
+                  {/* Row index top corner cell */}
+                  <th className="sticky top-0 left-0 z-30 w-12 border-r border-b border-slate-250 dark:border-slate-800 bg-slate-150 dark:bg-slate-850 text-center text-2xs text-slate-500 font-medium py-1.5 shadow-[2px_2px_0_0_rgba(0,0,0,0.02)]">
+                    &nbsp;
+                  </th>
+                  
+                  {/* Column headers (A, B, C...) */}
+                  {COLUMNS.map(col => {
+                    const width = colWidths[col.key] || 120;
+                    return (
+                      <th
+                        key={col.key}
+                        style={{ width: `${width}px` }}
+                        className="sticky top-0 z-20 border-r border-b border-slate-250 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 font-semibold text-center select-none relative group"
+                      >
+                        <div className="flex flex-col items-center justify-center py-1">
+                          <span className="text-2xs text-slate-400">{col.headerLetter}</span>
+                          <span className="text-xs truncate px-2 max-w-full" title={col.label}>
+                            {col.label}
+                          </span>
+                        </div>
+                        {/* Resizer Handle */}
+                        <div
+                          onMouseDown={e => handleResizeStart(col.key, e)}
+                          className="absolute top-0 right-0 bottom-0 w-1 cursor-col-resize hover:bg-emerald-500/50 active:bg-emerald-600 transition z-10"
+                        />
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.map((row, rowIdx) => {
+                  return (
+                    <tr
+                      key={row._id}
+                      className="hover:bg-slate-50 dark:hover:bg-slate-900/60 transition-colors bg-white dark:bg-slate-900"
+                    >
+                      {/* Row index cell */}
+                      <td className="sticky left-0 z-10 border-r border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-center text-2xs text-slate-400 font-mono py-1.5 shadow-[2px_0_0_0_rgba(0,0,0,0.02)] select-none">
+                        {rowIdx + 1}
+                      </td>
+
+                      {/* Spreadsheet Columns */}
+                      {COLUMNS.map(col => {
+                        const isSelected =
+                          selectedCell?.orderId === row._id &&
+                          selectedCell?.colKey === col.key;
+                        const val = row[col.key];
+
+                        const isItemsList = col.key === "items_list";
+                        let cellClass =
+                          "border-r border-b border-slate-150 dark:border-slate-800 text-slate-800 dark:text-slate-200 font-mono font-normal outline-none relative cursor-pointer select-none";
+                        cellClass += isItemsList ? " px-1.5 py-1.5 align-top" : " truncate px-3 py-2";
+                        if (isSelected) {
+                          cellClass += " ring-2 ring-emerald-500 ring-inset bg-emerald-500/5 dark:bg-emerald-500/10";
+                        }
+
+                        // Styles based on cell data type
+                        const isNumber = col.type === "number";
+                        const textAlignment = isNumber ? "text-right" : "text-left";
+
+                        return (
+                          <td
+                            key={col.key}
+                            onClick={() => setSelectedCell({ orderId: row._id, colKey: col.key })}
+                            className={`${cellClass} ${textAlignment}`}
+                            title={isItemsList ? row.items_list : undefined}
+                          >
+                            {isNumber && typeof val === "number" ? (
+                              <span>₹{formatMoney(val)}</span>
+                            ) : col.key === "priority" ? (
+                              <span className="capitalize">{String(val)}</span>
+                            ) : col.key === "status" ? (
+                              <span className="capitalize">{String(val).replace(/_/g, " ")}</span>
+                            ) : isItemsList ? (
+                              <ItemsListNestedTable items={row.items_rows} />
+                            ) : (
+                              <span>{String(val ?? "")}</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 flex-col border-t border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center justify-between gap-4 px-4 py-2 text-xs text-slate-500 dark:text-slate-400">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-purple-500" />
+              <span className="font-semibold">Read-Only Grid Mode</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span>
+                Rows:{" "}
+                <strong className="text-slate-800 dark:text-slate-200">
+                  {filteredRows.length}
+                </strong>{" "}
+                / {localRows.length}
+              </span>
+              {config.showPricing && (
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                  ∑ ₹
+                  {formatMoney(
+                    filteredRows.reduce((a, r) => a + r.grand_total, 0),
+                  )}
+                </span>
+              )}
+              <span className="font-semibold text-purple-600 dark:text-purple-400">
+                Qty:{" "}
+                {filteredRows
+                  .reduce((a, r) => a + r.total_quantity, 0)
+                  .toLocaleString("en-IN")}
+              </span>
+            </div>
+          </div>
+          <OrderListSheetProcessFilters
+            processTabs={
+              config.includeDraftTab ? SALES_ORDER_TABS : ORDER_WORKFLOW_TABS
+            }
+            activeProcessTab={listActiveTab}
+            onProcessTabChange={(tabId) =>
+              onActiveTabChange(tabId as ListOrdersTabId)
+            }
+            priorityFilter={priorityFilter}
+            onPriorityFilterChange={onPriorityFilterChange}
+            showReset={showReset || hasActiveFilters}
+            onReset={() => {
+              handleClearFilters();
+              onResetFilters?.();
+            }}
+            compact
+          />
+        </div>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950 p-6 space-y-6">
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-lg space-y-4">
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Link2 className="h-5 w-5 text-emerald-500" />
+                <span>Link a Real Google Sheet URL</span>
+              </h3>
+              <p className="text-xs text-slate-650 dark:text-slate-400 max-w-2xl leading-relaxed">
+                Paste your Google Sheet link here. Export orders from the Virtual Sheet tab as CSV,
+                import into Google Sheets, then install the Apps Script so edits sync live to OPMS.
+              </p>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={realSheetUrl}
+                  onChange={e => handleSaveRealSheetUrl(e.target.value)}
+                  placeholder="https://docs.google.com/spreadsheets/d/.../edit"
+                  className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 px-3.5 py-2 text-sm text-slate-800 dark:text-slate-100 outline-none transition focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500/30"
+                />
+                {realSheetUrl && (
+                  <a
+                    href={realSheetUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-705 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 transition"
+                  >
+                    <span>Open Sheet</span>
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {googleSheetEmbedUrl ? (
+              <div className="border border-slate-200 dark:border-slate-850 rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900">
+                <div className="bg-slate-100 dark:bg-slate-850 px-4 py-2 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">Google Sheet Embedded View</span>
+                  <span className="text-2xs text-slate-400 dark:text-slate-500">Iframe loading via Google Docs URL</span>
+                </div>
+                <iframe
+                  src={googleSheetEmbedUrl}
+                  className="w-full h-[450px] border-none bg-white"
+                  title="Google Sheet Embedded View"
+                  loading="lazy"
+                />
+              </div>
+            ) : (
+              <div className="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl py-12 px-4 text-center bg-white dark:bg-slate-900/30">
+                <div className="text-slate-400 dark:text-slate-655 mb-3 text-3xl">📁</div>
+                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">No Google Sheet URL connected</h4>
+                <p className="text-xs text-slate-500 max-w-xs mx-auto mt-1">
+                  Paste your spreadsheet link above to enable the embedded preview panel in this tab.
+                </p>
+              </div>
+            )}
+
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-lg space-y-5">
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+                <Info className="h-5 w-5 text-blue-500 dark:text-blue-400" />
+                <span>Webhooks Setup Guide (How to Sync Google Sheet {"->"} Backend)</span>
+              </h3>
+
+              <div className="space-y-4 text-xs leading-relaxed text-slate-600 dark:text-slate-350">
+                <div className="space-y-2">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 block">1. Sheet Columns Setup</span>
+                  <p>
+                    Set headers in Row 1 (column order does not matter). Include{" "}
+                    <strong className="text-slate-800 dark:text-slate-200">Order Number</strong> or{" "}
+                    <strong className="text-slate-800 dark:text-slate-200">Order ID</strong> so the webhook can find the order.
+                  </p>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 pt-1.5 font-mono text-2xs">
+                    <div className="bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-850 p-1.5 rounded text-center text-slate-700 dark:text-slate-300">Order ID</div>
+                    <div className="bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-850 p-1.5 rounded text-center text-slate-700 dark:text-slate-300">Order Number*</div>
+                    <div className="bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-850 p-1.5 rounded text-center text-slate-700 dark:text-slate-300">Party Name</div>
+                    <div className="bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-850 p-1.5 rounded text-center text-slate-700 dark:text-slate-300">Priority</div>
+                    <div className="bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-850 p-1.5 rounded text-center text-slate-700 dark:text-slate-300">Order Date</div>
+                    <div className="bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-850 p-1.5 rounded text-center text-slate-700 dark:text-slate-300">Expected Delivery Date</div>
+                    <div className="bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-850 p-1.5 rounded text-center text-slate-700 dark:text-slate-300">Remarks</div>
+                    <div className="bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-850 p-1.5 rounded text-center text-slate-700 dark:text-slate-300">Payment Status</div>
+                    <div className="bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-850 p-1.5 rounded text-center text-slate-700 dark:text-slate-300">Status</div>
+                    <div className="bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-850 p-1.5 rounded text-center text-slate-700 dark:text-slate-300">Grand Total (₹)</div>
+                  </div>
+                  <span className="text-2xs text-slate-400 dark:text-slate-500 block mt-1">
+                    Editable via sync: Priority, Order Date, Expected Delivery Date, Remarks, Payment Status, Party Name.
+                    Status and totals are display-only (workflow transitions stay in the app).
+                  </span>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 block">2. Google Apps Script Configuration</span>
+                  <p>
+                    Open your sheet, select <strong className="text-slate-800 dark:text-slate-200">Extensions &gt; Apps Script</strong>, clear the editor, and copy-paste the code snippet below:
+                  </p>
+
+                  <div className="relative border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-950 font-mono text-xs leading-normal text-slate-700 dark:text-slate-300">
+                    <div className="bg-slate-100 dark:bg-slate-850 px-4 py-2 flex justify-between items-center text-xs select-none">
+                      <span className="font-semibold text-slate-550 dark:text-slate-450">GoogleAppsScriptCode.js</span>
+                      <button
+                        type="button"
+                        onClick={copyScriptCode}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 text-slate-600 dark:text-slate-250 border border-slate-200 dark:border-slate-700 transition active:scale-95"
+                      >
+                        {copiedScript ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                        <span>{copiedScript ? "Copied!" : "Copy Code"}</span>
+                      </button>
+                    </div>
+                    <pre className="p-4 overflow-x-auto max-h-60 select-all border-t border-slate-200 dark:border-slate-800 whitespace-pre-wrap">
+                      {appsScriptPreview}
+                    </pre>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 block">3. Authorize &amp; Deploy Trigger</span>
+                  <ol className="list-decimal pl-4 space-y-1">
+                    <li>In Apps Script, click <strong className="text-slate-800 dark:text-slate-200">Save</strong>, then run <code className="font-mono text-emerald-600 dark:text-emerald-400">onEdit</code> once and approve permissions.</li>
+                    <li>
+                      Optional: Triggers → Add Trigger → Function <code className="font-mono">onEdit</code> → Event source:{" "}
+                      <code className="font-mono text-emerald-600 dark:text-emerald-400">From spreadsheet</code> → Event type:{" "}
+                      <code className="font-mono text-emerald-600 dark:text-emerald-400">On edit</code>.
+                    </li>
+                    <li>
+                      Webhook target:{" "}
+                      <code className="break-all font-mono text-2xs text-emerald-700 dark:text-emerald-400">{ordersWebhookUrl}</code>
+                    </li>
+                    <li>
+                      Ensure the backend is reachable from the internet (Apps Script cannot call localhost). For local Docker, use a tunnel or set{" "}
+                      <code className="font-mono">NEXT_PUBLIC_API_ORIGIN</code> to your public API URL.
+                    </li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      </div>
+    </LargeModalPortal>
+  );
+}

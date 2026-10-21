@@ -1,0 +1,71 @@
+[
+  {
+    "cityText": "Amritsar",
+    "reason": "state_unmatched"
+  },
+  {
+    "cityText": "Morinda",
+    "reason": "state_unmatched"
+  },
+  {
+    "cityText": "Khanna",
+    "reason": "state_unmatched"
+  },
+  {
+    "cityText": "Gurdaspur",
+    "reason": "state_unmatched"
+  },
+  {
+    "cityText": "Gurdaspur",
+    "reason": "state_unmatched"
+  },
+  {
+    "cityText": "Jalandhar",
+    "reason": "state_unmatched"
+  },
+  {
+    "stateText": "Jammu",
+    "cityText": "Jammu",
+    "reason": "state_unmatched"
+  },
+  {
+    "stateText": "Gujrat",
+    "cityText": "Gujrat",
+    "reason": "state_unmatched"
+  },
+  {
+    "stateText": "",
+    "cityText": "Hoshiarpur - 146001",
+    "reason": "state_unmatched"
+  },
+  {
+    "stateText": "",
+    "cityText": "Mohali",
+    "reason": "state_unmatched"
+  },
+  {
+    "stateText": "Malerkotla",
+    "cityText": "Malerkotla",
+    "reason": "state_unmatched"
+  },
+  {
+    "stateText": "Himacha Pradesh",
+    "cityText": "Kangra",
+    "reason": "state_unmatched"
+  },
+  {
+    "stateText": "Himacha Pradesh",
+    "cityText": "Kangra",
+    "reason": "state_unmatched"
+  },
+  {
+    "stateText": "",
+    "cityText": "Ludhiana",
+    "reason": "state_unmatched"
+  },
+  {
+    "stateText": "Uttrakhand",
+    "cityText": "Rudrapur",
+    "reason": "state_unmatched"
+  }
+]

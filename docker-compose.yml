@@ -1,0 +1,407 @@
+# OPMS stack: Redis + API services + Next.js frontends
+#
+# Quick start:
+#   cp .env.docker.example .env.docker
+#   # Edit .env.docker — set JWT_SECRET and MONGO_URI at minimum
+#   docker compose --env-file .env.docker up --build
+#   # or: ln -sf .env.docker .env && docker compose up --build
+#
+# Dev (hot reload):
+#   docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# Secrets/Mongo come from service env_file (.env.docker).
+# Do not re-list MONGO_URI/JWT_SECRET under environment: — empty ${VAR} overrides env_file.
+# Do not hardcode credentials in this file.
+
+name: ${COMPOSE_PROJECT_NAME:-opms}
+
+x-env-file: &env_file
+  - path: ${ENV_FILE:-.env.docker}
+    required: false
+  - path: .env
+    required: false
+
+x-extra-hosts: &extra_hosts
+  - "host.docker.internal:host-gateway"
+
+services:
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Host bind localhost-only (not LAN/internet). Prefer Compose network for apps.
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-7014}:6379"
+    command: [ "redis-server", "--requirepass", "${REDIS_PASSWORD:-changeme}" ]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+      pull: false
+    restart: unless-stopped
+    ports:
+      - "${AUTH_SERVICE_PORT:-7003}:${AUTH_SERVICE_PORT:-7003}"
+    env_file: *env_file
+    extra_hosts: *extra_hosts
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${AUTH_SERVICE_PORT:-7003}
+    healthcheck:
+      test: [ "CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:'+(process.env.PORT||7003)+'/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\"" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  product-service:
+    build:
+      context: ./product-service
+      dockerfile: Dockerfile
+      pull: false
+    restart: unless-stopped
+    ports:
+      - "${PRODUCT_SERVICE_PORT:-7005}:${PRODUCT_SERVICE_PORT:-7005}"
+    env_file: *env_file
+    extra_hosts: *extra_hosts
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PRODUCT_SERVICE_PORT:-7005}
+    healthcheck:
+      test: [ "CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:'+(process.env.PORT||7005)+'/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\"" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  party-service:
+    build:
+      context: ./party-service
+      dockerfile: Dockerfile
+      pull: false
+    restart: unless-stopped
+    ports:
+      - "${PARTY_SERVICE_PORT:-7006}:${PARTY_SERVICE_PORT:-7006}"
+    env_file: *env_file
+    extra_hosts: *extra_hosts
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PARTY_SERVICE_PORT:-7006}
+    healthcheck:
+      test: [ "CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:'+(process.env.PORT||7006)+'/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\"" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  work-planner-backend:
+    build:
+      context: ./work-planner-backend
+      dockerfile: Dockerfile
+      pull: false
+    restart: unless-stopped
+    ports:
+      - "${WORK_PLANNER_BACKEND_PORT:-7007}:${WORK_PLANNER_BACKEND_PORT:-7007}"
+    env_file: *env_file
+    extra_hosts: *extra_hosts
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${WORK_PLANNER_BACKEND_PORT:-7007}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+      MESSAGE_SERVICE_URL: ${MESSAGE_SERVICE_URL:-http://message-service:7011}
+      NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL:-http://notification-service:7012}
+      POWER_APP_BASE_URL: ${POWER_APP_BASE_URL:-http://host.docker.internal:5001}
+      POWER_APP_API_KEY: ${POWER_APP_API_KEY:-}
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:'+(process.env.PORT||7007)+'/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\"" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  lead-manager-backend:
+    build:
+      context: ./lead-manager-backend
+      dockerfile: Dockerfile
+      pull: false
+    restart: unless-stopped
+    ports:
+      - "${LEAD_MANAGER_BACKEND_PORT:-7009}:${LEAD_MANAGER_BACKEND_PORT:-7009}"
+    env_file: *env_file
+    extra_hosts: *extra_hosts
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${LEAD_MANAGER_BACKEND_PORT:-7009}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+      OPMS_BACKEND_URL: ${OPMS_BACKEND_URL:-http://opms-backend:7001}
+      MESSAGE_SERVICE_URL: ${MESSAGE_SERVICE_URL:-http://message-service:7011}
+      NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL:-http://notification-service:7012}
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      opms-backend:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      message-service:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:'+(process.env.PORT||7009)+'/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\"" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  message-service:
+    build:
+      context: ./message-service
+      dockerfile: Dockerfile
+      pull: false
+    restart: unless-stopped
+    ports:
+      - "${MESSAGE_SERVICE_PORT:-7011}:${MESSAGE_SERVICE_PORT:-7011}"
+    env_file: *env_file
+    extra_hosts: *extra_hosts
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${MESSAGE_SERVICE_PORT:-7011}
+      # Always build from REDIS_PASSWORD so a stale unauthenticated REDIS_URL in env_file cannot win
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:'+(process.env.PORT||7011)+'/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\"" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+      pull: false
+    restart: unless-stopped
+    ports:
+      - "${NOTIFICATION_SERVICE_PORT:-7012}:${NOTIFICATION_SERVICE_PORT:-7012}"
+    env_file: *env_file
+    extra_hosts: *extra_hosts
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${NOTIFICATION_SERVICE_PORT:-7012}
+      # Always build from REDIS_PASSWORD so a stale unauthenticated REDIS_URL in env_file cannot win
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:'+(process.env.PORT||7012)+'/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\"" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  opms-backend:
+    build:
+      context: ./opms-backend
+      dockerfile: Dockerfile
+      pull: false
+    restart: unless-stopped
+    ports:
+      - "${OPMS_BACKEND_PORT:-7001}:${OPMS_BACKEND_PORT:-7001}"
+    env_file: *env_file
+    extra_hosts: *extra_hosts
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${OPMS_BACKEND_PORT:-7001}
+      # Always build from REDIS_PASSWORD so a stale unauthenticated REDIS_URL in env_file cannot win
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+      PRODUCT_SERVICE_URL: ${PRODUCT_SERVICE_URL:-http://product-service:7005}
+      PARTY_SERVICE_URL: ${PARTY_SERVICE_URL:-http://party-service:7006}
+      MESSAGE_SERVICE_URL: ${MESSAGE_SERVICE_URL:-http://message-service:7011}
+      NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL:-http://notification-service:7012}
+    depends_on:
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+      party-service:
+        condition: service_healthy
+      message-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:'+(process.env.PORT||7001)+'/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\"" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  opms-frontend:
+    build:
+      context: ./opms-frontend
+      dockerfile: Dockerfile
+      pull: false
+      additional_contexts:
+        session_auth: ./session-auth-client
+      args:
+        NEXT_PUBLIC_API_ORIGIN: ${NEXT_PUBLIC_API_ORIGIN:-http://localhost:7001}
+        NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+        NEXT_PUBLIC_AUTH_ORIGIN: ${NEXT_PUBLIC_AUTH_ORIGIN:-http://localhost:7003}
+        NEXT_PUBLIC_PRODUCT_SERVICE_URL: ${NEXT_PUBLIC_PRODUCT_SERVICE_URL:-http://localhost:7005}
+        NEXT_PUBLIC_PARTY_SERVICE_URL: ${NEXT_PUBLIC_PARTY_SERVICE_URL:-http://localhost:7006}
+        NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+        NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+        NEXT_PUBLIC_COMPANY_FAVICON_URL: ${NEXT_PUBLIC_COMPANY_FAVICON_URL:-}
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-}
+    restart: unless-stopped
+    ports:
+      - "${OPMS_FRONTEND_PORT:-7002}:3000"
+    environment:
+      NEXT_PUBLIC_API_ORIGIN: ${NEXT_PUBLIC_API_ORIGIN:-http://localhost:7001}
+      NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+      NEXT_PUBLIC_AUTH_ORIGIN: ${NEXT_PUBLIC_AUTH_ORIGIN:-http://localhost:7003}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+      NEXT_PUBLIC_PRODUCT_SERVICE_URL: ${NEXT_PUBLIC_PRODUCT_SERVICE_URL:-http://localhost:7005}
+      NEXT_PUBLIC_PARTY_SERVICE_URL: ${NEXT_PUBLIC_PARTY_SERVICE_URL:-http://localhost:7006}
+      NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+      NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+      NEXT_PUBLIC_COMPANY_FAVICON_URL: ${NEXT_PUBLIC_COMPANY_FAVICON_URL:-}
+      NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-}
+    depends_on:
+      opms-backend:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+
+  user-manager-frontend:
+    build:
+      context: ./user-manager-frontend
+      dockerfile: Dockerfile
+      pull: false
+      additional_contexts:
+        session_auth: ./session-auth-client
+      args:
+        NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+        NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+        NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+    restart: unless-stopped
+    ports:
+      - "${USER_MANAGER_FRONTEND_PORT:-7004}:3000"
+    environment:
+      NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+      NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+      NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+    depends_on:
+      auth-service:
+        condition: service_healthy
+
+  work-planner-frontend:
+    build:
+      context: ./work-planner-frontend
+      dockerfile: Dockerfile
+      pull: false
+      additional_contexts:
+        session_auth: ./session-auth-client
+      args:
+        NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+        NEXT_PUBLIC_WORK_PLANNER_SERVICE_URL: ${NEXT_PUBLIC_WORK_PLANNER_SERVICE_URL:-http://localhost:7007}
+        NEXT_PUBLIC_PARTY_SERVICE_URL: ${NEXT_PUBLIC_PARTY_SERVICE_URL:-http://localhost:7006}
+        NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+        NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+    restart: unless-stopped
+    ports:
+      - "${WORK_PLANNER_FRONTEND_PORT:-7008}:3000"
+    environment:
+      NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+      NEXT_PUBLIC_WORK_PLANNER_SERVICE_URL: ${NEXT_PUBLIC_WORK_PLANNER_SERVICE_URL:-http://localhost:7007}
+      NEXT_PUBLIC_PARTY_SERVICE_URL: ${NEXT_PUBLIC_PARTY_SERVICE_URL:-http://localhost:7006}
+      NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+      NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+    depends_on:
+      work-planner-backend:
+        condition: service_healthy
+
+  lead-manager-frontend:
+    build:
+      context: ./lead-manager-frontend
+      dockerfile: Dockerfile
+      pull: false
+      additional_contexts:
+        session_auth: ./session-auth-client
+      args:
+        NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+        NEXT_PUBLIC_LEAD_MANAGER_SERVICE_URL: ${NEXT_PUBLIC_LEAD_MANAGER_SERVICE_URL:-http://localhost:7009}
+        NEXT_PUBLIC_PRODUCT_SERVICE_URL: ${NEXT_PUBLIC_PRODUCT_SERVICE_URL:-http://localhost:7005}
+        NEXT_PUBLIC_PARTY_SERVICE_URL: ${NEXT_PUBLIC_PARTY_SERVICE_URL:-http://localhost:7006}
+        NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+        NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+    restart: unless-stopped
+    ports:
+      - "${LEAD_MANAGER_FRONTEND_PORT:-7010}:3000"
+    environment:
+      NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+      NEXT_PUBLIC_LEAD_MANAGER_SERVICE_URL: ${NEXT_PUBLIC_LEAD_MANAGER_SERVICE_URL:-http://localhost:7009}
+      NEXT_PUBLIC_PRODUCT_SERVICE_URL: ${NEXT_PUBLIC_PRODUCT_SERVICE_URL:-http://localhost:7005}
+      NEXT_PUBLIC_PARTY_SERVICE_URL: ${NEXT_PUBLIC_PARTY_SERVICE_URL:-http://localhost:7006}
+      NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+      NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+    depends_on:
+      lead-manager-backend:
+        condition: service_healthy
+
+  app-frontend:
+    build:
+      context: ./app-frontend
+      dockerfile: Dockerfile
+      pull: false
+      additional_contexts:
+        session_auth: ./session-auth-client
+      args:
+        NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+        NEXT_PUBLIC_OPMS_URL: ${NEXT_PUBLIC_OPMS_URL:-http://localhost:7002}
+        NEXT_PUBLIC_USER_MANAGER_URL: ${NEXT_PUBLIC_USER_MANAGER_URL:-http://localhost:7004/dashboard}
+        NEXT_PUBLIC_WORK_PLANNER_URL: ${NEXT_PUBLIC_WORK_PLANNER_URL:-http://localhost:7008/dashboard}
+        NEXT_PUBLIC_LEAD_MANAGER_URL: ${NEXT_PUBLIC_LEAD_MANAGER_URL:-http://localhost:7010/dashboard}
+        NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+        NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+    restart: unless-stopped
+    ports:
+      - "${APP_FRONTEND_PORT:-7013}:3000"
+    environment:
+      NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+      NEXT_PUBLIC_OPMS_URL: ${NEXT_PUBLIC_OPMS_URL:-http://localhost:7002}
+      NEXT_PUBLIC_USER_MANAGER_URL: ${NEXT_PUBLIC_USER_MANAGER_URL:-http://localhost:7004/dashboard}
+      NEXT_PUBLIC_WORK_PLANNER_URL: ${NEXT_PUBLIC_WORK_PLANNER_URL:-http://localhost:7008/dashboard}
+      NEXT_PUBLIC_LEAD_MANAGER_URL: ${NEXT_PUBLIC_LEAD_MANAGER_URL:-http://localhost:7010/dashboard}
+      NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+      NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+
+volumes:
+  redis_data:

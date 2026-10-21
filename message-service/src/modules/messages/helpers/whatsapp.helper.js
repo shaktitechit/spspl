@@ -1,0 +1,122 @@
+/**
+ * @fileoverview WhatsApp Helper: encapsulates formatting and calls to WhatsApp Cloud API.
+ * @module modules/messages/helpers/whatsapp.helper
+ */
+const axios = require('axios');
+const whatsappConfig = require('../../../config/whatsapp');
+const { logger } = require('../../../config/logger');
+const {
+  WHATSAPP_TEMPLATES,
+  WHATSAPP_TEMPLATE_LANGUAGE,
+  isValidTemplate,
+} = require('../templates/whatsapp/whatsappTemplates.registry');
+
+/**
+ * Sends a raw payload to WhatsApp Cloud API.
+ * @param {string} recipient - The phone number of the recipient (with country code, e.g. "919876543210").
+ * @param {object} payload - The message payload object.
+ * @returns {Promise<object>} The API response data.
+ */
+async function sendRawMessage(recipient, payload) {
+  if (!whatsappConfig.isConfigured()) {
+    throw new Error('WhatsApp Cloud API is not configured. Check WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID.');
+  }
+
+  const url = whatsappConfig.getBaseUrl() + '/messages';
+  const headers = whatsappConfig.getHeaders();
+
+  const body = {
+    messaging_product: 'whatsapp',
+    to: recipient,
+    ...payload,
+  };
+
+  logger.info(`[WhatsApp Helper] Sending message to ${recipient}...`);
+
+  try {
+    const response = await axios.post(url, body, { headers, timeout: 15000 });
+    logger.info(`[WhatsApp Helper] Message sent successfully to ${recipient}. Message ID: ${response.data.messages?.[0]?.id}`);
+    return response.data;
+  } catch (error) {
+    const errorMsg = error.response?.data?.error?.message || error.message;
+    logger.error(`[WhatsApp Helper] Error sending message to ${recipient}: ${errorMsg}`, error.response?.data);
+    throw new Error(errorMsg);
+  }
+}
+
+/**
+ * Send a plain text message.
+ */
+async function sendTextMessage(recipient, text) {
+  return sendRawMessage(recipient, {
+    type: 'text',
+    text: { body: text },
+  });
+}
+
+/**
+ * Send a template message.
+ */
+async function sendTemplateMessage(
+  recipient,
+  templateName,
+  languageCode = WHATSAPP_TEMPLATE_LANGUAGE,
+  components = [],
+) {
+  const lang = languageCode || WHATSAPP_TEMPLATE_LANGUAGE || 'en_US';
+  const payload = {
+    type: 'template',
+    template: {
+      name: templateName,
+      language: {
+        code: lang,
+      },
+    },
+  };
+
+  if (components && components.length > 0) {
+    payload.template.components = components;
+  }
+
+  logger.info(
+    `[WhatsApp Helper] Template send name="${templateName}" language="${lang}" to ${recipient}`,
+  );
+
+  try {
+    return await sendRawMessage(recipient, payload);
+  } catch (err) {
+    const msg = String(err.message || '');
+    const altLang = lang === 'en' ? 'en_US' : lang === 'en_US' ? 'en' : null;
+    if (altLang && msg.includes('132001')) {
+      logger.warn(
+        `[WhatsApp Helper] (#132001) for name="${templateName}" language="${lang}"; retrying with language="${altLang}"`,
+      );
+      payload.template.language.code = altLang;
+      return sendRawMessage(recipient, payload);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Send a media message.
+ */
+async function sendMediaMessage(recipient, mediaType, mediaUrl, caption = '', filename = '') {
+  const mediaObj = { link: mediaUrl };
+  if (caption) mediaObj.caption = caption;
+  if (filename && mediaType === 'document') mediaObj.filename = filename;
+
+  return sendRawMessage(recipient, {
+    type: mediaType,
+    [mediaType]: mediaObj,
+  });
+}
+
+module.exports = {
+  sendRawMessage,
+  sendTextMessage,
+  sendTemplateMessage,
+  sendMediaMessage,
+  WHATSAPP_TEMPLATES,
+  isValidTemplate,
+};

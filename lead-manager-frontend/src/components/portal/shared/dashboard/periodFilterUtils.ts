@@ -1,0 +1,218 @@
+export const MONTH_OPTIONS = [
+  { value: 0, label: "Jan" },
+  { value: 1, label: "Feb" },
+  { value: 2, label: "Mar" },
+  { value: 3, label: "Apr" },
+  { value: 4, label: "May" },
+  { value: 5, label: "Jun" },
+  { value: 6, label: "Jul" },
+  { value: 7, label: "Aug" },
+  { value: 8, label: "Sep" },
+  { value: 9, label: "Oct" },
+  { value: 10, label: "Nov" },
+  { value: 11, label: "Dec" },
+] as const;
+
+export type DashboardDataType = "approved" | "billed";
+export type OrderYearMonth = { year: number; month: number };
+
+export function getOrderYearMonth(
+  order: unknown,
+  dataType?: DashboardDataType,
+): OrderYearMonth | null {
+  const row = order as {
+    order_date?: unknown;
+    billing_date?: unknown;
+    dispatched_at?: unknown;
+    dispatch_date?: unknown;
+    created_at?: unknown;
+    createdAt?: unknown;
+  };
+
+  if (dataType === "billed") {
+    const billingDateStr = row?.billing_date ?? row?.dispatched_at ?? row?.dispatch_date;
+    if (!billingDateStr) return null;
+    const d = new Date(String(billingDateStr));
+    if (Number.isNaN(d.getTime())) return null;
+    return { year: d.getFullYear(), month: d.getMonth() };
+  }
+
+  const orderDateStr = row?.order_date ?? row?.created_at ?? row?.createdAt;
+  if (!orderDateStr) return null;
+  const d = new Date(String(orderDateStr));
+  if (Number.isNaN(d.getTime())) return null;
+  return { year: d.getFullYear(), month: d.getMonth() };
+}
+
+export function collectAvailableYears(
+  orders: unknown[],
+  dataType?: DashboardDataType,
+): number[] {
+  const years = new Set<number>();
+  for (const o of orders) {
+    const ym = getOrderYearMonth(o, dataType);
+    if (ym) years.add(ym.year);
+  }
+  years.add(new Date().getFullYear());
+  return Array.from(years).sort((a, b) => b - a);
+}
+
+export function filterOrdersByPeriod<T>(
+  orders: T[],
+  selectedYears: number[],
+  selectedMonths: number[],
+  dataType?: DashboardDataType,
+): T[] {
+  if (selectedYears.length === 0 || selectedMonths.length === 0) return [];
+  const yearSet = new Set(selectedYears);
+  const monthSet = new Set(selectedMonths);
+  return orders.filter((o) => {
+    const ym = getOrderYearMonth(o, dataType);
+    if (!ym) return false;
+    return yearSet.has(ym.year) && monthSet.has(ym.month);
+  });
+}
+
+export function formatMultiSelectLabel(
+  selected: number[],
+  allCount: number,
+  singular: string,
+  plural: string,
+  resolveLabel?: (value: number) => string,
+): string {
+  if (selected.length === 0) return `Select ${singular}`;
+  if (selected.length === 1) {
+    const value = selected[0];
+    return resolveLabel ? resolveLabel(value) : String(value);
+  }
+  if (selected.length === allCount) return `All ${plural}`;
+  return `${selected.length} ${plural}`;
+}
+
+export const ALL_MONTHS = MONTH_OPTIONS.map((m) => m.value);
+
+function monthLabel(value: number): string {
+  return MONTH_OPTIONS.find((m) => m.value === value)?.label ?? String(value);
+}
+
+function formatSortedRangeOrList(
+  sorted: number[],
+  allCount: number,
+  allLabel: string,
+  resolveLabel: (value: number) => string,
+  countNoun: string,
+): string {
+  if (sorted.length === 0) return `No ${countNoun}`;
+  if (sorted.length === allCount) return allLabel;
+  if (sorted.length === 1) return resolveLabel(sorted[0]);
+
+  const isContiguous =
+    sorted[sorted.length - 1] - sorted[0] === sorted.length - 1;
+  if (isContiguous) {
+    return `${resolveLabel(sorted[0])}–${resolveLabel(sorted[sorted.length - 1])}`;
+  }
+  if (sorted.length <= 4) {
+    return sorted.map(resolveLabel).join(", ");
+  }
+  return `${sorted.length} ${countNoun}`;
+}
+
+function toYmd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function startOfLocalDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+export type DashboardPeriodQuery = {
+  dateFilter?: string;
+  customDateFrom?: string;
+  customDateTo?: string;
+  selectedYears?: number[];
+  selectedMonths?: number[];
+};
+
+/** Maps the dashboard PeriodFilter to work-plan / stats API `from`/`to` or `years`/`months`. */
+export function dashboardPeriodToStatsQuery(
+  period?: DashboardPeriodQuery,
+): Record<string, string> {
+  if (!period) return {};
+  const {
+    dateFilter = "all",
+    customDateFrom = "",
+    customDateTo = "",
+    selectedYears = [],
+    selectedMonths = [],
+  } = period;
+
+  if (dateFilter && dateFilter !== "all") {
+    const now = new Date();
+    let from: Date | null = null;
+    let to: Date | null = null;
+
+    if (dateFilter === "today") {
+      from = startOfLocalDay(now);
+      to = startOfLocalDay(now);
+    } else if (dateFilter === "yesterday") {
+      const y = new Date(now);
+      y.setDate(y.getDate() - 1);
+      from = startOfLocalDay(y);
+      to = startOfLocalDay(y);
+    } else if (dateFilter === "last_week") {
+      const w = new Date(now);
+      w.setDate(w.getDate() - 7);
+      from = startOfLocalDay(w);
+      to = startOfLocalDay(now);
+    } else if (dateFilter === "last_month") {
+      const m = new Date(now);
+      m.setMonth(m.getMonth() - 1);
+      from = startOfLocalDay(m);
+      to = startOfLocalDay(now);
+    } else if (dateFilter === "custom") {
+      if (customDateFrom) from = startOfLocalDay(new Date(customDateFrom));
+      if (customDateTo) to = startOfLocalDay(new Date(customDateTo));
+    }
+
+    const params: Record<string, string> = {};
+    if (from) params.from = toYmd(from);
+    if (to) params.to = toYmd(to);
+    return params;
+  }
+
+  return {
+    years: selectedYears.join(","),
+    months: selectedMonths.map((month) => month + 1).join(","),
+  };
+}
+
+/** Human-readable period for report headings, e.g. "2026 · Jan–Mar". */
+export function formatPeriodLabel(
+  selectedYears: number[],
+  selectedMonths?: number[],
+): string {
+  const yearsSorted = [...selectedYears].sort((a, b) => a - b);
+  const yearPart = formatSortedRangeOrList(
+    yearsSorted,
+    Number.POSITIVE_INFINITY,
+    "All years",
+    String,
+    "years",
+  );
+
+  if (selectedMonths == null) return yearPart;
+
+  const monthsSorted = [...selectedMonths].sort((a, b) => a - b);
+  const monthPart = formatSortedRangeOrList(
+    monthsSorted,
+    ALL_MONTHS.length,
+    "All months",
+    monthLabel,
+    "months",
+  );
+
+  return `${yearPart} · ${monthPart}`;
+}

@@ -1,0 +1,157 @@
+# =============================================================================
+# Medica — HTTP-only bootstrap (use BEFORE certificates exist)
+#
+#   sudo cp nginx/snippets/* /etc/nginx/snippets/
+#   sudo cp nginx/sites-available/medica.http-bootstrap /etc/nginx/sites-available/medica
+#   sudo ln -sfn /etc/nginx/sites-available/medica /etc/nginx/sites-enabled/medica
+#   sudo mkdir -p /var/www/html
+#   sudo nginx -t && sudo systemctl reload nginx
+#
+# Issue certs (DNS must already point here):
+#   sudo certbot certonly --webroot -w /var/www/html \
+#     -d opms.medicaent.in -d app.medicaent.in -d users.medicaent.in -d plans.medicaent.in \
+#     -d leads.medicaent.in -d api.medicaent.in -d auth.medicaent.in \
+#     -d api-products.medicaent.in -d api-parties.medicaent.in -d api-plans.medicaent.in \
+#     -d api-leads.medicaent.in \
+#     --cert-name opms.medicaent.in
+#
+# Then switch to HTTPS:
+#   sudo cp nginx/sites-available/medica /etc/nginx/sites-available/medica
+#   sudo nginx -t && sudo systemctl reload nginx
+# =============================================================================
+
+upstream medica_opms_backend          { server 127.0.0.1:5001; keepalive 32; }
+upstream medica_opms_frontend         { server 127.0.0.1:5002; keepalive 16; }
+upstream medica_auth_service          { server 127.0.0.1:5003; keepalive 32; }
+upstream medica_user_manager_frontend { server 127.0.0.1:5004; keepalive 16; }
+upstream medica_product_service       { server 127.0.0.1:5005; keepalive 32; }
+upstream medica_party_service         { server 127.0.0.1:5006; keepalive 32; }
+upstream medica_work_planner_backend  { server 127.0.0.1:5007; keepalive 32; }
+upstream medica_work_planner_frontend { server 127.0.0.1:5008; keepalive 16; }
+upstream medica_lead_manager_backend  { server 127.0.0.1:5009; keepalive 32; }
+upstream medica_lead_manager_frontend { server 127.0.0.1:5010; keepalive 16; }
+upstream medica_notification_service  { server 127.0.0.1:5012; keepalive 32; }
+upstream medica_app_frontend          { server 127.0.0.1:5013; keepalive 16; }
+
+server {
+    listen 80;
+    server_name app.medicaent.in;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/html; }
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://medica_app_frontend;
+    }
+}
+
+server {
+    listen 80;
+    server_name opms.medicaent.in;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/html; }
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://medica_opms_frontend;
+    }
+}
+
+server {
+    listen 80;
+    server_name users.medicaent.in;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/html; }
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://medica_user_manager_frontend;
+    }
+}
+
+server {
+    listen 80;
+    server_name plans.medicaent.in;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/html; }
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://medica_work_planner_frontend;
+    }
+}
+
+server {
+    listen 80;
+    server_name leads.medicaent.in;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/html; }
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://medica_lead_manager_frontend;
+    }
+}
+
+server {
+    listen 80;
+    server_name api.medicaent.in;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/html; }
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://medica_opms_backend;
+        client_max_body_size 50m;
+    }
+}
+
+server {
+    listen 80;
+    server_name auth.medicaent.in;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/html; }
+    location ~ ^/api/notifications/stream {
+        include /etc/nginx/snippets/proxy-sse.conf;
+        proxy_pass http://medica_auth_service;
+    }
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://medica_auth_service;
+    }
+}
+
+server {
+    listen 80;
+    server_name api-products.medicaent.in;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/html; }
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://medica_product_service;
+    }
+}
+
+server {
+    listen 80;
+    server_name api-parties.medicaent.in;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/html; }
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://medica_party_service;
+    }
+}
+
+server {
+    listen 80;
+    server_name api-plans.medicaent.in;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/html; }
+    location ~ ^/api/notifications/stream {
+        include /etc/nginx/snippets/proxy-sse.conf;
+        proxy_pass http://medica_work_planner_backend;
+    }
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://medica_work_planner_backend;
+    }
+}
+
+server {
+    listen 80;
+    server_name api-leads.medicaent.in;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/html; }
+    location ~ ^/api/notifications/stream {
+        include /etc/nginx/snippets/proxy-sse.conf;
+        proxy_pass http://medica_lead_manager_backend;
+    }
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://medica_lead_manager_backend;
+    }
+}
