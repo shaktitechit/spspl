@@ -11,7 +11,13 @@ const { auditContextMiddleware } = require('./middlewares/auditContext.middlewar
 const { errorMiddleware } = require('./middlewares/error.middleware');
 const { notFound } = require('./middlewares/notFound.middleware');
 const swaggerUi = require('swagger-ui-express');
-const { spec: swaggerDocument } = require('./docs/swagger');
+let swaggerDocument = null;
+try {
+  const swaggerModule = require('./docs/swagger');
+  swaggerDocument = swaggerModule.spec || swaggerModule;
+} catch (err) {
+  console.warn('[WARN] Swagger documentation spec could not be loaded:', err.message);
+}
 
 const { proxyToAuthService } = require('./utils/proxyToAuthService');
 const { proxyToProductService } = require('./utils/proxyToProductService');
@@ -55,7 +61,11 @@ app.use(authMiddleware);
 app.get(['/health', '/api/health'], (_req, res) => res.json({ ok: true }));
 
 // Serve API Documentation
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+if (swaggerDocument) {
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+} else {
+  app.use('/api-docs', (_req, res) => res.status(503).json({ ok: false, error: 'API documentation unavailable' }));
+}
 
 app.get('/', (_req, res) =>
   res.json({

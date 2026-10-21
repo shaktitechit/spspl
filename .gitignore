@@ -62,7 +62,7 @@ minio-data/
 backups/
 
 # Project docs (local only)
-docs/
+/docs/
 
 # Mobile App
 mobile/
