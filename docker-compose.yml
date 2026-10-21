@@ -35,6 +35,9 @@ services:
     command: [ "redis-server", "--requirepass", "${REDIS_PASSWORD:-changeme}" ]
     volumes:
       - redis_data:/data
+    networks:
+      - default
+      - office-internal
     healthcheck:
       test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping" ]
       interval: 10s
@@ -52,6 +55,9 @@ services:
       - "${AUTH_SERVICE_PORT:-7003}:${AUTH_SERVICE_PORT:-7003}"
     env_file: *env_file
     extra_hosts: *extra_hosts
+    networks:
+      - default
+      - office-internal
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${AUTH_SERVICE_PORT:-7003}
@@ -72,6 +78,9 @@ services:
       - "${PRODUCT_SERVICE_PORT:-7005}:${PRODUCT_SERVICE_PORT:-7005}"
     env_file: *env_file
     extra_hosts: *extra_hosts
+    networks:
+      - default
+      - office-internal
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PRODUCT_SERVICE_PORT:-7005}
@@ -92,6 +101,9 @@ services:
       - "${PARTY_SERVICE_PORT:-7006}:${PARTY_SERVICE_PORT:-7006}"
     env_file: *env_file
     extra_hosts: *extra_hosts
+    networks:
+      - default
+      - office-internal
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PARTY_SERVICE_PORT:-7006}
@@ -112,6 +124,9 @@ services:
       - "${WORK_PLANNER_BACKEND_PORT:-7007}:${WORK_PLANNER_BACKEND_PORT:-7007}"
     env_file: *env_file
     extra_hosts: *extra_hosts
+    networks:
+      - default
+      - office-internal
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${WORK_PLANNER_BACKEND_PORT:-7007}
@@ -140,6 +155,9 @@ services:
       - "${LEAD_MANAGER_BACKEND_PORT:-7009}:${LEAD_MANAGER_BACKEND_PORT:-7009}"
     env_file: *env_file
     extra_hosts: *extra_hosts
+    networks:
+      - default
+      - office-internal
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${LEAD_MANAGER_BACKEND_PORT:-7009}
@@ -173,6 +191,9 @@ services:
       - "${MESSAGE_SERVICE_PORT:-7011}:${MESSAGE_SERVICE_PORT:-7011}"
     env_file: *env_file
     extra_hosts: *extra_hosts
+    networks:
+      - default
+      - office-internal
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${MESSAGE_SERVICE_PORT:-7011}
@@ -199,6 +220,9 @@ services:
       - "${NOTIFICATION_SERVICE_PORT:-7012}:${NOTIFICATION_SERVICE_PORT:-7012}"
     env_file: *env_file
     extra_hosts: *extra_hosts
+    networks:
+      - default
+      - office-internal
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${NOTIFICATION_SERVICE_PORT:-7012}
@@ -224,6 +248,9 @@ services:
       - "${OPMS_BACKEND_PORT:-7001}:${OPMS_BACKEND_PORT:-7001}"
     env_file: *env_file
     extra_hosts: *extra_hosts
+    networks:
+      - default
+      - office-internal
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${OPMS_BACKEND_PORT:-7001}
@@ -274,6 +301,9 @@ services:
     restart: unless-stopped
     ports:
       - "${OPMS_FRONTEND_PORT:-7002}:3000"
+    networks:
+      - default
+      - office-internal
     environment:
       NEXT_PUBLIC_API_ORIGIN: ${NEXT_PUBLIC_API_ORIGIN:-http://localhost:7001}
       NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
@@ -305,6 +335,9 @@ services:
     restart: unless-stopped
     ports:
       - "${USER_MANAGER_FRONTEND_PORT:-7004}:3000"
+    networks:
+      - default
+      - office-internal
     environment:
       NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
       NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
@@ -330,6 +363,9 @@ services:
     restart: unless-stopped
     ports:
       - "${WORK_PLANNER_FRONTEND_PORT:-7008}:3000"
+    networks:
+      - default
+      - office-internal
     environment:
       NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
       NEXT_PUBLIC_WORK_PLANNER_SERVICE_URL: ${NEXT_PUBLIC_WORK_PLANNER_SERVICE_URL:-http://localhost:7007}
@@ -358,6 +394,9 @@ services:
     restart: unless-stopped
     ports:
       - "${LEAD_MANAGER_FRONTEND_PORT:-7010}:3000"
+    networks:
+      - default
+      - office-internal
     environment:
       NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
       NEXT_PUBLIC_LEAD_MANAGER_SERVICE_URL: ${NEXT_PUBLIC_LEAD_MANAGER_SERVICE_URL:-http://localhost:7009}
@@ -388,6 +427,9 @@ services:
     restart: unless-stopped
     ports:
       - "${APP_FRONTEND_PORT:-7013}:3000"
+    networks:
+      - default
+      - office-internal
     environment:
       NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
       NEXT_PUBLIC_OPMS_URL: ${NEXT_PUBLIC_OPMS_URL:-http://localhost:7002}
@@ -405,3 +447,9 @@ services:
 
 volumes:
   redis_data:
+
+networks:
+  default:
+  office-internal:
+    external: true
+    name: office-internal
