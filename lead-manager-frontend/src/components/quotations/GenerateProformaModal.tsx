@@ -669,14 +669,46 @@ export function GenerateProformaModal({ quotation, open, onClose, onSuccess }: P
                     </div>
 
                     <div>
-                      <label className={labelClass}>GST Concession</label>
+                      <div className="flex items-center justify-between">
+                        <label className={labelClass}>GST Concession</label>
+                        <div className="flex items-center gap-1">
+                          {[
+                            { label: "na", val: "na" },
+                            { label: "8.9%", val: "8.9% Concession Certificate" },
+                            { label: "5%", val: "5% Concession Certificate" },
+                            { label: "12%", val: "12% Concession Certificate" },
+                          ].map((chip) => (
+                            <button
+                              key={chip.label}
+                              type="button"
+                              onClick={() => setGstConcession(chip.val)}
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-semibold transition ${
+                                gstConcession === chip.val
+                                  ? "bg-primary text-white"
+                                  : "bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200"
+                              }`}
+                            >
+                              {chip.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <input
                         type="text"
+                        list="gst-concession-options"
                         value={gstConcession}
                         onChange={(e) => setGstConcession(e.target.value)}
-                        placeholder="e.g. na or 5% Concession Certificate"
+                        placeholder="e.g. na, 8.9% Concession Certificate, or 5% Concession Certificate"
                         className={`mt-1 ${inputClass}`}
                       />
+                      <datalist id="gst-concession-options">
+                        <option value="na" />
+                        <option value="8.9% Concession Certificate" />
+                        <option value="8.9% GST Concession" />
+                        <option value="5% Concession Certificate" />
+                        <option value="12% Concession Certificate" />
+                        <option value="18% Standard GST" />
+                      </datalist>
                     </div>
                     <div>
                       <label className={labelClass}>Margin Sheet Attached</label>
@@ -749,6 +781,7 @@ export function GenerateProformaModal({ quotation, open, onClose, onSuccess }: P
                           <th className="py-2 px-3 text-center">HSN</th>
                           <th className="py-2 px-3 text-center">Qty</th>
                           <th className="py-2 px-3 text-right">Rate (₹)</th>
+                          <th className="py-2 px-3 text-center">GST %</th>
                           <th className="py-2 px-3 text-right">Tax (₹)</th>
                           <th className="py-2 px-3 text-right">Total (₹)</th>
                         </tr>
@@ -763,6 +796,9 @@ export function GenerateProformaModal({ quotation, open, onClose, onSuccess }: P
                             <td className="py-2 px-3 text-center text-slate-500">{it.hsn_code || "—"}</td>
                             <td className="py-2 px-3 text-center font-bold">{it.quantity}</td>
                             <td className="py-2 px-3 text-right">{it.rate?.toLocaleString("en-IN")}</td>
+                            <td className="py-2 px-3 text-center text-slate-600 dark:text-slate-300 font-medium">
+                              {quotation.gst_enabled === false || it.gst_enabled === false || !it.gst_rate ? "0%" : `${it.gst_rate}%`}
+                            </td>
                             <td className="py-2 px-3 text-right text-slate-500">{it.total_gst_amount?.toLocaleString("en-IN")}</td>
                             <td className="py-2 px-3 text-right font-bold text-slate-900 dark:text-white">
                               {it.line_total?.toLocaleString("en-IN")}
