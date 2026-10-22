@@ -63,7 +63,6 @@ import {
   isSeniorLeadRole,
 } from "./leadUtils";
 import { isAdmin as checkIsAdmin, readSessionFromStorage } from "@/utils/authStorage";
-import { useLeadManagerTeamScope } from "@/hooks/useLeadManagerTeamScope";
 import {
   PartySearchAutocomplete,
   pickParties,
@@ -281,7 +280,6 @@ export function LeadFormPage({
   const authUser = (reduxUser || sessionUser) as any;
   const isAdmin = checkIsAdmin(authUser);
   const isSales = !isAdmin;
-  const { filterByTeam, withSelfInList, canAssignWithinTeam } = useLeadManagerTeamScope();
 
   // Fetch lead data if edit mode or copy mode
   const { data: existingLead, isLoading: loadingLead } = useGetLeadQuery(
@@ -656,15 +654,6 @@ export function LeadFormPage({
     );
   };
 
-  const assignableUsers = useMemo(() => {
-    const filtered = rawUsers.filter(isUserInLeadManagerPortal);
-    const base = filtered.length > 0 ? filtered : rawUsers;
-    const scoped = filterByTeam(base);
-    const selfRow = authUser?._id
-      ? base.find((u) => String(u._id) === String(authUser._id))
-      : undefined;
-    return withSelfInList(scoped, selfRow);
-  }, [rawUsers, filterByTeam, withSelfInList, authUser]);
 
   const sourcesList =
     Array.isArray(sourcesData) && sourcesData.length > 0
@@ -916,7 +905,7 @@ export function LeadFormPage({
     }
 
     const assignmentFields = {
-      assigned_to: assignedUsers.length > 0 ? assignedUsers[0] : (isAdmin ? null : undefined),
+      assigned_to: assignedUsers.length > 0 ? assignedUsers[0] : (isSenior ? null : undefined),
       assigned_users: assignedUsers,
     };
 

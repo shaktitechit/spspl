@@ -502,7 +502,11 @@ export function canConvertLead(user: AuthUserLike, portalHome: string = ""): boo
  * Checks if user can assign / reassign leads to executives.
  */
 export function canAssignLead(user: AuthUserLike, portalHome: string = ""): boolean {
-  return isLeadAdmin(user, portalHome);
+  return (
+    isLeadAdmin(user, portalHome) ||
+    isLeadManagerRole(user, portalHome) ||
+    isLeadCoordinatorRole(user, portalHome)
+  );
 }
 
 /**

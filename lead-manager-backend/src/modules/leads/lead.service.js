@@ -19,7 +19,7 @@ const emailHelper = require('../messages/helpers/email.helper');
 const microsoftGraph = require('../../config/microsoftGraph');
 const { logger } = require('../../utils/logger');
 const { ALLOWED_STATUS_TRANSITIONS } = require('./lead.constants');
-const { getVisibleLeadUserIds, asObjectId, canAccessLeadUser } = require('../team/teamVisibility.service');
+const { getVisibleLeadUserIds, asObjectId } = require('../team/teamVisibility.service');
 const { resolveSalesRepFromLead } = require('../../utils/followUpSalesRep');
 
 const TEMPLATE_LEAD_ASSIGNED = 'lead_assigned';
@@ -547,35 +547,15 @@ async function create(body, user) {
     ? [String(body.assigned_to)]
     : [];
 
-  if (canManageAll) {
-    if (rawAssignedUsers.length > 0) {
-      assigned_users = rawAssignedUsers;
-      assigned_to = rawAssignedUsers[0];
-    } else {
-      assigned_to = body.assigned_to ? String(body.assigned_to) : null;
-      assigned_users = assigned_to ? [assigned_to] : [];
-    }
-  } else if (isLeadManager(user) || isLeadCoordinator(user)) {
-    if (rawAssignedUsers.length > 0) {
-      for (const uid of rawAssignedUsers) {
-        const allowed = await canAccessLeadUser(user, uid);
-        if (!allowed) {
-          throw new ApiError(403, 'You can only assign leads to members of your team');
-        }
-      }
-      assigned_users = rawAssignedUsers;
-      assigned_to = rawAssignedUsers[0];
-    } else if (body.assigned_to) {
-      const allowed = await canAccessLeadUser(user, body.assigned_to);
-      if (!allowed) {
-        throw new ApiError(403, 'You can only assign leads to members of your team');
-      }
-      assigned_to = body.assigned_to;
-      assigned_users = [assigned_to];
-    } else {
-      assigned_to = user._id;
-      assigned_users = [user._id];
-    }
+  if (rawAssignedUsers.length > 0) {
+    assigned_users = rawAssignedUsers;
+    assigned_to = rawAssignedUsers[0];
+  } else if (body.assigned_to) {
+    assigned_to = String(body.assigned_to);
+    assigned_users = [assigned_to];
+  } else if (canManageAll || isLeadManager(user) || isLeadCoordinator(user)) {
+    assigned_to = null;
+    assigned_users = [];
   } else {
     assigned_to = user._id;
     assigned_users = [user._id];
@@ -743,13 +723,6 @@ async function update(id, body, user) {
       } else if (field === 'assigned_to') {
         const nextAssigned = body.assigned_to ? body.assigned_to : null;
         nextAssignedId = nextAssigned ? String(nextAssigned) : null;
-        if (
-          nextAssignedId &&
-          !isLeadAdmin(user) &&
-          !(await canAccessLeadUser(user, nextAssignedId))
-        ) {
-          throw new ApiError(403, 'You can only assign leads to members of your team');
-        }
         assignmentChanged = nextAssignedId !== oldAssignedTo;
         lead.assigned_to = nextAssigned;
         if (assignmentChanged) {
@@ -813,8 +786,8 @@ async function update(id, body, user) {
  * Assign or reassign lead to user via assigned_to.
  */
 async function assign(id, body, user) {
-  if (!isLeadAdmin(user)) {
-    throw new ApiError(403, 'Only Lead Administrators can assign or reassign leads');
+  if (!isLeadAdmin(user) && !isLeadManager(user) && !isLeadCoordinator(user)) {
+    throw new ApiError(403, 'Only Lead Administrators, Managers, and Coordinators can assign or reassign leads');
   }
 
   const { Lead, User } = getModels();
