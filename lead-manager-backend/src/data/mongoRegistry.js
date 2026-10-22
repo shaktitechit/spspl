@@ -301,12 +301,25 @@ function registerModels() {
         follow_up_time: { type: String, trim: true },
         type: {
           type: String,
-          enum: ['call', 'meeting', 'email', 'whatsapp', 'visit', 'demo', 'other'],
+          enum: ['call', 'meeting', 'email', 'whatsapp', 'visit', 'demo', 'note', 'other'],
           default: 'call',
           index: true,
         },
         notes: { type: String, trim: true },
         outcome: { type: String, trim: true },
+        actions: [
+          {
+            author: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+            action_type: {
+              type: String,
+              enum: ['comment', 'call_log', 'whatsapp_log', 'meeting_note', 'outcome', 'rescheduled', 'status_change'],
+              default: 'comment',
+            },
+            message: { type: String, required: true, trim: true },
+            metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+            created_at: { type: Date, default: Date.now },
+          },
+        ],
         status: {
           type: String,
           enum: ['pending', 'completed', 'cancelled', 'rescheduled'],

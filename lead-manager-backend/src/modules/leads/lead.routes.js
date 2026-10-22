@@ -37,6 +37,7 @@ router.post('/follow-ups/reminders/run', controller.runAllFollowUpReminders);
 router.post('/follow-ups/reminders/today', controller.runTodaysFollowUpReminders);
 router.post('/follow-ups/reminders/overdue', controller.runOverdueFollowUpReminders);
 router.put('/follow-ups/:followUpId/complete', controller.completeFollowUp);
+router.post('/follow-ups/:followUpId/actions', controller.addFollowUpAction);
 
 /* --- Lead Quotations --- */
 router.get('/quotations/default-terms', requireLeadManagerSalesTeamRole, quotationController.getDefaultTerms);

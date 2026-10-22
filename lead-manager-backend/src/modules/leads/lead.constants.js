@@ -22,6 +22,7 @@ const FOLLOWUP_TYPES = Object.freeze([
   'whatsapp',
   'visit',
   'demo',
+  'note',
   'other',
 ]);
 

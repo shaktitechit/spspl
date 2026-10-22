@@ -29,7 +29,8 @@ async function createForLead(leadId, body, user) {
     await assertCanAccessLead(lead, user, 'schedule follow-ups for');
   }
 
-  const followUpDate = new Date(body.follow_up_date);
+  const isNote = body.type === 'note';
+  const followUpDate = body.follow_up_date ? new Date(body.follow_up_date) : new Date();
 
   const doc = await LeadFollowUp.create({
     lead: leadId,
@@ -37,27 +38,43 @@ async function createForLead(leadId, body, user) {
     follow_up_time: body.follow_up_time ? String(body.follow_up_time).trim() : '',
     type: body.type || 'call',
     notes: body.notes ? String(body.notes).trim() : '',
-    status: 'pending',
+    status: isNote ? 'completed' : 'pending',
+    completed_at: isNote ? new Date() : undefined,
+    completed_by: isNote ? user._id : undefined,
+    actions: body.notes && isNote ? [{
+      author: user._id,
+      action_type: 'comment',
+      message: String(body.notes).trim(),
+      created_at: new Date(),
+    }] : [],
     created_by: user._id,
     updated_by: user._id,
   });
 
-  // Update lead's next follow-up pointer & last activity
-  lead.next_follow_up_at = followUpDate;
+  // Update lead's next follow-up pointer & last activity if scheduled
+  if (!isNote) {
+    lead.next_follow_up_at = followUpDate;
+  }
   lead.last_activity_at = new Date();
   if (lead.status === 'new' || lead.status === 'assigned') {
     lead.status = 'follow_up';
   }
   await lead.save();
 
-  const plain = toPlain(doc.toObject());
+  const populated = await LeadFollowUp.findById(doc._id)
+    .populate('created_by', 'name email department')
+    .populate('completed_by', 'name email department')
+    .populate('actions.author', 'name email department')
+    .lean();
+
+  const plain = toPlain(populated);
 
   await activityService.create({
     actor: user._id,
     entity_type: 'lead',
     entity_id: lead._id,
-    action: 'created',
-    message: `Follow-up scheduled (${body.type || 'call'}) for ${followUpDate.toLocaleDateString()}`,
+    action: isNote ? 'updated' : 'created',
+    message: isNote ? `Team note added: "${(body.notes || '').slice(0, 80)}"` : `Follow-up scheduled (${body.type || 'call'}) for ${followUpDate.toLocaleDateString()}`,
     new_value: plain,
   });
 
@@ -88,9 +105,10 @@ async function listForLead(leadId, user) {
     await assertCanAccessLead(lead, user, 'view follow-ups for');
   }
   const rows = await LeadFollowUp.find({ lead: leadId, deletedAt: null })
-    .populate('created_by', 'name email')
-    .populate('completed_by', 'name email')
-    .sort({ follow_up_date: -1 })
+    .populate('created_by', 'name email department')
+    .populate('completed_by', 'name email department')
+    .populate('actions.author', 'name email department')
+    .sort({ follow_up_date: -1, createdAt: -1 })
     .lean();
   return rows.map(toPlain);
 }
@@ -464,10 +482,71 @@ async function getUrgentSummary(user, timeZone = 'Asia/Kolkata') {
   };
 }
 
+/**
+ * Append a collaborative comment or intermediate action to an existing follow-up.
+ */
+async function addAction(followUpId, body, user) {
+  const { Lead, LeadFollowUp } = getModels();
+  const fu = await LeadFollowUp.findOne({ _id: followUpId, deletedAt: null });
+  if (!fu) throw new ApiError(404, 'Follow-up not found');
+
+  if (fu.lead && user) {
+    const lead = await Lead.findOne({ _id: fu.lead, deletedAt: null });
+    if (lead) {
+      await assertCanAccessLead(lead, user, 'update follow-ups for');
+    }
+  }
+
+  const message = String(body.message || '').trim();
+  if (!message) throw new ApiError(400, 'Message is required');
+
+  const actionItem = {
+    author: user._id,
+    action_type: body.action_type || 'comment',
+    message,
+    metadata: body.metadata || {},
+    created_at: new Date(),
+  };
+
+  fu.actions = fu.actions || [];
+  fu.actions.push(actionItem);
+  fu.updated_by = user._id;
+  await fu.save();
+
+  if (fu.lead) {
+    await activityService.create({
+      actor: user._id,
+      entity_type: 'lead',
+      entity_id: fu.lead,
+      action: 'updated',
+      message: `Follow-up action logged (${actionItem.action_type}): "${message.slice(0, 80)}"`,
+      new_value: { follow_up_id: fu._id, action: actionItem },
+    });
+  } else if (fu.quotation) {
+    await activityService.create({
+      actor: user._id,
+      entity_type: 'quotation',
+      entity_id: fu.quotation,
+      action: 'updated',
+      message: `Quotation follow-up action logged (${actionItem.action_type}): "${message.slice(0, 80)}"`,
+      new_value: { follow_up_id: fu._id, action: actionItem },
+    });
+  }
+
+  const populated = await LeadFollowUp.findById(fu._id)
+    .populate('created_by', 'name email department')
+    .populate('completed_by', 'name email department')
+    .populate('actions.author', 'name email department')
+    .lean();
+
+  return toPlain(populated);
+}
+
 module.exports = {
   createForLead,
   listForLead,
   complete,
+  addAction,
   getCalendar,
   getUrgentSummary,
 };

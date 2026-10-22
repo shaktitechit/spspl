@@ -147,6 +147,14 @@ exports.completeFollowUp = asyncHandler(async (req, res) => {
   });
 });
 
+exports.addFollowUpAction = asyncHandler(async (req, res) => {
+  const followUpId = req.params.followUpId || req.params.id;
+  res.status(201).json({
+    success: true,
+    data: await followUpService.addAction(followUpId, req.body, req.user),
+  });
+});
+
 exports.getFollowUpCalendar = asyncHandler(async (req, res) => {
   res.json({
     success: true,

@@ -50,6 +50,7 @@ router.delete('/:id', elevatedRoles, controller.remove);
 router.get('/:id/follow-ups', allSalesRoles, controller.listFollowUps);
 router.post('/:id/follow-ups', allSalesRoles, controller.scheduleFollowUp);
 router.patch('/follow-ups/:id/complete', allSalesRoles, controller.completeFollowUp);
+router.post('/follow-ups/:id/actions', allSalesRoles, controller.addFollowUpAction);
 router.post('/:id/revise', elevatedRoles, controller.reviseQuotation);
 
 module.exports = router;

@@ -80,6 +80,7 @@ import { MarkLostModal } from "./MarkLostModal";
 import { FollowUpModal } from "./FollowUpModal";
 import { CompleteFollowUpModal } from "./CompleteFollowUpModal";
 import { LeadTimelineTab } from "./LeadTimelineTab";
+import { FollowUpChatPanel } from "@/components/shared/followups/FollowUpChatPanel";
 
 import { readSessionFromStorage } from "@/utils/authStorage";
 
@@ -1003,92 +1004,13 @@ export function LeadDetailPage({ leadId, portalHome = "/dashboard" }: Props) {
         </div>
       )}
 
-      {/* Tab 3: Follow-ups */}
+      {/* Tab 3: Follow-ups & Collaborative Communication */}
       {activeTab === "followups" && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4 dark:border-white/10">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Follow-up Activities & History
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Log outcomes and schedule recurring client touchpoints
-              </p>
-            </div>
-            {!isClosed && (
-              <button
-                type="button"
-                onClick={() => setFollowUpOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-amber-500"
-              >
-                <CalendarPlus className="h-4 w-4" />
-                Schedule Follow-up
-              </button>
-            )}
-          </div>
-
-          <div className="mt-5 space-y-3">
-            {!followUps || followUps.length === 0 ? (
-              <div className="py-12 text-center text-xs text-slate-400">
-                No follow-ups recorded yet. Click &apos;Schedule Follow-up&apos; above.
-              </div>
-            ) : (
-              followUps.map((fu) => {
-                const typeCfg = FOLLOWUP_TYPE_CONFIG[fu.type];
-                const isCompleted = fu.status === "completed";
-                return (
-                  <div
-                    key={fu._id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-slate-100 bg-slate-50/50 p-4 dark:border-white/5 dark:bg-slate-800/40"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex rounded-lg bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                          {typeCfg?.label || fu.type}
-                        </span>
-                        <span className="text-xs font-semibold text-slate-900 dark:text-white">
-                          {formatLeadDate(fu.follow_up_date)} {fu.follow_up_time ? `@ ${fu.follow_up_time}` : ""}
-                        </span>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-                            isCompleted
-                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-                              : "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
-                          }`}
-                        >
-                          {fu.status}
-                        </span>
-                      </div>
-
-                      {fu.notes && (
-                        <p className="text-xs text-slate-600 dark:text-slate-300">
-                          <strong className="text-slate-700 dark:text-slate-200">Agenda:</strong> {fu.notes}
-                        </p>
-                      )}
-
-                      {fu.outcome && (
-                        <p className="text-xs text-emerald-700 dark:text-emerald-300">
-                          <strong>Outcome:</strong> {fu.outcome}
-                        </p>
-                      )}
-                    </div>
-
-                    {!isCompleted && !isClosed && (
-                      <button
-                        type="button"
-                        onClick={() => setCompletingFollowUp(fu)}
-                        className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 whitespace-nowrap"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        Record Outcome
-                      </button>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
+        <FollowUpChatPanel
+          context="lead"
+          lead={lead}
+          disabled={isClosed}
+        />
       )}
 
       {/* Tab 4: Attachments */}

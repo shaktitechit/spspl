@@ -1021,6 +1021,10 @@ export function QuotationFormModal({
   const [showTerms, setShowTerms] = useState(true);
   const [gstEnabled, setGstEnabled] = useState<boolean>(true);
 
+  // Rich editor modal state for line item specifications
+  const [richDescModalItemIdx, setRichDescModalItemIdx] = useState<number | null>(null);
+  const [richDescModalText, setRichDescModalText] = useState<string>("");
+
   const [createQuotation, { isLoading: isCreating }] = useCreateLeadQuotationMutation();
   const [updateQuotation, { isLoading: isUpdating }] = useUpdateLeadQuotationMutation();
 
@@ -2499,7 +2503,7 @@ export function QuotationFormModal({
 
                       {/* Line breakdown */}
                       <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/60 pt-2 text-[11px] text-slate-600 dark:border-white/5 dark:text-slate-400">
-                        <div className="flex-1 min-w-[180px]">
+                        <div className="flex-1 min-w-[220px] flex items-center gap-2">
                           <input
                             type="text"
                             value={it.description}
@@ -2508,9 +2512,21 @@ export function QuotationFormModal({
                                 prev.map((x, i) => (i === idx ? { ...x, description: e.target.value } : x))
                               )
                             }
-                            placeholder="Optional technical specifications / extra notes..."
-                            className="w-full bg-transparent border-0 border-b border-dashed border-slate-300 py-0.5 text-[11px] focus:border-primary focus:outline-none dark:border-slate-700"
+                            placeholder="Technical specifications / extra notes..."
+                            className="flex-1 bg-transparent border-0 border-b border-dashed border-slate-300 py-0.5 text-[11px] focus:border-primary focus:outline-none dark:border-slate-700"
                           />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRichDescModalItemIdx(idx);
+                              setRichDescModalText(it.description || "");
+                            }}
+                            className="inline-flex items-center gap-1 rounded-md bg-blue-50/80 px-2 py-0.5 text-[10px] font-bold text-blue-700 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 transition cursor-pointer border border-blue-200/50 dark:border-blue-800/40 shrink-0"
+                            title="Open rich text editor for detailed specifications"
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            {/<[a-z][\s\S]*>/i.test(it.description || "") ? "Rich Specs" : "Rich Editor"}
+                          </button>
                         </div>
                         <div className="flex flex-wrap items-center gap-3">
                           <span>
@@ -3106,6 +3122,64 @@ export function QuotationFormModal({
           </div>
         </form>
       </div>
+
+      {/* Modal: Rich Editor for Line Item Specifications */}
+      {richDescModalItemIdx !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-slate-900 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-6 py-4 dark:border-white/10 dark:bg-slate-800/60">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  Product Specifications &amp; Scope (Rich Editor)
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {items[richDescModalItemIdx]?.product_name || `Line Item #${richDescModalItemIdx + 1}`} • Use bold, bullets, tables, highlights, or links
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRichDescModalItemIdx(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-white cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 space-y-4">
+              <RichTextEditor
+                value={richDescModalText}
+                onChange={setRichDescModalText}
+                placeholder="Enter detailed technical specifications, dimensions, features, tables, scope of supply, standard compliance..."
+                minHeight="240px"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50/50 px-6 py-3.5 dark:border-white/10 dark:bg-slate-800/40">
+              <button
+                type="button"
+                onClick={() => setRichDescModalItemIdx(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setItems((prev) =>
+                    prev.map((x, i) => (i === richDescModalItemIdx ? { ...x, description: richDescModalText } : x))
+                  );
+                  setRichDescModalItemIdx(null);
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white shadow-md shadow-primary/20 hover:opacity-95 transition cursor-pointer"
+              >
+                <Check className="h-3.5 w-3.5" />
+                Apply Specifications
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

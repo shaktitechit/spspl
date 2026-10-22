@@ -1082,7 +1082,17 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
 
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(6.5);
-    const descLines = it.description ? pdf.splitTextToSize(it.description, 51) : [];
+    const cleanDesc = it.description
+      ? it.description
+          .replace(/<br\s*\/?>/gi, "\n")
+          .replace(/<\/p>/gi, "\n")
+          .replace(/<\/li>/gi, "\n")
+          .replace(/<li[^>]*>/gi, "• ")
+          .replace(/<[^>]+>/g, "")
+          .replace(/&nbsp;/gi, " ")
+          .trim()
+      : "";
+    const descLines = cleanDesc ? pdf.splitTextToSize(cleanDesc, 51) : [];
     if (it.discount_percent && it.discount_percent > 0) {
       descLines.unshift(`Disc: ${it.discount_percent}% (-Rs. ${formatCurrency(it.discount_amount || 0)})`);
     }

@@ -185,6 +185,41 @@ export default function QuotationPdfTemplate({
           margin: 1px 0;
         }
 
+        .quotation-item-rich-desc {
+          font-size: 7.5px;
+          line-height: 11px;
+          color: #475569;
+          margin-top: 2px;
+          word-break: break-word;
+        }
+        .quotation-item-rich-desc p {
+          margin: 0 0 2px 0;
+          line-height: 11px;
+        }
+        .quotation-item-rich-desc ul {
+          list-style-type: disc;
+          margin: 1px 0 2px 10px;
+          padding: 0;
+        }
+        .quotation-item-rich-desc ol {
+          list-style-type: decimal;
+          margin: 1px 0 2px 10px;
+          padding: 0;
+        }
+        .quotation-item-rich-desc li {
+          margin: 0.5px 0;
+        }
+        .quotation-item-rich-desc table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 2px 0;
+          font-size: 7px;
+        }
+        .quotation-item-rich-desc th, .quotation-item-rich-desc td {
+          border: 1px solid #cbd5e1;
+          padding: 1.5px 3px;
+        }
+
         /* Message Rich-Text & HTML Table layout preservation */
         .rich-text-content {
           font-size: 8.5px;
@@ -736,17 +771,24 @@ export default function QuotationPdfTemplate({
                   </div>
                 ) : null}
                 {item.description && (
-                  <div
-                    style={{
-                      fontSize: "7.5px",
-                      color: "#64748b",
-                      marginTop: "2px",
-                      whiteSpace: "pre-line",
-                      lineHeight: "11px",
-                    }}
-                  >
-                    {item.description}
-                  </div>
+                  /<[a-z][\s\S]*>/i.test(item.description) ? (
+                    <div
+                      className="quotation-item-rich-desc"
+                      dangerouslySetInnerHTML={{ __html: item.description }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        fontSize: "7.5px",
+                        color: "#64748b",
+                        marginTop: "2px",
+                        whiteSpace: "pre-line",
+                        lineHeight: "11px",
+                      }}
+                    >
+                      {item.description}
+                    </div>
+                  )
                 )}
               </div>
               <div style={{ width: "9%", padding: "6px 4px", textAlign: "center", color: "#475569", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>

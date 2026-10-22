@@ -32,6 +32,7 @@ export type LeadFollowUpType =
   | "whatsapp"
   | "visit"
   | "demo"
+  | "note"
   | "other";
 
 export type LeadFollowUpStatus = "pending" | "completed" | "cancelled" | "rescheduled";
@@ -174,6 +175,15 @@ export type LeadInputPayload = Omit<
   contacts?: LeadContactItem[];
 };
 
+export type FollowUpActionRecord = {
+  _id?: string;
+  author: { _id: string; name: string; email?: string; department?: string };
+  action_type: "comment" | "call_attempt" | "status_change" | "reschedule" | "requirement_update" | string;
+  message: string;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+};
+
 export type LeadFollowUpRecord = {
   _id: string;
   id?: string;
@@ -218,6 +228,7 @@ export type LeadFollowUpRecord = {
   completed_at?: string;
   completed_by?: { _id: string; name: string; email: string };
   created_by: { _id: string; name: string; email: string };
+  actions?: FollowUpActionRecord[];
   createdAt?: string;
   updatedAt?: string;
 };
@@ -766,7 +777,7 @@ export const leadsApi = medicaApi.injectEndpoints({
       LeadFollowUpRecord,
       {
         leadId: string;
-        follow_up_date: string;
+        follow_up_date?: string;
         follow_up_time?: string;
         type: LeadFollowUpType;
         notes?: string;
@@ -809,6 +820,29 @@ export const leadsApi = medicaApi.injectEndpoints({
         { type: "LeadFollowUp", id: leadId ? `LEAD_${leadId}` : "LIST" },
         { type: "Lead", id: leadId || "LIST" },
         { type: "Lead", id: "LIST" },
+      ],
+    }),
+
+    addLeadFollowUpAction: build.mutation<
+      LeadFollowUpRecord,
+      {
+        followUpId: string;
+        leadId?: string;
+        message: string;
+        action_type?: string;
+        metadata?: Record<string, unknown>;
+      }
+    >({
+      query: ({ followUpId, leadId: _lid, ...body }) => ({
+        url: `/leads/follow-ups/${followUpId}/actions`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (res: ApiEnvelope<LeadFollowUpRecord>) => unwrapEnvelope(res),
+      invalidatesTags: (_res, _err, { leadId, followUpId }) => [
+        { type: "LeadFollowUp", id: leadId ? `LEAD_${leadId}` : "LIST" },
+        { type: "LeadFollowUp", id: followUpId },
+        { type: "Lead", id: leadId || "LIST" },
       ],
     }),
 
@@ -1011,6 +1045,7 @@ export const {
   useListLeadFollowUpsQuery,
   useCreateLeadFollowUpMutation,
   useCompleteLeadFollowUpMutation,
+  useAddLeadFollowUpActionMutation,
   useGetLeadFollowUpCalendarQuery,
   useGetUrgentFollowUpsSummaryQuery,
   useGetFollowUpAnalyticsReportQuery,

@@ -4,6 +4,7 @@
  */
 import { medicaApi } from "../baseApi";
 import { unwrapEnvelope, type ApiEnvelope } from "../unwrap";
+import type { FollowUpActionRecord } from "./leadsApi";
 
 export type QuotationStatus = "draft" | "pending_approval" | "approved" | "sent" | "in_negotiation" | "accepted" | "rejected" | "expired" | "on_hold" | "converted";
 export type QuotationApprovalStatus = "pending_approval" | "approved" | "rejected";
@@ -290,22 +291,23 @@ export type LeadQuotationFollowUp = {
   lead?: string | { _id: string; lead_no?: string; organization_name?: string };
   follow_up_date: string;
   follow_up_time?: string;
-  type: "call" | "meeting" | "email" | "whatsapp" | "visit" | "demo" | "other";
+  type: "call" | "meeting" | "email" | "whatsapp" | "visit" | "demo" | "note" | "other";
   notes?: string;
   outcome?: string;
   status: "pending" | "completed" | "cancelled" | "rescheduled";
   next_follow_up_date?: string;
   completed_at?: string;
-  completed_by?: { _id: string; name?: string; email?: string };
-  created_by: { _id: string; name?: string; email?: string };
+  completed_by?: { _id: string; name?: string; email?: string; department?: string };
+  created_by: { _id: string; name?: string; email?: string; department?: string };
+  actions?: FollowUpActionRecord[];
   createdAt: string;
   updatedAt: string;
 };
 
 export type ScheduleQuotationFollowUpPayload = {
-  follow_up_date: string;
+  follow_up_date?: string;
   follow_up_time?: string;
-  type?: "call" | "meeting" | "email" | "whatsapp" | "visit" | "demo" | "other";
+  type?: "call" | "meeting" | "email" | "whatsapp" | "visit" | "demo" | "note" | "other";
   notes?: string;
 };
 
@@ -392,7 +394,10 @@ export type CreateQuotationPayload = {
   notes?: string;
 };
 
-export type UpdateQuotationPayload = Partial<CreateQuotationPayload>;
+export type UpdateQuotationPayload = Partial<CreateQuotationPayload> & {
+  change_summary?: string;
+  lost_reason?: string;
+};
 
 export type ConvertQuotationPayload = {
   conversion_type?: "new_customer" | "existing_customer";
@@ -732,6 +737,31 @@ export const leadQuotationsApi = medicaApi.injectEndpoints({
       ],
     }),
 
+    addQuotationFollowUpAction: build.mutation<
+      LeadQuotationFollowUp,
+      {
+        followUpId: string;
+        quotationId: string;
+        leadId?: string;
+        message: string;
+        action_type?: string;
+        metadata?: Record<string, unknown>;
+      }
+    >({
+      query: ({ followUpId, message, action_type, metadata }) => ({
+        url: `/quotations/follow-ups/${followUpId}/actions`,
+        method: "POST",
+        body: { message, action_type, metadata },
+      }),
+      transformResponse: (raw: ApiEnvelope<LeadQuotationFollowUp>) =>
+        unwrapEnvelope(raw) as LeadQuotationFollowUp,
+      invalidatesTags: (_res, _err, { quotationId, leadId }) => [
+        { type: "LeadQuotation", id: `FOLLOWUPS_${quotationId}` },
+        { type: "LeadQuotation", id: quotationId },
+        ...(leadId ? [{ type: "LeadFollowUp" as const, id: `LEAD_${leadId}` }] : []),
+      ],
+    }),
+
     reviseQuotation: build.mutation<
       LeadQuotationRecord,
       { quotationId: string; leadId?: string }
@@ -1024,6 +1054,7 @@ export const {
   useListQuotationFollowUpsQuery,
   useScheduleQuotationFollowUpMutation,
   useCompleteQuotationFollowUpMutation,
+  useAddQuotationFollowUpActionMutation,
   useReviseQuotationMutation,
   useGetQuotationVersionQuery,
   useLazyGetQuotationVersionQuery,

@@ -103,6 +103,7 @@ export const FOLLOWUP_TYPE_CONFIG: Record<
   whatsapp: { label: "WhatsApp", icon: "MessageSquare" },
   visit: { label: "Site Visit", icon: "MapPin" },
   demo: { label: "Product Demo", icon: "Tv" },
+  note: { label: "Team Note", icon: "StickyNote" },
   other: { label: "Other", icon: "HelpCircle" },
 };
 

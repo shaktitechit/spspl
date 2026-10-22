@@ -1620,7 +1620,8 @@ async function scheduleFollowUp(quotationId, body, user) {
     throw new ApiError(400, 'No further actions allowed: this quotation has already been converted to an order');
   }
 
-  const followUpDate = new Date(body.follow_up_date);
+  const isNote = body.type === 'note';
+  const followUpDate = body.follow_up_date ? new Date(body.follow_up_date) : new Date();
   if (isNaN(followUpDate.getTime())) {
     throw new ApiError(400, 'Invalid follow-up date');
   }
@@ -1632,12 +1633,22 @@ async function scheduleFollowUp(quotationId, body, user) {
     follow_up_time: body.follow_up_time ? String(body.follow_up_time).trim() : '',
     type: body.type || 'call',
     notes: body.notes ? String(body.notes).trim() : '',
-    status: 'pending',
+    status: isNote ? 'completed' : 'pending',
+    completed_at: isNote ? new Date() : undefined,
+    completed_by: isNote ? user._id : undefined,
+    actions: body.notes && isNote ? [{
+      author: user._id,
+      action_type: 'comment',
+      message: String(body.notes).trim(),
+      created_at: new Date(),
+    }] : [],
     created_by: user._id,
     updated_by: user._id,
   });
 
-  quotation.next_follow_up_at = followUpDate;
+  if (!isNote) {
+    quotation.next_follow_up_at = followUpDate;
+  }
   if (quotation.status === 'sent') {
     quotation.status = 'in_negotiation';
   }
@@ -1647,7 +1658,9 @@ async function scheduleFollowUp(quotationId, body, user) {
   if (quotation.lead) {
     const lead = await Lead.findOne({ _id: quotation.lead, deletedAt: null });
     if (lead) {
-      lead.next_follow_up_at = followUpDate;
+      if (!isNote) {
+        lead.next_follow_up_at = followUpDate;
+      }
       lead.last_activity_at = new Date();
       await lead.save();
 
@@ -1655,8 +1668,10 @@ async function scheduleFollowUp(quotationId, body, user) {
         actor: user._id,
         entity_type: 'lead',
         entity_id: lead._id,
-        action: 'created',
-        message: `Quotation #${quotation.quotation_no} follow-up scheduled (${body.type || 'call'}) for ${followUpDate.toLocaleDateString('en-IN')}`,
+        action: isNote ? 'updated' : 'created',
+        message: isNote
+          ? `Quotation #${quotation.quotation_no} note logged: "${(body.notes || '').slice(0, 80)}"`
+          : `Quotation #${quotation.quotation_no} follow-up scheduled (${body.type || 'call'}) for ${followUpDate.toLocaleDateString('en-IN')}`,
         new_value: {
           quotation_id: quotation._id,
           quotation_no: quotation.quotation_no,
@@ -1668,7 +1683,13 @@ async function scheduleFollowUp(quotationId, body, user) {
     }
   }
 
-  return doc;
+  const populated = await LeadFollowUp.findById(doc._id)
+    .populate('created_by', 'name email department')
+    .populate('completed_by', 'name email department')
+    .populate('actions.author', 'name email department')
+    .lean();
+
+  return populated;
 }
 
 /**
@@ -1681,9 +1702,10 @@ async function listFollowUps(quotationId, user) {
   if (!quotation) throw new ApiError(404, 'Quotation not found');
 
   const rows = await LeadFollowUp.find({ quotation: quotationId, deletedAt: null })
-    .populate('created_by', 'name email')
-    .populate('completed_by', 'name email')
-    .sort({ follow_up_date: -1 })
+    .populate('created_by', 'name email department')
+    .populate('completed_by', 'name email department')
+    .populate('actions.author', 'name email department')
+    .sort({ follow_up_date: -1, createdAt: -1 })
     .lean();
 
   return rows;

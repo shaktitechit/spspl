@@ -139,10 +139,10 @@ function assertFollowUpCreate(body) {
   if (!body || typeof body !== 'object') {
     throw new ApiError(400, 'Request body is required');
   }
-  if (!body.follow_up_date) {
+  if (!body.follow_up_date && body.type !== 'note') {
     throw new ApiError(400, 'follow_up_date is required');
   }
-  if (isNaN(Date.parse(body.follow_up_date))) {
+  if (body.follow_up_date && isNaN(Date.parse(body.follow_up_date))) {
     throw new ApiError(400, 'Invalid follow_up_date format');
   }
   if (body.type && !FOLLOWUP_TYPES.includes(body.type)) {

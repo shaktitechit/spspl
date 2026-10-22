@@ -158,6 +158,17 @@ exports.completeFollowUp = asyncHandler(async (req, res) => {
   });
 });
 
+exports.addFollowUpAction = asyncHandler(async (req, res) => {
+  const followUpId = req.params.followUpId || req.params.id;
+  const followUpService = require('../leads/leadFollowUp.service');
+  const data = await followUpService.addAction(followUpId, req.body, req.user);
+  res.status(201).json({
+    success: true,
+    message: 'Action recorded successfully',
+    data,
+  });
+});
+
 exports.reviseQuotation = asyncHandler(async (req, res) => {
   const quotationId = req.params.quotationId || req.params.id;
   const data = await quotationService.reviseQuotation(quotationId, req.user);
