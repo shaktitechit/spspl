@@ -79,23 +79,74 @@ function formatDate(dateStr?: string): string {
   }
 }
 
-async function loadLogo(url?: string): Promise<string | null> {
+export type LoadedLogo = {
+  dataUrl: string;
+  width: number;
+  height: number;
+  format: string;
+};
+
+async function loadLogo(url?: string): Promise<LoadedLogo | null> {
   if (!url) return null;
-  if (url.startsWith("data:image/")) return url;
-  try {
-    const res = await fetch(url, { mode: "cors" });
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    if (!blob.type.startsWith("image/")) return null;
-    return await new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || "") || null);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
+  if (typeof window === "undefined") return null;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve(null);
+        ctx.drawImage(img, 0, 0);
+        const dataUrl = canvas.toDataURL("image/png");
+        resolve({
+          dataUrl,
+          width: img.naturalWidth || 100,
+          height: img.naturalHeight || 50,
+          format: "PNG",
+        });
+      } catch {
+        // Fallback to fetch/blob if canvas tainted
+        fetch(url, { mode: "cors" })
+          .then((r) => r.blob())
+          .then((blob) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const res = String(reader.result || "");
+              resolve({
+                dataUrl: res,
+                width: img.naturalWidth || 100,
+                height: img.naturalHeight || 50,
+                format: "PNG",
+              });
+            };
+            reader.readAsDataURL(blob);
+          })
+          .catch(() => resolve(null));
+      }
+    };
+    img.onerror = () => {
+      fetch(url, { mode: "cors" })
+        .then((r) => r.blob())
+        .then((blob) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            resolve({
+              dataUrl: String(reader.result || ""),
+              width: 120,
+              height: 48,
+              format: "PNG",
+            });
+          };
+          reader.readAsDataURL(blob);
+        })
+        .catch(() => resolve(null));
+    };
+    img.src = url;
+  });
 }
 
 export type StyleState = {
@@ -446,21 +497,27 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
   // Helper: Draw Header & Brand
   const drawHeader = () => {
     const logoY = currentY;
-    const logoW = 28;
-    const logoH = 12;
+    const maxLogoW = 44; // increased from 28mm (significantly larger logo)
+    const maxLogoH = 18; // increased from 12mm (significantly larger logo)
+    let logoW = maxLogoW;
+    let logoH = maxLogoH;
+
+    if (logoData && logoData.width && logoData.height) {
+      const aspect = logoData.width / logoData.height;
+      logoW = maxLogoW;
+      logoH = logoW / aspect;
+      if (logoH > maxLogoH) {
+        logoH = maxLogoH;
+        logoW = logoH * aspect;
+      }
+    }
 
     if (logoData) {
       try {
-        const formatMatch = logoData.match(/^data:image\/(png|jpeg|jpg|webp);/i);
-        const imgFormat = formatMatch
-          ? formatMatch[1].toUpperCase() === "JPG"
-            ? "JPEG"
-            : formatMatch[1].toUpperCase()
-          : "PNG";
-        pdf.addImage(logoData, imgFormat, M, logoY, logoW, logoH, undefined, "FAST");
+        pdf.addImage(logoData.dataUrl, logoData.format, M, logoY, logoW, logoH, undefined, "FAST");
       } catch {
         try {
-          pdf.addImage(logoData, M, logoY, logoW, logoH);
+          pdf.addImage(logoData.dataUrl, M, logoY, logoW, logoH);
         } catch {
           // Fallback gracefully
         }
@@ -469,12 +526,19 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
 
     let hY = currentY + 3.5;
 
+    // Center content safe area: Page is 210mm wide, M=10.
+    // Safe text width prevents long company name from overlapping logo or right edge.
+    const maxCenterTextW = 108;
+
     if (companyName) {
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(13);
+      pdf.setFontSize(12.5);
       pdf.setTextColor(...NAVY);
-      pdf.text(companyName.toUpperCase(), PAGE_W / 2, hY, { align: "center" });
-      hY += 4.5;
+      const companyLines = pdf.splitTextToSize(companyName.toUpperCase(), maxCenterTextW);
+      companyLines.forEach((line: string) => {
+        pdf.text(line, PAGE_W / 2, hY, { align: "center" });
+        hY += 4.5;
+      });
     }
 
     if (companyAddress) {
@@ -482,8 +546,11 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
       pdf.setFontSize(6.8);
       pdf.setTextColor(...TEXT);
       const fullAddressStr = `Regd. Off: ${companyAddress}`;
-      pdf.text(fullAddressStr, PAGE_W / 2, hY, { align: "center" });
-      hY += 3.6;
+      const splitAddr = pdf.splitTextToSize(fullAddressStr, maxCenterTextW + 10);
+      splitAddr.forEach((line: string) => {
+        pdf.text(line, PAGE_W / 2, hY, { align: "center" });
+        hY += 3.4;
+      });
     }
 
     const contactParts = [
@@ -497,11 +564,14 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
       pdf.setFontSize(6.8);
       pdf.setTextColor(...MUTED);
       const contactStr = contactParts.join("  •  ");
-      pdf.text(contactStr, PAGE_W / 2, hY, { align: "center" });
-      hY += 3.6;
+      const splitContact = pdf.splitTextToSize(contactStr, maxCenterTextW + 10);
+      splitContact.forEach((line: string) => {
+        pdf.text(line, PAGE_W / 2, hY, { align: "center" });
+        hY += 3.4;
+      });
     }
 
-    currentY = Math.max(hY + 2, logoY + logoH + 2, currentY + 15);
+    currentY = Math.max(hY + 2, logoY + logoH + 2, currentY + 16);
     pdf.setDrawColor(...NAVY);
     pdf.setLineWidth(0.5);
     pdf.line(M, currentY, PAGE_W - M, currentY);

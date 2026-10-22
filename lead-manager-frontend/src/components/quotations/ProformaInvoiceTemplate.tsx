@@ -134,29 +134,62 @@ export default function ProformaInvoiceTemplate({ quotation, proformaDetails }: 
     <div id="proforma-pdf-root" style={pageStyle}>
       {/* 1. Company Letterhead Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px", paddingBottom: "10px", borderBottom: "2.5px solid #1e3a5f" }}>
-        {/* Left: Logo */}
-        <div style={{ width: "135px", flexShrink: 0 }}>
+        {/* Left: Logo - Flex-protected slot with increased size & preserved aspect ratio */}
+        <div style={{ flex: "0 0 175px", width: "175px", minWidth: "175px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-start" }}>
           {logoUrl ? (
             <img
               src={logoUrl}
               alt={companyName || "Logo"}
               crossOrigin="anonymous"
-              style={{ width: "130px", height: "48px", objectFit: "contain", objectPosition: "left center", display: "block" }}
+              style={{
+                maxWidth: "175px",
+                maxHeight: "68px",
+                width: "auto",
+                height: "auto",
+                objectFit: "contain",
+                objectPosition: "left center",
+                display: "block",
+              }}
             />
           ) : (
-            <div style={{ width: "130px", height: "44px", border: "1px dashed #cbd5e1", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: "10px", fontWeight: 700 }}>
-              {companyName.slice(0, 12)}
+            <div style={{ width: "160px", height: "54px", border: "1px dashed #cbd5e1", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: "11px", fontWeight: 700 }}>
+              {companyName.slice(0, 16)}
             </div>
           )}
         </div>
 
-        {/* Center: Company Name & Credentials */}
-        <div style={{ flex: 1, textAlign: "center", padding: "0 12px", minWidth: 0 }}>
-          <div style={{ fontSize: "16.5px", fontWeight: 800, color: "#1e3a5f", letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: "3px", lineHeight: "20px" }}>
+        {/* Center: Company Name & Credentials - Multi-line word wrap that cannot encroach on logo */}
+        <div style={{ flex: 1, textAlign: "center", padding: "0 10px", minWidth: 0, overflow: "hidden" }}>
+          <div
+            style={{
+              fontSize: "15.5px",
+              fontWeight: 800,
+              color: "#1e3a5f",
+              letterSpacing: "0.03em",
+              textTransform: "uppercase",
+              marginBottom: "3px",
+              lineHeight: "20px",
+              whiteSpace: "normal",
+              wordBreak: "break-word",
+              overflowWrap: "break-word",
+              maxWidth: "100%",
+            }}
+          >
             {companyName}
           </div>
           {companyRegdAddress && (
-            <div style={{ fontSize: "8.5px", color: "#334155", marginBottom: "3px", lineHeight: "13px" }}>
+            <div
+              style={{
+                fontSize: "8.5px",
+                color: "#334155",
+                marginBottom: "3px",
+                lineHeight: "13px",
+                whiteSpace: "normal",
+                wordBreak: "break-word",
+                overflowWrap: "break-word",
+                maxWidth: "100%",
+              }}
+            >
               <strong style={{ color: "#1e3a5f" }}>Regd. Off:</strong> {companyRegdAddress}
             </div>
           )}
@@ -172,12 +205,12 @@ export default function ProformaInvoiceTemplate({ quotation, proformaDetails }: 
         </div>
 
         {/* Right: Document Badge */}
-        <div style={{ width: "135px", flexShrink: 0, textAlign: "right" }}>
-          <div style={{ display: "inline-block", background: "#eff6ff", border: "1px solid #bfdbfe", padding: "4px 8px", borderRadius: "4px" }}>
+        <div style={{ flex: "0 0 145px", width: "145px", minWidth: "145px", flexShrink: 0, textAlign: "right" }}>
+          <div style={{ display: "inline-block", background: "#eff6ff", border: "1px solid #bfdbfe", padding: "5px 10px", borderRadius: "5px" }}>
             <div style={{ fontSize: "9px", fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", letterSpacing: "0.03em" }}>
               PROFORMA INVOICE
             </div>
-            <div style={{ fontSize: "8px", fontWeight: 700, color: "#2563eb", marginTop: "1px" }}>
+            <div style={{ fontSize: "8.5px", fontWeight: 700, color: "#2563eb", marginTop: "1px" }}>
               {proformaNo}
             </div>
           </div>

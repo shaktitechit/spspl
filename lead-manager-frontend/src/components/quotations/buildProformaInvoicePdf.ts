@@ -186,8 +186,8 @@ export async function buildProformaInvoicePdf(input: BuildProformaInvoicePdfInpu
   const drawHeader = () => {
     const headerTop = currentY;
     if (logoData) {
-      const maxW = 38;
-      const maxH = 15;
+      const maxW = 44;
+      const maxH = 18;
       const aspect = logoData.width / logoData.height;
       let w = maxW;
       let h = w / aspect;
@@ -224,14 +224,20 @@ export async function buildProformaInvoicePdf(input: BuildProformaInvoicePdfInpu
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(12.5);
     pdf.setTextColor(...NAVY);
-    pdf.text(companyName.toUpperCase(), PAGE_W / 2, headerTop + 4, { align: "center" });
+    const maxCenterTextW = 105;
+    const companyLines = pdf.splitTextToSize(companyName.toUpperCase(), maxCenterTextW);
+    let infoY = headerTop + 4;
+    companyLines.forEach((line: string) => {
+      pdf.text(line, PAGE_W / 2, infoY, { align: "center" });
+      infoY += 4.2;
+    });
 
-    let infoY = headerTop + 8;
+    infoY += 0.5;
     if (companyAddress) {
       pdf.setFontSize(7.2);
       pdf.setFont("helvetica", "normal");
       pdf.setTextColor(...TEXT);
-      const splitAddr = pdf.splitTextToSize(`Regd. Off: ${companyAddress}`, 110);
+      const splitAddr = pdf.splitTextToSize(`Regd. Off: ${companyAddress}`, maxCenterTextW + 5);
       pdf.text(splitAddr, PAGE_W / 2, infoY, { align: "center" });
       infoY += splitAddr.length * 3.2 + 0.5;
     }

@@ -294,41 +294,47 @@ export default function QuotationPdfTemplate({
         {/* 1. HEADER SECTION */}
         <div style={{ marginBottom: "14px", width: "100%", boxSizing: "border-box" }}>
           <div style={{ display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%", paddingBottom: "10px", borderBottom: "2.5px solid #1e3a5f" }}>
-            {/* Logo Left */}
-            <div style={{ width: "135px", flexShrink: 0 }}>
+            {/* Logo Left - Flex-protected slot with increased size & preserved aspect ratio */}
+            <div style={{ flex: "0 0 175px", width: "175px", minWidth: "175px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-start" }}>
               {logoUrl ? (
                 <img
                   src={logoUrl}
                   alt={companyName || "Logo"}
                   crossOrigin="anonymous"
                   style={{
-                    width: "130px",
-                    height: "48px",
+                    maxWidth: "175px",
+                    maxHeight: "68px",
+                    width: "auto",
+                    height: "auto",
                     objectFit: "contain",
                     objectPosition: "left center",
                     display: "block",
                   }}
                 />
               ) : (
-                <div style={{ width: "130px", height: "44px", border: "1px dashed #cbd5e1", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: "10px", fontWeight: 700 }}>
-                  {companyName.slice(0, 12)}
+                <div style={{ width: "160px", height: "54px", border: "1px dashed #cbd5e1", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: "11px", fontWeight: 700 }}>
+                  {companyName.slice(0, 16)}
                 </div>
               )}
             </div>
 
-            {/* Company Info Center */}
-            <div style={{ flex: 1, textAlign: "center", padding: "0 12px", minWidth: 0 }}>
+            {/* Company Info Center - Multi-line word wrap that cannot encroach on logo */}
+            <div style={{ flex: 1, textAlign: "center", padding: "0 10px", minWidth: 0, overflow: "hidden" }}>
               {companyName && (
                 <div
                   style={{
-                    fontSize: "16.5px",
+                    fontSize: "15.5px",
                     fontWeight: 800,
                     color: "#1e3a5f",
-                    letterSpacing: "0.04em",
+                    letterSpacing: "0.03em",
                     textTransform: "uppercase",
                     lineHeight: "20px",
                     marginBottom: "3px",
                     textAlign: "center",
+                    whiteSpace: "normal",
+                    wordBreak: "break-word",
+                    overflowWrap: "break-word",
+                    maxWidth: "100%",
                   }}
                 >
                   {companyName}
@@ -342,6 +348,10 @@ export default function QuotationPdfTemplate({
                     lineHeight: "13px",
                     marginBottom: "3px",
                     textAlign: "center",
+                    whiteSpace: "normal",
+                    wordBreak: "break-word",
+                    overflowWrap: "break-word",
+                    maxWidth: "100%",
                   }}
                 >
                   <strong style={{ color: "#1e3a5f" }}>Regd. Off:</strong> {companyRegdAddress}
@@ -381,12 +391,12 @@ export default function QuotationPdfTemplate({
             </div>
 
             {/* Right: Document Badge */}
-            <div style={{ width: "135px", flexShrink: 0, textAlign: "right" }}>
-              <div style={{ display: "inline-block", background: "#eff6ff", border: "1px solid #bfdbfe", padding: "4px 8px", borderRadius: "4px" }}>
+            <div style={{ flex: "0 0 145px", width: "145px", minWidth: "145px", flexShrink: 0, textAlign: "right" }}>
+              <div style={{ display: "inline-block", background: "#eff6ff", border: "1px solid #bfdbfe", padding: "5px 10px", borderRadius: "5px" }}>
                 <div style={{ fontSize: "9px", fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", letterSpacing: "0.03em" }}>
                   {documentType === "proforma" ? "PROFORMA INVOICE" : "QUOTATION"}
                 </div>
-                <div style={{ fontSize: "8px", fontWeight: 700, color: "#2563eb", marginTop: "1px" }}>
+                <div style={{ fontSize: "8.5px", fontWeight: 700, color: "#2563eb", marginTop: "1px" }}>
                   {quotation.quotation_no || "DRAFT"}
                 </div>
               </div>
