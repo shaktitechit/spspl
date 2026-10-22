@@ -83,23 +83,23 @@ export function QuotationsDashboardSection({ portalHome = "/dashboard" }: Props)
   if (!canView) return null;
 
   return (
-    <section className="space-y-4 rounded-3xl border border-indigo-200/70 bg-gradient-to-b from-indigo-50/40 via-white to-white p-5 sm:p-6 shadow-xs dark:border-indigo-900/30 dark:from-indigo-950/20 dark:via-slate-900 dark:to-slate-900">
+    <section className="space-y-4 rounded-3xl border border-border bg-card p-5 sm:p-6 shadow-2xs transition-all">
       {/* Section Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-indigo-100 dark:border-indigo-900/40">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border/70">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-sm shadow-indigo-600/30">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-indigo-500/20 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shadow-2xs">
             <FileText className="h-5 w-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                Quotations & Commercial Proposals Hub
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base sm:text-lg font-bold text-foreground tracking-tight">
+                Quotations &amp; Commercial Proposals Hub
               </h2>
-              <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+              <span className="rounded-full border border-indigo-500/20 bg-indigo-500/5 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
                 {scopeBadge}
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{scopeHint}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{scopeHint}</p>
           </div>
         </div>
 
@@ -107,25 +107,25 @@ export function QuotationsDashboardSection({ portalHome = "/dashboard" }: Props)
         <div className="flex flex-wrap items-center gap-2">
           <Link
             href={`${portalHome}/quotations`}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-3.5 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900/60 dark:bg-slate-800 dark:text-indigo-300 dark:hover:bg-slate-750 transition"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface-muted/50 px-3.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-muted transition-colors shadow-2xs"
           >
             <span>{isExecutive ? "My Quotations" : "View All Quotations"}</span>
-            <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
           </Link>
 
           <Link
             href={`${portalHome}/leads/follow-ups`}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200/80 bg-white px-3.5 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900/60 dark:bg-slate-800 dark:text-indigo-300 transition"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface-muted/50 px-3.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-muted transition-colors shadow-2xs"
           >
-            <Calendar className="h-3.5 w-3.5" />
+            <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
             <span>Quote Follow-ups</span>
           </Link>
 
           <Link
             href={`${portalHome}/quotations/reports`}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200/80 bg-white px-3.5 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900/60 dark:bg-slate-800 dark:text-indigo-300 transition"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface-muted/50 px-3.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-muted transition-colors shadow-2xs"
           >
-            <TrendingUp className="h-3.5 w-3.5" />
+            <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
             <span>Quote Reports</span>
           </Link>
 
@@ -133,7 +133,7 @@ export function QuotationsDashboardSection({ portalHome = "/dashboard" }: Props)
             <button
               type="button"
               onClick={() => setCreateModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-md shadow-indigo-600/20 hover:bg-indigo-700 transition cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition-colors cursor-pointer"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>Generate Quotation</span>
@@ -145,42 +145,54 @@ export function QuotationsDashboardSection({ portalHome = "/dashboard" }: Props)
       {/* Metric Cards Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Total Proposals */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-2xs dark:border-white/5 dark:bg-slate-800/80">
-          <div className="flex items-center justify-between text-slate-400 mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Total Proposals</span>
-            <FileText className="h-3.5 w-3.5 text-slate-400" />
+        <div className="rounded-2xl border border-border bg-surface-muted/30 hover:bg-surface-muted/50 p-3.5 shadow-2xs transition-colors">
+          <div className="flex items-center justify-between text-muted-foreground mb-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider">Total Proposals</span>
+            <FileText className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
-          <div className="text-xl font-black text-slate-900 dark:text-white">
+          <div className="text-xl font-bold tracking-tight text-foreground">
             {loadingStats ? "…" : stats?.total_quotations || 0}
           </div>
-          <div className="text-[10px] text-slate-500 mt-0.5">
+          <div className="text-[10px] text-muted-foreground mt-0.5">
             {isExecutive ? "In your scope" : "All created quotes"}
           </div>
         </div>
 
         {/* Pending Approvals */}
-        <div className={`rounded-2xl border p-3.5 shadow-2xs transition ${
-          stats?.pending_approval_count && stats.pending_approval_count > 0
-            ? "border-amber-300 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/40"
-            : "border-slate-200/80 bg-white dark:border-white/5 dark:bg-slate-800/80"
-        }`}>
+        <div
+          className={`rounded-2xl border p-3.5 shadow-2xs transition-colors ${
+            stats?.pending_approval_count && stats.pending_approval_count > 0
+              ? "border-amber-500/30 bg-amber-500/10 dark:bg-amber-950/20"
+              : "border-border bg-surface-muted/30 hover:bg-surface-muted/50"
+          }`}
+        >
           <div className="flex items-center justify-between text-amber-600 dark:text-amber-400 mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Pending Approval</span>
-            <Clock className={`h-3.5 w-3.5 ${stats?.pending_approval_count ? "animate-pulse text-amber-600" : ""}`} />
+            <span className="text-[10px] font-semibold uppercase tracking-wider">Pending Approval</span>
+            <Clock
+              className={`h-3.5 w-3.5 ${
+                stats?.pending_approval_count ? "animate-pulse text-amber-600 dark:text-amber-400" : "text-muted-foreground"
+              }`}
+            />
           </div>
-          <div className="text-xl font-black text-amber-700 dark:text-amber-300">
+          <div
+            className={`text-xl font-bold tracking-tight ${
+              stats?.pending_approval_count && stats.pending_approval_count > 0
+                ? "text-amber-700 dark:text-amber-300"
+                : "text-foreground"
+            }`}
+          >
             {loadingStats ? "…" : stats?.pending_approval_count || 0}
           </div>
           <div className="text-[10px] text-amber-700/80 dark:text-amber-400 mt-0.5">Signatory review</div>
         </div>
 
         {/* In Negotiation */}
-        <div className="rounded-2xl border border-indigo-200/80 bg-indigo-50/40 p-3.5 shadow-2xs dark:border-indigo-900/40 dark:bg-indigo-950/30">
+        <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-950/20 hover:bg-indigo-500/10 p-3.5 shadow-2xs transition-colors">
           <div className="flex items-center justify-between text-indigo-600 dark:text-indigo-400 mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider">In Negotiation</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider">In Negotiation</span>
             <MessageSquare className="h-3.5 w-3.5" />
           </div>
-          <div className="text-xl font-black text-indigo-700 dark:text-indigo-300">
+          <div className="text-xl font-bold tracking-tight text-indigo-700 dark:text-indigo-300">
             {loadingStats ? "…" : stats?.active_pipeline_count ?? stats?.in_negotiation_count ?? 0}
           </div>
           <div className="text-[10px] text-indigo-600/80 dark:text-indigo-400 mt-0.5">
@@ -189,12 +201,12 @@ export function QuotationsDashboardSection({ portalHome = "/dashboard" }: Props)
         </div>
 
         {/* Won Proposals Value */}
-        <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/40 p-3.5 shadow-2xs dark:border-emerald-900/40 dark:bg-emerald-950/30">
+        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/20 hover:bg-emerald-500/10 p-3.5 shadow-2xs transition-colors">
           <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400 mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Won Value (Accepted)</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider">Won Value</span>
             <CheckCircle2 className="h-3.5 w-3.5" />
           </div>
-          <div className="text-xl font-black text-emerald-700 dark:text-emerald-300 truncate">
+          <div className="text-xl font-bold tracking-tight text-emerald-700 dark:text-emerald-300 truncate">
             {loadingStats ? "…" : formatCurrencyINR(stats?.total_won_value || 0)}
           </div>
           <div className="text-[10px] text-emerald-600/80 dark:text-emerald-400 mt-0.5">
@@ -203,52 +215,52 @@ export function QuotationsDashboardSection({ portalHome = "/dashboard" }: Props)
         </div>
 
         {/* Total Active Pipeline Value */}
-        <div className="rounded-2xl border border-blue-200/80 bg-blue-50/40 p-3.5 shadow-2xs dark:border-blue-900/40 dark:bg-blue-950/30">
+        <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 dark:bg-blue-950/20 hover:bg-blue-500/10 p-3.5 shadow-2xs transition-colors">
           <div className="flex items-center justify-between text-blue-600 dark:text-blue-400 mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider">Quoted Pipeline</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider">Quoted Pipeline</span>
             <TrendingUp className="h-3.5 w-3.5" />
           </div>
-          <div className="text-xl font-black text-blue-700 dark:text-blue-300 truncate">
+          <div className="text-xl font-bold tracking-tight text-blue-700 dark:text-blue-300 truncate">
             {loadingStats ? "…" : formatCurrencyINR(stats?.active_pipeline_value ?? stats?.total_quoted_value ?? 0)}
           </div>
-          <div className="text-[10px] text-blue-600/80 dark:text-blue-400 mt-0.5">Quoted pipeline (live deals)</div>
+          <div className="text-[10px] text-blue-600/80 dark:text-blue-400 mt-0.5">Quoted live deals</div>
         </div>
 
         {/* Expired Proposals / Avg Discount */}
         {Boolean(stats?.expired_count && stats.expired_count > 0) ? (
           <Link
             href={`${portalHome}/quotations?status=expired`}
-            className="rounded-2xl border border-rose-200 bg-rose-50/50 p-3.5 shadow-2xs dark:border-rose-900/40 dark:bg-rose-950/30 hover:bg-rose-100/60 transition block"
+            className="rounded-2xl border border-rose-500/30 bg-rose-500/10 dark:bg-rose-950/25 p-3.5 shadow-2xs hover:bg-rose-500/15 transition-colors block"
           >
             <div className="flex items-center justify-between text-rose-600 dark:text-rose-400 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider">Expired Quotes</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider">Expired Quotes</span>
               <AlertTriangle className="h-3.5 w-3.5" />
             </div>
-            <div className="text-xl font-black text-rose-700 dark:text-rose-300">
+            <div className="text-xl font-bold tracking-tight text-rose-700 dark:text-rose-300">
               {loadingStats ? "…" : stats?.expired_count || 0}
             </div>
-            <div className="text-[10px] text-rose-600/80 dark:text-rose-400 mt-0.5">Needs extension →</div>
+            <div className="text-[10px] text-rose-600/80 dark:text-rose-400 mt-0.5">Needs extension &rarr;</div>
           </Link>
         ) : (
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-2xs dark:border-white/5 dark:bg-slate-800/80">
-            <div className="flex items-center justify-between text-slate-400 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider">Avg. Discount</span>
-              <Percent className="h-3.5 w-3.5 text-slate-400" />
+          <div className="rounded-2xl border border-border bg-surface-muted/30 hover:bg-surface-muted/50 p-3.5 shadow-2xs transition-colors">
+            <div className="flex items-center justify-between text-muted-foreground mb-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wider">Avg. Discount</span>
+              <Percent className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
-            <div className="text-xl font-black text-slate-900 dark:text-white">
+            <div className="text-xl font-bold tracking-tight text-foreground">
               {loadingStats ? "…" : `${stats?.avg_discount_percent || 0}%`}
             </div>
-            <div className="text-[10px] text-slate-500 mt-0.5">Margin health indicator</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">Margin health indicator</div>
           </div>
         )}
       </div>
 
       {/* Active Quotations Follow-Up Snapshot */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 dark:border-white/5 dark:bg-slate-800/60">
-        <div className="flex items-center justify-between mb-3">
+      <div className="rounded-2xl border border-border bg-card p-4 shadow-2xs">
+        <div className="flex items-center justify-between pb-3 border-b border-border/70 mb-3">
           <div className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-            <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+            <MessageSquare className="h-4 w-4 text-primary" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
               {isExecutive ? "Recent proposals" : "Active negotiations"} ({recentQuotations.length})
             </h3>
           </div>
@@ -258,72 +270,72 @@ export function QuotationsDashboardSection({ portalHome = "/dashboard" }: Props)
                 ? `${portalHome}/quotations`
                 : `${portalHome}/quotations?status=in_negotiation`
             }
-            className="text-[11px] font-bold text-indigo-600 hover:underline dark:text-indigo-400"
+            className="text-[11px] font-semibold text-primary hover:underline"
           >
             {isExecutive ? "View all →" : "View negotiation pipeline →"}
           </Link>
         </div>
 
         {loadingQuotes ? (
-          <div className="py-6 text-center text-xs text-slate-400">Loading proposals...</div>
+          <div className="py-6 text-center text-xs text-muted-foreground">Loading proposals...</div>
         ) : recentQuotations.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 py-6 text-center text-xs text-slate-400 dark:border-white/10">
+          <div className="rounded-xl border border-dashed border-border py-8 text-center text-xs text-muted-foreground">
             {isExecutive
               ? "No quotations assigned to you yet."
               : "No quotations currently marked as in negotiation."}
           </div>
         ) : (
-          <div className="divide-y divide-slate-100 dark:divide-white/5">
+          <div className="divide-y divide-border/60">
             {recentQuotations.slice(0, 4).map((q) => {
               const salesRep =
                 q.sales_person_name ||
                 (typeof q.sales_person_user === "object" && q.sales_person_user?.name) ||
                 "";
               return (
-              <div
-                key={q._id}
-                className="flex items-center justify-between py-2.5 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 rounded-xl px-2 transition"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300 font-bold text-xs">
-                    {q.version ? `v${q.version}` : "v1"}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Link
-                        href={`${portalHome}/quotations/${q._id}`}
-                        className="text-xs font-bold text-slate-900 hover:text-indigo-600 dark:text-white dark:hover:text-indigo-400 truncate"
-                      >
-                        {q.quotation_no}
-                      </Link>
-                      <span className="text-xs text-slate-400">• {q.customer_name || "Customer"}</span>
-                    </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2 mt-0.5">
-                      <span>Total: <strong>{formatCurrencyINR(q.grand_total || 0)}</strong></span>
-                      {q.status ? (
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          {String(q.status).replace(/_/g, " ")}
-                        </span>
-                      ) : null}
-                      {salesRep && !isExecutive ? (
-                        <span className="text-slate-500">Rep: {salesRep}</span>
-                      ) : null}
-                      {q.total_discount && q.total_discount > 0 ? (
-                        <span className="text-emerald-600 font-medium">Disc: -{formatCurrencyINR(q.total_discount)}</span>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-
-                <Link
-                  href={`${portalHome}/quotations/${q._id}`}
-                  className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:text-indigo-300 transition shrink-0 ml-2"
+                <div
+                  key={q._id}
+                  className="flex items-center justify-between py-2.5 px-2 hover:bg-surface-muted/50 rounded-xl transition-colors"
                 >
-                  <span>Open</span>
-                  <ExternalLink className="h-3 w-3" />
-                </Link>
-              </div>
-            );
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-indigo-500/20 bg-indigo-500/10 font-bold text-xs text-indigo-700 dark:text-indigo-300 font-mono">
+                      {q.version ? `v${q.version}` : "v1"}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`${portalHome}/quotations/${q._id}`}
+                          className="text-xs font-bold text-foreground hover:text-primary truncate"
+                        >
+                          {q.quotation_no}
+                        </Link>
+                        <span className="text-xs text-muted-foreground">&bull; {q.customer_name || "Customer"}</span>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground flex flex-wrap items-center gap-2 mt-0.5">
+                        <span>Total: <strong className="text-foreground">{formatCurrencyINR(q.grand_total || 0)}</strong></span>
+                        {q.status ? (
+                          <span className="rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-foreground">
+                            {String(q.status).replace(/_/g, " ")}
+                          </span>
+                        ) : null}
+                        {salesRep && !isExecutive ? (
+                          <span className="text-muted-foreground">Rep: {salesRep}</span>
+                        ) : null}
+                        {q.total_discount && q.total_discount > 0 ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">Disc: -{formatCurrencyINR(q.total_discount)}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+
+                  <Link
+                    href={`${portalHome}/quotations/${q._id}`}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface-muted/60 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-surface-muted transition-colors shrink-0 ml-2 shadow-2xs"
+                  >
+                    <span>Open</span>
+                    <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                  </Link>
+                </div>
+              );
             })}
           </div>
         )}

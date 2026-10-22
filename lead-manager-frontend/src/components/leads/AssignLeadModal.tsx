@@ -1,13 +1,11 @@
 /**
- * @fileoverview Modal to assign or reassign a lead to a team member.
- * @module components/portal/shared/leads/AssignLeadModal
+ * @fileoverview Slide-Over Drawer to assign or reassign a lead to one or more team members.
+ * @module components/leads/AssignLeadModal
  */
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { UserCheck, X, Search, Mail, Building2 } from "lucide-react";
-import { LargeModalPortal } from "@/components/portal/shared/LargeModalPortal";
-import { ModalOverlay } from "@/components/portal/shared/ModalOverlay";
+import { UserCheck, Search, Mail, Building2, X, Check } from "lucide-react";
 import {
   useAssignLeadMutation,
   useListUsersQuery,
@@ -22,6 +20,7 @@ import {
   getLeadManagerPortalRole,
   getDeptLabel,
 } from "./leadUtils";
+import { SlideOverDrawer } from "@/components/portal/shared/SlideOverDrawer";
 
 type Props = {
   lead: LeadRecord;
@@ -108,175 +107,159 @@ export function AssignLeadModal({ lead, open, onClose, onSuccess }: Props) {
     }
   };
 
+  const footerActions = (
+    <div className="flex items-center justify-between gap-3">
+      <button
+        type="button"
+        onClick={onClose}
+        className="rounded-xl border border-border bg-card px-4 py-2 text-xs font-semibold text-muted hover:text-foreground hover:bg-surface-muted transition cursor-pointer"
+      >
+        Cancel
+      </button>
+
+      <button
+        type="button"
+        onClick={handleSubmit}
+        disabled={isLoading || assignedUsers.length === 0}
+        className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-primary-hover transition cursor-pointer disabled:opacity-50"
+      >
+        <Check className="h-4 w-4" />
+        <span>{isLoading ? "Saving..." : `Assign (${assignedUsers.length})`}</span>
+      </button>
+    </div>
+  );
+
   return (
-    <LargeModalPortal>
-      <ModalOverlay onClick={onClose}>
-        <div
-          role="dialog"
-          aria-modal="true"
-          onClick={(e) => e.stopPropagation()}
-          className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl transition-all dark:border-white/10 dark:bg-slate-900"
-        >
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4 dark:border-white/10">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <UserCheck className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Assign Lead
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Lead #{lead.lead_no} • {lead.name}
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/5 dark:hover:text-slate-200"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-            {/* Assign to Team Members */}
-            <div>
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Assign to Team Members ({allPortalUsers.length} available)
-                </label>
-                {assignedUsers.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setAssignedUsers([])}
-                    className="text-[11px] font-medium text-rose-500 hover:underline"
-                  >
-                    Clear All ({assignedUsers.length} selected)
-                  </button>
-                )}
-              </div>
-
-              {/* Instant Search Filter */}
-              <div className="mt-1.5 relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={assignSearch}
-                  onChange={(e) => setAssignSearch(e.target.value)}
-                  placeholder="Search user by name, email or department..."
-                  className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-7 text-xs text-slate-800 placeholder-slate-400 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
-                />
-                {assignSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setAssignSearch("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
-
-              {loadingUsers ? (
-                <div className="mt-2 h-20 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
-              ) : filteredAssignees.length === 0 ? (
-                <div className="mt-2 rounded-xl border border-dashed border-amber-300 bg-amber-50/50 p-3 text-center text-xs text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-400">
-                  No Lead Manager portal users found matching your search.
-                </div>
-              ) : (
-                <div className="mt-2 max-h-56 overflow-y-auto space-y-1.5 rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 dark:border-white/10 dark:bg-slate-800/40">
-                  {filteredAssignees.map((u) => {
-                    const isSelected = assignedUsers.includes(u._id);
-                    const roleBadge = getLeadManagerPortalRole(u);
-                    const isCurrentUser = String(u._id) === authUserId;
-                    const deptLabel = getDeptLabel(u.department || "") || u.department || "General";
-                    return (
-                      <label
-                        key={u._id}
-                        className={`flex items-center justify-between gap-2.5 rounded-lg p-2.5 text-xs transition cursor-pointer ${
-                          isSelected
-                            ? "bg-white dark:bg-slate-700 shadow-xs border border-primary/50 ring-1 ring-primary/20"
-                            : "bg-white/70 dark:bg-slate-800/60 hover:bg-white dark:hover:bg-slate-700/70 border border-slate-200/60 dark:border-white/5"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleAssignedUser(u._id)}
-                            className="rounded border-slate-300 text-primary focus:ring-primary h-4 w-4"
-                          />
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-semibold text-slate-800 dark:text-slate-100">
-                                {u.name}
-                              </span>
-                              {isCurrentUser && (
-                                <span className="rounded bg-indigo-50 px-1 py-0.2 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
-                                  You
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 flex-wrap">
-                              {u.email && (
-                                <span className="inline-flex items-center gap-1 truncate text-slate-600 dark:text-slate-300">
-                                  <Mail className="h-3 w-3 text-slate-400 shrink-0" />
-                                  <span className="truncate">{u.email}</span>
-                                </span>
-                              )}
-                              <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-200">
-                                <Building2 className="h-2.5 w-2.5 text-slate-400 shrink-0" />
-                                Dept: {deptLabel}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        {roleBadge && (
-                          <span className="shrink-0 rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
-                            {roleBadge}
-                          </span>
-                        )}
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Assignment Note <span className="font-normal text-slate-400">(Optional)</span>
-              </label>
-              <textarea
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Reason for reassignment or notes..."
-                className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
-              />
-            </div>
-
-            <div className="flex justify-end gap-3 pt-2">
+    <SlideOverDrawer
+      open={open}
+      onClose={onClose}
+      title="Assign Lead to Team"
+      subtitle={`Lead #${lead.lead_no} • ${lead.name}`}
+      icon={UserCheck}
+      footer={footerActions}
+      size="lg"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Search Input */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+              Select Team Members
+            </label>
+            {assignedUsers.length > 0 && (
               <button
                 type="button"
-                onClick={onClose}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                onClick={() => setAssignedUsers([])}
+                className="text-[11px] font-semibold text-rose-500 hover:underline cursor-pointer"
               >
-                Cancel
+                Clear selection ({assignedUsers.length})
               </button>
+            )}
+          </div>
+
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted" />
+            <input
+              type="text"
+              value={assignSearch}
+              onChange={(e) => setAssignSearch(e.target.value)}
+              placeholder="Search by representative name, email, department..."
+              className="w-full rounded-xl border border-border bg-surface-muted/50 pl-9 pr-8 py-2 text-xs text-foreground placeholder:text-muted focus:border-primary focus:bg-card focus:outline-none transition"
+            />
+            {assignSearch && (
               <button
-                type="submit"
-                disabled={isLoading}
-                className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+                type="button"
+                onClick={() => setAssignSearch("")}
+                className="absolute right-2.5 top-2.5 text-muted hover:text-foreground p-0.5 rounded cursor-pointer"
               >
-                {isLoading ? "Saving..." : "Save Assignment"}
+                <X className="h-3.5 w-3.5" />
               </button>
-            </div>
-          </form>
+            )}
+          </div>
         </div>
-      </ModalOverlay>
-    </LargeModalPortal>
+
+        {/* User Selection List */}
+        <div>
+          {loadingUsers ? (
+            <div className="h-36 animate-pulse rounded-xl bg-surface-muted" />
+          ) : filteredAssignees.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-surface-muted/30 p-6 text-center text-xs text-muted">
+              No team members found matching &ldquo;{assignSearch}&rdquo;.
+            </div>
+          ) : (
+            <div className="max-h-[380px] overflow-y-auto space-y-1.5 rounded-xl border border-border bg-surface-muted/30 p-2 scrollbar-none">
+              {filteredAssignees.map((u) => {
+                const isSelected = assignedUsers.includes(u._id);
+                const roleBadge = getLeadManagerPortalRole(u as any);
+                const isCurrentUser = String(u._id) === authUserId;
+                const deptLabel = getDeptLabel(u.department || "") || u.department || "General";
+
+                return (
+                  <label
+                    key={u._id}
+                    className={`flex items-center justify-between gap-3 rounded-xl p-3 text-xs transition cursor-pointer border ${
+                      isSelected
+                        ? "bg-primary/10 border-primary/40 shadow-2xs"
+                        : "bg-card border-border hover:bg-surface-muted"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleAssignedUser(u._id)}
+                        className="rounded border-border text-primary focus:ring-primary h-4 w-4"
+                      />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-foreground truncate">{u.name}</span>
+                          {isCurrentUser && (
+                            <span className="rounded bg-primary/15 text-primary px-1.5 py-0.2 text-[10px] font-bold">
+                              You
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted flex-wrap">
+                          {u.email && (
+                            <span className="flex items-center gap-1 truncate">
+                              <Mail className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{u.email}</span>
+                            </span>
+                          )}
+                          <span className="flex items-center gap-1 rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted">
+                            <Building2 className="h-2.5 w-2.5 shrink-0" />
+                            {deptLabel}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {roleBadge && (
+                      <span className="shrink-0 rounded-md bg-surface-muted px-2 py-0.5 text-[10px] font-extrabold uppercase text-primary">
+                        {roleBadge}
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Assignment Notes */}
+        <div>
+          <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-1.5">
+            Assignment Note <span className="font-normal text-muted">(Optional)</span>
+          </label>
+          <textarea
+            rows={3}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Special instructions or reason for assigning..."
+            className="w-full rounded-xl border border-border bg-surface-muted/50 p-3 text-xs text-foreground placeholder:text-muted focus:border-primary focus:bg-card focus:outline-none transition"
+          />
+        </div>
+      </form>
+    </SlideOverDrawer>
   );
 }

@@ -1,13 +1,22 @@
 /**
- * @fileoverview Modal to schedule a follow-up for a lead.
- * @module components/portal/shared/leads/FollowUpModal
+ * @fileoverview Slide-Over Drawer to schedule a follow-up for a lead.
+ * @module components/leads/FollowUpModal
  */
 "use client";
 
 import React, { useState } from "react";
-import { CalendarClock, X } from "lucide-react";
-import { LargeModalPortal } from "@/components/portal/shared/LargeModalPortal";
-import { ModalOverlay } from "@/components/portal/shared/ModalOverlay";
+import {
+  CalendarClock,
+  Calendar,
+  Clock,
+  Phone,
+  Video,
+  Mail,
+  MessageCircle,
+  MapPin,
+  Check,
+  AlertTriangle,
+} from "lucide-react";
 import {
   useCreateLeadFollowUpMutation,
   type LeadRecord,
@@ -16,6 +25,7 @@ import {
 import { toast } from "@/lib/toast";
 import { mutationRejectedMessage } from "@/lib/mutationMessages";
 import { FOLLOWUP_TYPE_CONFIG, canScheduleFollowUp } from "./leadUtils";
+import { SlideOverDrawer } from "@/components/portal/shared/SlideOverDrawer";
 
 type Props = {
   lead: LeadRecord;
@@ -50,45 +60,30 @@ export function FollowUpModal({ lead, open, onClose, onSuccess }: Props) {
 
   if (lead && !canScheduleFollowUp(lead.status)) {
     return (
-      <LargeModalPortal>
-        <ModalOverlay onClick={onClose}>
-          <div
-            role="dialog"
-            aria-modal="true"
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl transition-all dark:border-white/10 dark:bg-slate-900"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-white/10">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Follow-up Unavailable
-              </h3>
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <p className="mt-4 text-xs text-slate-600 dark:text-slate-300">
-              Follow-ups cannot be scheduled for closed leads (Status:{" "}
-              <span className="font-bold uppercase text-amber-600 dark:text-amber-400">
-                {lead.status}
-              </span>
-              ).
-            </p>
-            <div className="mt-5 flex justify-end">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900"
-              >
-                Close
-              </button>
-            </div>
+      <SlideOverDrawer
+        open={open}
+        onClose={onClose}
+        title="Follow-up Unavailable"
+        subtitle={`Lead #${lead.lead_no} • Status: ${lead.status.toUpperCase()}`}
+        icon={AlertTriangle}
+        size="md"
+        footer={
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white hover:bg-primary-hover transition cursor-pointer"
+            >
+              Close
+            </button>
           </div>
-        </ModalOverlay>
-      </LargeModalPortal>
+        }
+      >
+        <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs text-amber-800 dark:text-amber-200">
+          Follow-ups cannot be scheduled for closed leads (Status:{" "}
+          <strong className="uppercase">{lead.status}</strong>).
+        </div>
+      </SlideOverDrawer>
     );
   }
 
@@ -116,124 +111,111 @@ export function FollowUpModal({ lead, open, onClose, onSuccess }: Props) {
     }
   };
 
+  const footerActions = (
+    <div className="flex items-center justify-between gap-3">
+      <button
+        type="button"
+        onClick={onClose}
+        disabled={isLoading}
+        className="rounded-xl border border-border bg-card px-4 py-2 text-xs font-semibold text-muted hover:text-foreground hover:bg-surface-muted transition cursor-pointer"
+      >
+        Cancel
+      </button>
+
+      <button
+        type="button"
+        onClick={handleSubmit}
+        disabled={isLoading || !date}
+        className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-primary-hover transition cursor-pointer disabled:opacity-50"
+      >
+        <Check className="h-4 w-4" />
+        <span>{isLoading ? "Scheduling..." : "Schedule Follow-up"}</span>
+      </button>
+    </div>
+  );
+
   return (
-    <LargeModalPortal>
-      <ModalOverlay onClick={onClose}>
-        <div
-          role="dialog"
-          aria-modal="true"
-          onClick={(e) => e.stopPropagation()}
-          className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl transition-all dark:border-white/10 dark:bg-slate-900"
-        >
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4 dark:border-white/10">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400">
-                <CalendarClock className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Schedule Follow-up
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Lead #{lead.lead_no} • {lead.name}
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/5 dark:hover:text-slate-200"
-            >
-              <X className="h-4 w-4" />
-            </button>
+    <SlideOverDrawer
+      open={open}
+      onClose={onClose}
+      title="Schedule Follow-up"
+      subtitle={`Lead #${lead.lead_no} • ${lead.name}`}
+      icon={CalendarClock}
+      footer={footerActions}
+      size="md"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Follow-up Channel / Type */}
+        <div>
+          <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-2">
+            Follow-up Channel / Method
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {TYPES.map((t) => {
+              const isSelected = type === t;
+              const cfg = FOLLOWUP_TYPE_CONFIG[t];
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setType(t)}
+                  className={`rounded-xl border p-2.5 text-xs font-bold transition cursor-pointer text-center ${
+                    isSelected
+                      ? "border-primary bg-primary/10 text-primary shadow-2xs ring-1 ring-primary/30"
+                      : "border-border bg-card text-foreground hover:bg-surface-muted"
+                  }`}
+                >
+                  {cfg?.label || t}
+                </button>
+              );
+            })}
           </div>
+        </div>
 
-          <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Follow-up Channel / Type
-              </label>
-              <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {TYPES.map((t) => {
-                  const isSelected = type === t;
-                  const cfg = FOLLOWUP_TYPE_CONFIG[t];
-                  return (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setType(t)}
-                      className={`rounded-xl border p-2 text-center text-xs font-semibold transition-all ${
-                        isSelected
-                          ? "border-amber-500 bg-amber-50 text-amber-700 shadow-sm dark:border-amber-400 dark:bg-amber-950/40 dark:text-amber-300"
-                          : "border-slate-200 bg-slate-50/50 text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-slate-800/40 dark:text-slate-300"
-                      }`}
-                    >
-                      {cfg?.label || t}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Follow-up Date <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Time (Optional)
-                </label>
-                <input
-                  type="time"
-                  value={time}
-                  onChange={(e) => setTime(e.target.value)}
-                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Agenda / Discussion Points (Optional)
-              </label>
-              <textarea
-                rows={3}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Product demo, revised quote, requirement clarifications..."
-                className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-white/10 dark:bg-slate-800 dark:text-white"
+        {/* Date & Time */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-1.5">
+              Scheduled Date <span className="text-rose-500">*</span>
+            </label>
+            <div className="relative">
+              <input
+                type="date"
+                required
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full rounded-xl border border-border bg-surface-muted/50 px-3 py-2 text-xs text-foreground focus:border-primary focus:bg-card focus:outline-none transition"
               />
             </div>
+          </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-3">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isLoading}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isLoading || !date}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-primary-hover disabled:opacity-50 transition"
-              >
-                {isLoading ? "Scheduling..." : "Schedule Follow-up"}
-              </button>
-            </div>
-          </form>
+          <div>
+            <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-1.5">
+              Time <span className="text-muted text-[10px] font-normal">(Optional)</span>
+            </label>
+            <input
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              className="w-full rounded-xl border border-border bg-surface-muted/50 px-3 py-2 text-xs text-foreground focus:border-primary focus:bg-card focus:outline-none transition"
+            />
+          </div>
         </div>
-      </ModalOverlay>
-    </LargeModalPortal>
+
+        {/* Agenda / Notes */}
+        <div>
+          <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-1.5">
+            Agenda / Discussion Points <span className="text-muted text-[10px] font-normal">(Optional)</span>
+          </label>
+          <textarea
+            rows={4}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Key discussion topics, proposal review, demo arrangement, questions to ask..."
+            className="w-full rounded-xl border border-border bg-surface-muted/50 p-3 text-xs text-foreground placeholder:text-muted focus:border-primary focus:bg-card focus:outline-none transition"
+          />
+        </div>
+      </form>
+    </SlideOverDrawer>
   );
 }

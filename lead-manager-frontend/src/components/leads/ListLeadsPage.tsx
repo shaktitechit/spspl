@@ -1,6 +1,7 @@
 /**
- * @fileoverview Lead Manager List Page with DataTable, server-side filters, status tabs, and lifecycle actions.
- * @module components/portal/shared/leads/ListLeadsPage
+ * @fileoverview Lead Manager List Page with High-Density DataTable, Mobile Card View,
+ * Sticky Filter Bar, Slide-Over Filter Drawer, and Floating Bulk Action Dock.
+ * @module components/leads/ListLeadsPage
  */
 "use client";
 
@@ -27,15 +28,26 @@ import {
   X,
   FileSpreadsheet,
   Copy,
+  Calendar,
+  Layers,
+  MapPin,
+  CheckSquare,
+  Square,
+  Sparkles,
+  ChevronRight,
+  LayoutGrid,
+  Table as TableIcon,
 } from "lucide-react";
 import {
   useListLeadsQuery,
   useListUsersQuery,
   useListLeadSourcesQuery,
+  useBulkDeleteLeadsMutation,
   type LeadRecord,
   type LeadStatus,
 } from "@/store/api";
 import { useAppSelector } from "@/store/hooks";
+import { toast } from "@/lib/toast";
 import { TablePaginationBar } from "@/components/portal/shared/pagination/TablePaginationBar";
 import { PortalBusyOverlay } from "@/components/portal/shared/PortalBusyOverlay";
 import {
@@ -63,7 +75,8 @@ import { ConfirmDeleteLeadModal } from "./ConfirmDeleteLeadModal";
 import { GoogleSheetLeadsModal } from "./GoogleSheetLeadsModal";
 import { BulkUploadLeadsModal } from "./BulkUploadLeadsModal";
 import { DownloadLeadsPreviewModal, type ColumnDef } from "./DownloadLeadsPreviewModal";
-
+import { LeadFilterDrawer } from "./LeadFilterDrawer";
+import { TableSkeletonRows, CardSkeletonFeed } from "@/components/shared/Skeletons";
 
 import { readSessionFromStorage, isManager, isCoordinator } from "@/utils/authStorage";
 import { useLeadManagerRole } from "@/hooks/useLeadManagerRole";
@@ -127,10 +140,17 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
   const [toDate, setToDate] = useState<string>("");
   const [page, setPage] = useState<number>(1);
   const [limit, setLimit] = useState<number>(25);
-  const [showFilters, setShowFilters] = useState<boolean>(false);
+
+  // Filter drawer toggle
+  const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
+
+  // Bulk Selection
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
+  const [bulkDeleteLeads, { isLoading: isBulkDeleting }] = useBulkDeleteLeadsMutation();
 
   // Modals state
   const [downloadModalOpen, setDownloadModalOpen] = useState<boolean>(false);
+  const [downloadOnlySelected, setDownloadOnlySelected] = useState<boolean>(false);
   const [assignTarget, setAssignTarget] = useState<LeadRecord | null>(null);
   const [followUpTarget, setFollowUpTarget] = useState<LeadRecord | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<LeadRecord | null>(null);
@@ -148,15 +168,8 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
   const canFilterRep = isAdmin || isTeamLead;
 
   const [scopeFilter, setScopeFilter] = useState<"team" | "mine">("team");
-
   const showPricing = canViewLeadPricing(authUser, portalHome);
-  const tableColSpan = showPricing ? 13 : 12;
-
-  const authUserId = authUser?._id
-    ? String(authUser._id)
-    : authUser?.id
-    ? String(authUser.id)
-    : undefined;
+  const tableColSpan = showPricing ? 14 : 13;
 
   const queryArgs = useMemo(
     () => ({
@@ -220,20 +233,30 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
     return withSelfInList(scoped, selfRow);
   }, [users, filterByTeam, withSelfInList, authUser, isAdmin]);
 
+  // Formatted export data
   const formattedLeadsForExport = useMemo(() => {
-    return items.map((lead: LeadRecord) => {
+    const listToFormat = downloadOnlySelected
+      ? items.filter((l) => selectedLeadIds.includes(String(l._id)))
+      : items;
+
+    return listToFormat.map((lead: LeadRecord) => {
       const assignedNames = formatLeadAssignees(lead) || "Unassigned";
-      const productsSummary = (lead.products || [])
-        .map((p: any) => p.product_name || p.name || "")
-        .filter(Boolean)
-        .join(", ") || (lead as any).requirement_details || (lead as any).products_interested || "N/A";
+      const productsSummary =
+        (lead.products || [])
+          .map((p: any) => p.product_name || p.name || "")
+          .filter(Boolean)
+          .join(", ") ||
+        (lead as any).requirement_details ||
+        (lead as any).products_interested ||
+        "N/A";
       const party = lead.party_id;
       const contactName =
         (typeof (lead as any).name === "string" && (lead as any).name) ||
         party?.party_name ||
         (party as any)?.legal_name ||
         "N/A";
-      const companyName = party?.party_name || (lead as any).company_name || (party as any)?.legal_name || "N/A";
+      const companyName =
+        party?.party_name || (lead as any).company_name || (party as any)?.legal_name || "N/A";
       const phoneVal = (lead as any).phone || party?.mobile || "N/A";
       const emailVal = (lead as any).email || party?.email || "N/A";
       const cityVal = party?.district || party?.billing_address?.city || (lead as any).city || "N/A";
@@ -263,13 +286,15 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
         department: getDeptLabel(lead.department || "sales"),
         assigned_to_name: assignedNames,
         created_by_name: createdByName,
-        estimated_value_fmt: lead.estimated_value ? `₹${Number(lead.estimated_value).toLocaleString("en-IN")}` : "₹0",
+        estimated_value_fmt: lead.estimated_value
+          ? `₹${Number(lead.estimated_value).toLocaleString("en-IN")}`
+          : "₹0",
         products_summary: productsSummary,
         next_follow_up_at: lead.next_follow_up_at ? formatLeadDate(lead.next_follow_up_at) : "None",
         created_at_fmt: createdDate ? formatLeadDate(createdDate) : "N/A",
       };
     });
-  }, [items]);
+  }, [items, downloadOnlySelected, selectedLeadIds]);
 
   const clearFilters = () => {
     setSearch("");
@@ -283,110 +308,174 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
     setFromDate("");
     setToDate("");
     setPage(1);
+    setSelectedLeadIds([]);
   };
 
-  const hasActiveFilters =
-    Boolean(search) ||
-    priorityFilter !== "all" ||
-    departmentFilter !== "all" ||
-    sourceFilter !== "all" ||
-    salesUserFilter !== "all" ||
-    (isAdmin && createdByFilter !== "all") ||
-    Boolean(cityFilter) ||
-    Boolean(followUpFilter) ||
-    Boolean(fromDate) ||
-    Boolean(toDate);
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (search.trim()) count++;
+    if (priorityFilter !== "all") count++;
+    if (departmentFilter !== "all") count++;
+    if (sourceFilter !== "all") count++;
+    if (salesUserFilter !== "all") count++;
+    if (isAdmin && createdByFilter !== "all") count++;
+    if (cityFilter.trim()) count++;
+    if (followUpFilter) count++;
+    if (fromDate) count++;
+    if (toDate) count++;
+    return count;
+  }, [
+    search,
+    priorityFilter,
+    departmentFilter,
+    sourceFilter,
+    salesUserFilter,
+    isAdmin,
+    createdByFilter,
+    cityFilter,
+    followUpFilter,
+    fromDate,
+    toDate,
+  ]);
+
+  const hasActiveFilters = activeFilterCount > 0;
+
+  // Selection helpers
+  const isAllPageSelected =
+    items.length > 0 && items.every((l) => selectedLeadIds.includes(String(l._id)));
+
+  const toggleSelectAllPage = () => {
+    if (isAllPageSelected) {
+      setSelectedLeadIds([]);
+    } else {
+      const pageIds = items.map((l) => String(l._id));
+      setSelectedLeadIds(Array.from(new Set([...selectedLeadIds, ...pageIds])));
+    }
+  };
+
+  const toggleSelectLead = (id: string) => {
+    setSelectedLeadIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  // Bulk delete handler
+  const handleBulkDelete = async () => {
+    if (!isAdmin || selectedLeadIds.length === 0) return;
+    const confirmMsg = `Are you sure you want to delete ${selectedLeadIds.length} lead${
+      selectedLeadIds.length > 1 ? "s" : ""
+    }? This action cannot be undone.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await bulkDeleteLeads(selectedLeadIds).unwrap();
+      toast.success(`Successfully deleted ${selectedLeadIds.length} leads.`);
+      setSelectedLeadIds([]);
+      refetch();
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to delete selected leads.");
+    }
+  };
 
   return (
-    <div className="relative min-h-screen space-y-6 pb-20">
+    <div className="relative min-h-screen space-y-5 pb-24 font-sans">
       <PortalBusyOverlay active={isFetching && !isLoading} />
 
-      {/* Header Banner */}
-      <div className="relative shrink-0 overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-4 py-2.5 shadow-sm">
-        <div className="relative flex flex-wrap items-center justify-between gap-3">
+      {/* Top Header Banner */}
+      <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs transition-colors">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold tracking-tight text-slate-900 dark:text-white">
-                Lead Manager
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-xl font-black tracking-tight text-foreground">
+                Lead Pipeline
               </h1>
               <span className="rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-primary">
                 {isAdmin
-                  ? "All Leads (Global)"
+                  ? "Global Scope"
                   : isTeamLead
-                  ? (scopeFilter === "team" ? "Team Leads" : "My Leads")
-                  : "My Leads"}
+                  ? scopeFilter === "team"
+                    ? "Team Scope"
+                    : "Personal Scope"
+                  : "Personal Scope"}
+              </span>
+              <span className="text-xs text-muted font-mono tabular-nums">
+                ({total} total lead{total !== 1 ? "s" : ""})
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {isAdmin
-                ? "Global lead management — track all company inquiries, assignments, and conversions."
-                : isTeamLead
-                ? "Team lead management — track leads created by or assigned to your team members."
-                : "Personal lead pipeline — track leads assigned to you or created by you."}
+            <p className="mt-1 text-xs text-muted max-w-2xl">
+              Track enquiries, assign sales representatives, qualify prospects, and drive sales conversions.
             </p>
           </div>
 
+          {/* Action Toolbar Buttons */}
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => refetch()}
               disabled={isFetching}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-white/5"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground shadow-2xs hover:bg-surface-muted transition cursor-pointer disabled:opacity-50"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
-              Refresh
+              <span className="hidden sm:inline">Refresh</span>
             </button>
+
             <button
               type="button"
-              onClick={() => setDownloadModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 shadow-xs transition hover:bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950/70"
+              onClick={() => {
+                setDownloadOnlySelected(false);
+                setDownloadModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 shadow-2xs hover:bg-emerald-500/20 transition cursor-pointer"
             >
-              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              Export Leads (.xlsx)
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              <span>Export (.xlsx)</span>
             </button>
+
             {isAdmin && (
               <>
                 <button
                   type="button"
                   onClick={() => setBulkUploadOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-500/30 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-800 shadow-xs transition hover:bg-indigo-100 dark:border-indigo-500/20 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-950/70"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300 shadow-2xs hover:bg-indigo-500/20 transition cursor-pointer"
                 >
-                  <FileSpreadsheet className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-                  Bulk Upload
+                  <FileSpreadsheet className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Bulk Upload</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setSheetOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 shadow-xs transition hover:bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950/70"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 shadow-2xs hover:bg-emerald-500/20 transition cursor-pointer"
                 >
-                  <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                  Google Sheet
+                  <FileSpreadsheet className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Google Sheet</span>
                 </button>
               </>
             )}
 
             <Link
               href="/dashboard/leads/follow-ups"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-white/5"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground shadow-2xs hover:bg-surface-muted transition"
             >
-              <CalendarPlus className="h-3.5 w-3.5 text-teal-500" />
-              Follow-ups
+              <CalendarPlus className="h-3.5 w-3.5 text-primary" />
+              <span>Follow-ups</span>
             </Link>
 
             <Link
               href="/dashboard/leads/reports"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-white/5"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground shadow-2xs hover:bg-surface-muted transition"
             >
               <BarChart3 className="h-3.5 w-3.5 text-indigo-500" />
-              {isAdmin || isTeamLead ? "Team Sales Reports" : "My Reports"}
+              <span className="hidden sm:inline">
+                {isAdmin || isTeamLead ? "Reports" : "My Reports"}
+              </span>
             </Link>
 
             <Link
               href={`${portalHome}/leads/new`}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-hover"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-primary-hover transition"
             >
               <Plus className="h-4 w-4" />
-              Create Lead
+              <span>New Lead</span>
             </Link>
           </div>
         </div>
@@ -394,19 +483,19 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
 
       {/* Team / Mine Scope Toggle for Managers & Coordinators */}
       {isTeamLead && (
-        <div className="flex items-center gap-2 px-1">
-          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">View Scope:</span>
-          <div className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl text-xs font-semibold border border-slate-200/80 dark:border-white/10">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-muted">Scope:</span>
+          <div className="inline-flex items-center gap-1 p-1 bg-surface-muted rounded-xl text-xs font-semibold border border-border">
             <button
               type="button"
               onClick={() => {
                 setScopeFilter("team");
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                 scopeFilter === "team"
-                  ? "bg-white dark:bg-slate-700 text-primary shadow-xs font-bold"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  ? "bg-card text-primary shadow-xs font-bold"
+                  : "text-muted hover:text-foreground"
               }`}
             >
               Team Leads (Created or Assigned to Team)
@@ -417,10 +506,10 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
                 setScopeFilter("mine");
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                 scopeFilter === "mine"
-                  ? "bg-white dark:bg-slate-700 text-primary shadow-xs font-bold"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  ? "bg-card text-primary shadow-xs font-bold"
+                  : "text-muted hover:text-foreground"
               }`}
             >
               My Leads (Created or Assigned to Me)
@@ -429,35 +518,37 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
         </div>
       )}
 
-      {/* Status Tab Strip */}
-      <div className="flex overflow-x-auto border-b border-slate-200 dark:border-white/10">
-        {STATUS_TABS.map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => {
-                setActiveTab(tab.id);
-                setPage(1);
-              }}
-              className={`whitespace-nowrap px-4 py-2.5 text-xs font-bold transition-all border-b-2 ${
-                isActive
-                  ? "border-primary text-primary font-bold"
-                  : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-              }`}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      {/* Sticky Control Bar: Status Tabs, Search & Filter Trigger */}
+      <div className="sticky top-0 z-20 space-y-3 rounded-2xl border border-border bg-card/95 p-3.5 backdrop-blur-md shadow-sm transition-colors">
+        {/* Status Horizontal Tabs */}
+        <div className="flex overflow-x-auto scrollbar-none border-b border-border/70 pb-2 gap-1.5">
+          {STATUS_TABS.map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setPage(1);
+                  setSelectedLeadIds([]);
+                }}
+                className={`whitespace-nowrap px-3.5 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer ${
+                  isActive
+                    ? "bg-primary text-white shadow-2xs"
+                    : "text-muted hover:bg-surface-muted hover:text-foreground"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
 
-      {/* Search & Quick Filter Bar */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {/* Search, Filter Drawer Trigger & Quick Clear */}
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" />
             <input
               type="text"
               value={search}
@@ -465,26 +556,36 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              placeholder="Search by Lead No, Contact Name, Company, Phone, Email..."
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-9 pr-4 py-2 text-xs text-slate-800 shadow-sm placeholder:text-slate-400 focus:border-primary focus:bg-white focus:outline-none dark:border-white/10 dark:bg-slate-800/40 dark:text-white dark:focus:bg-slate-800"
+              placeholder="Search by Lead No, Contact Name, Company, Phone, Email, Requirement..."
+              className="w-full rounded-xl border border-border bg-surface-muted/50 pl-9 pr-9 py-2 text-xs text-foreground placeholder:text-muted focus:border-primary focus:bg-card focus:outline-none transition"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-2.5 text-muted hover:text-foreground p-0.5 rounded cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Filter Drawer Trigger Button */}
             <button
               type="button"
-              onClick={() => setShowFilters(!showFilters)}
-              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold shadow-sm transition ${
-                showFilters || hasActiveFilters
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300"
+              onClick={() => setDrawerOpen(true)}
+              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold shadow-2xs transition cursor-pointer ${
+                hasActiveFilters
+                  ? "border-primary bg-primary/10 text-primary font-bold"
+                  : "border-border bg-card text-foreground hover:bg-surface-muted"
               }`}
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
-              Filters
-              {hasActiveFilters && (
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-white">
-                  !
+              <span>Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">
+                  {activeFilterCount}
                 </span>
               )}
             </button>
@@ -493,235 +594,71 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
               <button
                 type="button"
                 onClick={clearFilters}
-                className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-300"
+                className="inline-flex items-center gap-1 rounded-xl border border-rose-500/30 bg-rose-500/10 px-2.5 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition cursor-pointer"
+                title="Reset all filters"
               >
-                <X className="h-3 w-3" />
-                Clear
+                <X className="h-3.5 w-3.5" />
+                <span>Reset</span>
               </button>
             )}
           </div>
         </div>
-
-        {/* Collapsible Advanced Filters */}
-        {showFilters && (
-          <div className="mt-4 grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2 lg:grid-cols-4 dark:border-white/10">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                Priority
-              </label>
-              <select
-                value={priorityFilter}
-                onChange={(e) => {
-                  setPriorityFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
-              >
-                <option value="all">All Priorities</option>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                Department
-              </label>
-              <select
-                value={departmentFilter}
-                onChange={(e) => {
-                  setDepartmentFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
-              >
-                <option value="all">All Departments</option>
-                {LEAD_DEPARTMENT_OPTIONS.map((d) => (
-                  <option key={d.value} value={d.value}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                Lead Source
-              </label>
-              <select
-                value={sourceFilter}
-                onChange={(e) => {
-                  setSourceFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
-              >
-                <option value="all">All Sources</option>
-                {sources?.map((s) => (
-                  <option key={s._id} value={s.name}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {canFilterRep && (
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                  Assigned To
-                </label>
-                <select
-                  value={salesUserFilter}
-                  onChange={(e) => {
-                    setSalesUserFilter(e.target.value);
-                    setPage(1);
-                  }}
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
-                >
-                  <option value="all">{isAdmin ? "All Users" : "All Team Members"}</option>
-                  <option value="unassigned">Unassigned Only</option>
-                  {assignableUsers.map((u) => {
-                    const roleBadge = getLeadManagerPortalRole(u);
-                    return (
-                      <option key={u._id} value={u._id}>
-                        {u.name} {roleBadge ? `(${roleBadge})` : ""}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-            )}
-
-            {isAdmin && (
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                  Created By
-                </label>
-                <select
-                  value={createdByFilter}
-                  onChange={(e) => {
-                    setCreatedByFilter(e.target.value);
-                    setPage(1);
-                  }}
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
-                >
-                  <option value="all">All Creators</option>
-                  {users
-                    .filter(isUserInLeadManagerPortal)
-                    .map((u) => {
-                      const roleBadge = getLeadManagerPortalRole(u);
-                      return (
-                        <option key={u._id} value={u._id}>
-                          {u.name} {roleBadge ? `(${roleBadge})` : ""}
-                        </option>
-                      );
-                    })}
-                </select>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                Follow-up State
-              </label>
-              <select
-                value={followUpFilter}
-                onChange={(e) => {
-                  setFollowUpFilter(e.target.value as "" | "today" | "overdue" | "upcoming");
-                  setPage(1);
-                }}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
-              >
-                <option value="">All Follow-up States</option>
-                <option value="today">Follow-up Today</option>
-                <option value="overdue">Overdue Follow-up</option>
-                <option value="upcoming">Upcoming Follow-up</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                City / Location
-              </label>
-              <input
-                type="text"
-                value={cityFilter}
-                onChange={(e) => {
-                  setCityFilter(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="Mumbai, Pune, Delhi..."
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                Created From Date
-              </label>
-              <input
-                type="date"
-                value={fromDate}
-                onChange={(e) => {
-                  setFromDate(e.target.value);
-                  setPage(1);
-                }}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                Created To Date
-              </label>
-              <input
-                type="date"
-                value={toDate}
-                onChange={(e) => {
-                  setToDate(e.target.value);
-                  setPage(1);
-                }}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
-              />
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Leads Table */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900">
+      {/* DUAL-MODE VIEW: High-Density Table on Desktop (lg+), Adaptive Card Feed on Mobile (<lg) */}
+
+      {/* 1. Desktop High-Density Table (lg+) */}
+      <div className="hidden lg:block overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
-            <thead className="border-b border-slate-200 bg-slate-50/80 font-bold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:bg-slate-800/60 dark:text-slate-400">
+          <table className="w-full text-left text-xs text-foreground">
+            <thead className="border-b border-border bg-surface-muted/60 font-bold uppercase tracking-wider text-muted text-[11px]">
               <tr>
-                <th className="px-4 py-3">Lead No</th>
-                <th className="px-4 py-3">Lead / Company</th>
-                <th className="px-4 py-3">Contact</th>
-                <th className="px-4 py-3">Source</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Priority</th>
-                <th className="px-4 py-3">Assigned To</th>
-                <th className="px-4 py-3 text-center">Est. Qty</th>
-                {showPricing && <th className="px-4 py-3 text-right">Est. Value</th>}
-                <th className="px-4 py-3">Next Follow-up</th>
-                <th className="px-4 py-3">Created By</th>
-                <th className="px-4 py-3">Created</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th className="px-3.5 py-3 w-10 text-center">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAllPage}
+                    className="p-1 text-muted hover:text-foreground cursor-pointer"
+                    title={isAllPageSelected ? "Deselect all on page" : "Select all on page"}
+                  >
+                    {isAllPageSelected ? (
+                      <CheckSquare className="h-4 w-4 text-primary" />
+                    ) : (
+                      <Square className="h-4 w-4 text-muted/60" />
+                    )}
+                  </button>
+                </th>
+                <th className="px-3 py-3">Lead No</th>
+                <th className="px-3.5 py-3">Contact &amp; Organization</th>
+                <th className="px-3 py-3">Source</th>
+                <th className="px-3 py-3">Status</th>
+                <th className="px-3 py-3">Priority</th>
+                <th className="px-3 py-3">Assigned To</th>
+                <th className="px-3 py-3 text-center">Est. Qty</th>
+                {showPricing && <th className="px-3 py-3 text-right">Est. Value</th>}
+                <th className="px-3 py-3">Next Follow-Up</th>
+                <th className="px-3 py-3">Created</th>
+                <th className="px-3.5 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+            <tbody className="divide-y divide-border/60">
               {isLoading ? (
-                <tr>
-                  <td colSpan={tableColSpan} className="py-12 text-center text-slate-400">
-                    Loading leads...
-                  </td>
-                </tr>
+                <TableSkeletonRows rows={8} cols={tableColSpan} />
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={tableColSpan} className="py-12 text-center text-slate-400">
-                    No leads found matching your criteria.
+                  <td colSpan={tableColSpan} className="py-16 text-center text-muted">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Layers className="h-8 w-8 text-muted/50" />
+                      <p className="font-bold text-foreground">No leads found matching your criteria.</p>
+                      {hasActiveFilters && (
+                        <button
+                          type="button"
+                          onClick={clearFilters}
+                          className="mt-1 text-xs font-semibold text-primary hover:underline cursor-pointer"
+                        >
+                          Clear active filters
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -734,77 +671,85 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
                   const isLeadLost = lead.status === "lost";
                   const isLeadConverted = lead.status === "converted";
                   const isLeadClosed = isLeadWon || isLeadLost || isLeadConverted;
+                  const isSelected = selectedLeadIds.includes(String(lead._id));
 
                   return (
                     <tr
                       key={lead._id}
-                      className="transition hover:bg-slate-50/60 dark:hover:bg-white/[0.02]"
+                      className={`transition-colors hover:bg-surface-muted/40 ${
+                        isSelected ? "bg-primary/5" : ""
+                      }`}
                     >
+                      {/* Checkbox */}
+                      <td className="px-3.5 py-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => toggleSelectLead(String(lead._id))}
+                          className="p-1 text-muted hover:text-foreground cursor-pointer"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="h-4 w-4 text-primary" />
+                          ) : (
+                            <Square className="h-4 w-4 text-muted/60" />
+                          )}
+                        </button>
+                      </td>
+
                       {/* Lead No */}
-                      <td className="px-4 py-3 font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                      <td className="px-3 py-3 font-bold whitespace-nowrap">
                         <Link
                           href={`${portalHome}/leads/${lead._id}`}
-                          className="text-blue-600 hover:text-blue-700 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+                          className="text-primary hover:underline font-mono text-xs font-bold"
                         >
                           {lead.lead_no}
                         </Link>
                       </td>
 
-                      {/* Lead Name / Company */}
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-slate-900 dark:text-white">
-                          {lead.name}
+                      {/* Contact & Company */}
+                      <td className="px-3.5 py-3 max-w-[240px]">
+                        <div className="font-bold text-foreground truncate">
+                          {lead.name || "Untitled Lead"}
                         </div>
                         {lead.company_name && (
-                          <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
-                            <Building2 className="h-3 w-3" />
-                            {lead.company_name}
+                          <div className="flex items-center gap-1 text-[11px] text-muted truncate mt-0.5">
+                            <Building2 className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{lead.company_name}</span>
                           </div>
                         )}
-                        {lead.department && (
-                          <div className="mt-1">
-                            <span className="inline-flex items-center rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
+                        <div className="flex items-center gap-2 text-[11px] text-muted mt-1">
+                          {lead.phone && (
+                            <span className="flex items-center gap-1 font-mono text-[10px]">
+                              <Phone className="h-2.5 w-2.5 text-muted" />
+                              {lead.phone}
+                            </span>
+                          )}
+                          {lead.department && (
+                            <span className="rounded bg-surface-muted border border-border px-1 py-0.2 text-[9px] font-semibold text-muted">
                               {getDeptLabel(lead.department)}
                             </span>
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Contact */}
-                      <td className="px-4 py-3 text-[11px]">
-                        {lead.phone && (
-                          <div className="flex items-center gap-1">
-                            <Phone className="h-3 w-3 text-slate-400" />
-                            {lead.phone}
-                          </div>
-                        )}
-                        {lead.email && (
-                          <div className="flex items-center gap-1 text-slate-500">
-                            <Mail className="h-3 w-3 text-slate-400" />
-                            {lead.email}
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </td>
 
                       {/* Source */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="inline-flex rounded-lg bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <span className="rounded-lg bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-foreground">
                           {lead.source}
                         </span>
                       </td>
 
-                      {/* Status Badge */}
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      {/* Status */}
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${statusCfg?.bg} ${statusCfg?.text} ${statusCfg?.border}`}
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${statusCfg?.bg} ${statusCfg?.text} ${statusCfg?.border}`}
                         >
                           <span className={`h-1.5 w-1.5 rounded-full ${statusCfg?.dot}`} />
                           {statusCfg?.label || lead.status}
                         </span>
                       </td>
 
-                      {/* Priority Badge */}
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      {/* Priority */}
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <span
                           className={`inline-flex rounded-lg border px-2 py-0.5 text-[11px] font-semibold ${priorityCfg?.bg} ${priorityCfg?.text} ${priorityCfg?.border}`}
                         >
@@ -813,73 +758,65 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
                       </td>
 
                       {/* Assigned To */}
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3 max-w-[160px]">
                         {lead.assigned_users && lead.assigned_users.length > 0 ? (
-                          <div>
-                            <div className="text-[11px] font-semibold text-slate-800 dark:text-slate-200">
+                          <div className="truncate">
+                            <span className="text-[11px] font-semibold text-foreground truncate block">
                               {lead.assigned_users.map((u) => u.name).filter(Boolean).join(", ")}
-                            </div>
+                            </span>
                             {lead.assigned_users.length > 1 && (
-                              <span className="text-[10px] text-slate-400 font-medium">
-                                ({lead.assigned_users.length} members)
+                              <span className="text-[10px] text-muted">
+                                ({lead.assigned_users.length} assigned)
                               </span>
                             )}
                           </div>
                         ) : lead.assigned_to?.name ? (
-                          <div className="text-[11px] font-semibold text-slate-800 dark:text-slate-200">
+                          <span className="text-[11px] font-semibold text-foreground truncate block">
                             {lead.assigned_to.name}
-                          </div>
-                        ) : (
-                          <span className="text-[11px] italic text-slate-400">
-                            Unassigned
                           </span>
+                        ) : (
+                          <span className="text-[11px] italic text-muted">Unassigned</span>
                         )}
                       </td>
 
-                      {/* Estimated Quantity */}
-                      <td className="px-4 py-3 whitespace-nowrap text-center font-bold text-slate-900 dark:text-white">
+                      {/* Estimated Qty */}
+                      <td className="px-3 py-3 whitespace-nowrap text-center font-mono font-bold text-foreground">
                         {(() => {
                           const totalQty = Array.isArray(lead.products)
                             ? lead.products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0)
                             : 0;
                           return totalQty > 0 ? (
-                            <span>
-                              {totalQty.toLocaleString()}{" "}
-                              <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">
-                                {lead.products && lead.products.length === 1 && lead.products[0].unit
-                                  ? lead.products[0].unit
-                                  : "pcs"}
-                              </span>
-                            </span>
+                            <span>{totalQty.toLocaleString()}</span>
                           ) : (
-                            <span className="text-slate-400 font-normal">—</span>
+                            <span className="text-muted font-normal">—</span>
                           );
                         })()}
                       </td>
 
+                      {/* Estimated Value */}
                       {showPricing && (
-                        <td className="px-4 py-3 whitespace-nowrap text-right font-bold text-slate-900 dark:text-white">
+                        <td className="px-3 py-3 whitespace-nowrap text-right font-mono font-bold text-foreground">
                           {(() => {
                             const value = leadEstimatedValue(lead);
                             return value > 0 ? (
                               formatCurrencyINR(value)
                             ) : (
-                              <span className="text-slate-400 font-normal">—</span>
+                              <span className="text-muted font-normal">—</span>
                             );
                           })()}
                         </td>
                       )}
 
-                      {/* Next Follow-up */}
-                      <td className="px-4 py-3 whitespace-nowrap text-[11px]">
+                      {/* Next Follow-Up */}
+                      <td className="px-3 py-3 whitespace-nowrap text-[11px]">
                         {lead.next_follow_up_at ? (
                           <span
                             className={`font-semibold ${
                               isOverdue
-                                ? "text-rose-600 dark:text-rose-400"
+                                ? "text-rose-600 dark:text-rose-400 font-bold"
                                 : isToday
-                                ? "text-amber-600 dark:text-amber-400"
-                                : "text-slate-700 dark:text-slate-300"
+                                ? "text-amber-600 dark:text-amber-400 font-bold"
+                                : "text-muted"
                             }`}
                           >
                             {formatLeadDate(lead.next_follow_up_at)}
@@ -887,78 +824,52 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
                             {isToday && " (Today)"}
                           </span>
                         ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
-
-                      {/* Created By */}
-                      <td className="px-4 py-3 whitespace-nowrap text-[11px]">
-                        {typeof lead.created_by === "object" && lead.created_by?.name ? (
-                          <div>
-                            <span className="font-semibold text-slate-800 dark:text-slate-200">
-                              {lead.created_by.name}
-                            </span>
-                            {lead.created_by.department && (
-                              <span className="block text-[10px] text-slate-400">
-                                {lead.created_by.department}
-                              </span>
-                            )}
-                          </div>
-                        ) : typeof lead.created_by === "object" && lead.created_by?.email ? (
-                          <span className="font-medium text-slate-700 dark:text-slate-300">
-                            {lead.created_by.email}
-                          </span>
-                        ) : typeof lead.created_by === "string" && lead.created_by ? (
-                          <span className="font-medium text-slate-700 dark:text-slate-300">
-                            {lead.created_by}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">System</span>
+                          <span className="text-muted">—</span>
                         )}
                       </td>
 
                       {/* Created Date */}
-                      <td className="px-4 py-3 whitespace-nowrap text-[11px] text-slate-500">
+                      <td className="px-3 py-3 whitespace-nowrap text-[11px] text-muted font-mono">
                         {formatLeadDate(lead.createdAt)}
                       </td>
 
-                      {/* Actions */}
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
+                      {/* Action Buttons */}
+                      <td className="px-3.5 py-3 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1">
                           <Link
                             href={`${portalHome}/leads/${lead._id}`}
                             title="View Lead Details"
-                            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white"
+                            className="rounded-lg p-1.5 text-muted hover:bg-surface-muted hover:text-foreground transition"
                           >
-                            <Eye className="h-4 w-4" />
+                            <Eye className="h-3.5 w-3.5" />
                           </Link>
 
                           {!isLeadClosed && (
                             <Link
                               href={`${portalHome}/leads/${lead._id}/edit`}
                               title="Edit Lead"
-                              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white"
+                              className="rounded-lg p-1.5 text-muted hover:bg-surface-muted hover:text-foreground transition"
                             >
-                              <Pencil className="h-4 w-4" />
+                              <Pencil className="h-3.5 w-3.5" />
                             </Link>
                           )}
 
                           <Link
                             href={`${portalHome}/leads/new?copy_from=${lead._id}`}
                             title="Copy Lead as New"
-                            className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/50 dark:hover:text-indigo-400"
+                            className="rounded-lg p-1.5 text-muted hover:bg-indigo-500/15 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
                           >
-                            <Copy className="h-4 w-4" />
+                            <Copy className="h-3.5 w-3.5" />
                           </Link>
 
                           {!isLeadClosed && (
                             <button
                               type="button"
                               onClick={() => setFollowUpTarget(lead)}
-                              title="Add Follow-up"
-                              className="rounded-lg p-1.5 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/50"
+                              title="Schedule Follow-up"
+                              className="rounded-lg p-1.5 text-amber-600 dark:text-amber-400 hover:bg-amber-500/15 transition cursor-pointer"
                             >
-                              <CalendarPlus className="h-4 w-4" />
+                              <CalendarPlus className="h-3.5 w-3.5" />
                             </button>
                           )}
 
@@ -967,9 +878,9 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
                               type="button"
                               onClick={() => setAssignTarget(lead)}
                               title="Assign Lead"
-                              className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/50"
+                              className="rounded-lg p-1.5 text-primary hover:bg-primary/10 transition cursor-pointer"
                             >
-                              <UserCheck className="h-4 w-4" />
+                              <UserCheck className="h-3.5 w-3.5" />
                             </button>
                           )}
 
@@ -978,9 +889,9 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
                               type="button"
                               onClick={() => setDeleteTarget(lead)}
                               title="Delete Lead"
-                              className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400"
+                              className="rounded-lg p-1.5 text-muted hover:bg-rose-500/15 hover:text-rose-600 dark:hover:text-rose-400 transition cursor-pointer"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           )}
                         </div>
@@ -993,8 +904,8 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
           </table>
         </div>
 
-        {/* Pagination Bar */}
-        <div className="border-t border-slate-100 dark:border-white/10">
+        {/* Desktop Pagination */}
+        <div className="border-t border-border">
           <TablePaginationBar
             startEntry={total === 0 ? 0 : (page - 1) * limit + 1}
             endEntry={Math.min(page * limit, total)}
@@ -1011,7 +922,368 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
         </div>
       </div>
 
-      {/* Modals */}
+      {/* 2. Mobile & Tablet Adaptive Card Feed (< lg) */}
+      <div className="block lg:hidden space-y-3">
+        {/* Mobile Select All on Page */}
+        {items.length > 0 && (
+          <div className="flex items-center justify-between px-2 py-1 text-xs text-muted">
+            <button
+              type="button"
+              onClick={toggleSelectAllPage}
+              className="flex items-center gap-2 font-semibold text-foreground cursor-pointer"
+            >
+              {isAllPageSelected ? (
+                <CheckSquare className="h-4 w-4 text-primary" />
+              ) : (
+                <Square className="h-4 w-4 text-muted/60" />
+              )}
+              <span>Select all on this page ({items.length})</span>
+            </button>
+            <span className="font-mono text-[11px]">
+              Page {page} of {totalPages}
+            </span>
+          </div>
+        )}
+
+        {isLoading ? (
+          <CardSkeletonFeed count={4} />
+        ) : items.length === 0 ? (
+          <div className="rounded-2xl border border-border bg-card p-12 text-center text-muted">
+            <Layers className="h-8 w-8 text-muted/50 mx-auto mb-2" />
+            <p className="font-bold text-foreground">No leads found matching your criteria.</p>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="mt-2 text-xs font-semibold text-primary hover:underline cursor-pointer"
+              >
+                Clear active filters
+              </button>
+            )}
+          </div>
+        ) : (
+          items.map((lead) => {
+            const statusCfg = LEAD_STATUS_CONFIG[lead.status];
+            const priorityCfg = LEAD_PRIORITY_CONFIG[lead.priority];
+            const isOverdue = isFollowUpOverdue(lead.next_follow_up_at);
+            const isToday = isFollowUpToday(lead.next_follow_up_at);
+            const isLeadWon = lead.status === "won";
+            const isLeadLost = lead.status === "lost";
+            const isLeadConverted = lead.status === "converted";
+            const isLeadClosed = isLeadWon || isLeadLost || isLeadConverted;
+            const isSelected = selectedLeadIds.includes(String(lead._id));
+            const estVal = leadEstimatedValue(lead);
+
+            return (
+              <div
+                key={lead._id}
+                className={`rounded-2xl border bg-card p-4 shadow-xs transition-all ${
+                  isSelected
+                    ? "border-primary bg-primary/5 shadow-md"
+                    : "border-border hover:border-primary/40"
+                }`}
+              >
+                {/* Card Top: Checkbox, Lead No & Badges */}
+                <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleSelectLead(String(lead._id))}
+                      className="text-muted hover:text-foreground cursor-pointer p-0.5"
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="h-4 w-4 text-primary" />
+                      ) : (
+                        <Square className="h-4 w-4 text-muted/60" />
+                      )}
+                    </button>
+
+                    <Link
+                      href={`${portalHome}/leads/${lead._id}`}
+                      className="font-mono text-xs font-bold text-primary hover:underline"
+                    >
+                      {lead.lead_no}
+                    </Link>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusCfg?.bg} ${statusCfg?.text} ${statusCfg?.border}`}
+                    >
+                      <span className={`h-1.5 w-1.5 rounded-full ${statusCfg?.dot}`} />
+                      {statusCfg?.label || lead.status}
+                    </span>
+
+                    <span
+                      className={`rounded-md border px-1.5 py-0.5 text-[9px] font-semibold ${priorityCfg?.bg} ${priorityCfg?.text} ${priorityCfg?.border}`}
+                    >
+                      {priorityCfg?.label || lead.priority}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Card Body: Contact, Company, Dept, Phone & Mail */}
+                <div className="py-3 space-y-2">
+                  <Link href={`${portalHome}/leads/${lead._id}`} className="block group">
+                    <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition truncate">
+                      {lead.name || "Untitled Lead"}
+                    </h3>
+                    {lead.company_name && (
+                      <div className="flex items-center gap-1.5 text-xs text-muted mt-0.5 truncate">
+                        <Building2 className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{lead.company_name}</span>
+                      </div>
+                    )}
+                  </Link>
+
+                  {/* Contact Chips with touch-friendly links */}
+                  <div className="flex items-center gap-2 flex-wrap text-xs pt-1">
+                    {lead.phone && (
+                      <a
+                        href={`tel:${lead.phone}`}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface-muted/60 px-2.5 py-1 text-[11px] font-semibold text-foreground hover:border-primary/40 transition"
+                      >
+                        <Phone className="h-3 w-3 text-primary" />
+                        <span className="font-mono">{lead.phone}</span>
+                      </a>
+                    )}
+                    {lead.email && (
+                      <a
+                        href={`mailto:${lead.email}`}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface-muted/60 px-2.5 py-1 text-[11px] text-muted hover:text-foreground transition truncate max-w-[180px]"
+                      >
+                        <Mail className="h-3 w-3" />
+                        <span className="truncate">{lead.email}</span>
+                      </a>
+                    )}
+                    {lead.department && (
+                      <span className="rounded-lg bg-surface-muted px-2 py-1 text-[10px] font-bold text-muted">
+                        {getDeptLabel(lead.department)}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Metrics Row: Assigned To, Next Follow-Up & Value */}
+                  <div className="grid grid-cols-2 gap-2 rounded-xl bg-surface-muted/40 p-2.5 text-xs mt-2 border border-border/50">
+                    <div>
+                      <span className="text-[10px] text-muted uppercase font-bold block">
+                        Assigned To
+                      </span>
+                      <span className="font-semibold text-foreground text-xs truncate block mt-0.5">
+                        {lead.assigned_users && lead.assigned_users.length > 0
+                          ? lead.assigned_users.map((u) => u.name).filter(Boolean).join(", ")
+                          : lead.assigned_to?.name || "Unassigned"}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-muted uppercase font-bold block">
+                        Est. Value
+                      </span>
+                      <span className="font-mono font-bold text-foreground text-xs block mt-0.5">
+                        {showPricing && estVal > 0 ? formatCurrencyINR(estVal) : "—"}
+                      </span>
+                    </div>
+
+                    {lead.next_follow_up_at && (
+                      <div className="col-span-2 border-t border-border/50 pt-1.5 mt-1">
+                        <span className="text-[10px] text-muted uppercase font-bold block">
+                          Next Follow-Up
+                        </span>
+                        <span
+                          className={`text-xs font-semibold mt-0.5 block ${
+                            isOverdue
+                              ? "text-rose-600 dark:text-rose-400 font-bold"
+                              : isToday
+                              ? "text-amber-600 dark:text-amber-400 font-bold"
+                              : "text-foreground"
+                          }`}
+                        >
+                          {formatLeadDate(lead.next_follow_up_at)}
+                          {isOverdue && " (⚠️ Overdue)"}
+                          {isToday && " (📅 Due Today)"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card Footer: Action Buttons */}
+                <div className="flex items-center justify-between border-t border-border/60 pt-3 gap-2">
+                  <Link
+                    href={`${portalHome}/leads/${lead._id}`}
+                    className="flex-1 flex items-center justify-center gap-1 rounded-xl bg-surface-muted py-2 text-xs font-bold text-foreground hover:bg-primary hover:text-white transition"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    <span>View Lead</span>
+                  </Link>
+
+                  {!isLeadClosed && (
+                    <button
+                      type="button"
+                      onClick={() => setFollowUpTarget(lead)}
+                      className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-2 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition cursor-pointer"
+                      title="Add Follow-up"
+                    >
+                      <CalendarPlus className="h-4 w-4" />
+                    </button>
+                  )}
+
+                  {!isLeadClosed && canAssignLead(authUser, portalHome) && (
+                    <button
+                      type="button"
+                      onClick={() => setAssignTarget(lead)}
+                      className="rounded-xl border border-primary/30 bg-primary/10 p-2 text-primary hover:bg-primary/20 transition cursor-pointer"
+                      title="Assign Lead"
+                    >
+                      <UserCheck className="h-4 w-4" />
+                    </button>
+                  )}
+
+                  {!isLeadClosed && (
+                    <Link
+                      href={`${portalHome}/leads/${lead._id}/edit`}
+                      className="rounded-xl border border-border bg-card p-2 text-muted hover:text-foreground hover:bg-surface-muted transition"
+                      title="Edit Lead"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Link>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+
+        {/* Mobile Pagination */}
+        <div className="rounded-2xl border border-border bg-card p-3 shadow-xs">
+          <TablePaginationBar
+            startEntry={total === 0 ? 0 : (page - 1) * limit + 1}
+            endEntry={Math.min(page * limit, total)}
+            totalEntries={total}
+            itemsPerPage={limit}
+            onItemsPerPageChange={(val) => {
+              setLimit(val);
+              setPage(1);
+            }}
+            currentPage={page}
+            totalPages={totalPages}
+            onPageChange={(p) => setPage(p)}
+          />
+        </div>
+      </div>
+
+      {/* FLOATING BULK ACTIONS DOCK */}
+      {selectedLeadIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="flex items-center gap-2 sm:gap-3 rounded-2xl border border-border/90 bg-card/95 px-4 py-2.5 shadow-2xl backdrop-blur-md">
+            <div className="flex items-center gap-2 pr-2 border-r border-border">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">
+                {selectedLeadIds.length}
+              </span>
+              <span className="text-xs font-bold text-foreground hidden sm:inline">
+                Leads Selected
+              </span>
+            </div>
+
+            {/* Export Selected */}
+            <button
+              type="button"
+              onClick={() => {
+                setDownloadOnlySelected(true);
+                setDownloadModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition cursor-pointer"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              <span>Export</span>
+            </button>
+
+            {/* Bulk Delete (Admin only) */}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                disabled={isBulkDeleting}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete</span>
+              </button>
+            )}
+
+            {/* Deselect All */}
+            <button
+              type="button"
+              onClick={() => setSelectedLeadIds([])}
+              className="rounded-xl p-1.5 text-muted hover:bg-surface-muted hover:text-foreground transition cursor-pointer"
+              title="Deselect all"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* SLIDE-OVER FILTER DRAWER */}
+      <LeadFilterDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        priorityFilter={priorityFilter}
+        setPriorityFilter={(val) => {
+          setPriorityFilter(val);
+          setPage(1);
+        }}
+        departmentFilter={departmentFilter}
+        setDepartmentFilter={(val) => {
+          setDepartmentFilter(val);
+          setPage(1);
+        }}
+        sourceFilter={sourceFilter}
+        setSourceFilter={(val) => {
+          setSourceFilter(val);
+          setPage(1);
+        }}
+        salesUserFilter={salesUserFilter}
+        setSalesUserFilter={(val) => {
+          setSalesUserFilter(val);
+          setPage(1);
+        }}
+        createdByFilter={createdByFilter}
+        setCreatedByFilter={(val) => {
+          setCreatedByFilter(val);
+          setPage(1);
+        }}
+        cityFilter={cityFilter}
+        setCityFilter={(val) => {
+          setCityFilter(val);
+          setPage(1);
+        }}
+        followUpFilter={followUpFilter}
+        setFollowUpFilter={(val) => {
+          setFollowUpFilter(val);
+          setPage(1);
+        }}
+        fromDate={fromDate}
+        setFromDate={(val) => {
+          setFromDate(val);
+          setPage(1);
+        }}
+        toDate={toDate}
+        setToDate={(val) => {
+          setToDate(val);
+          setPage(1);
+        }}
+        onClear={clearFilters}
+        sources={sources as any}
+        assignableUsers={assignableUsers as any}
+        allUsers={users as any}
+        isAdmin={isAdmin}
+        canFilterRep={canFilterRep}
+        activeFilterCount={activeFilterCount}
+      />
+
+      {/* MODALS */}
       {assignTarget && canAssignLead(authUser, portalHome) && (
         <AssignLeadModal
           lead={assignTarget}
@@ -1058,7 +1330,10 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
       {downloadModalOpen && (
         <DownloadLeadsPreviewModal
           open={downloadModalOpen}
-          onClose={() => setDownloadModalOpen(false)}
+          onClose={() => {
+            setDownloadModalOpen(false);
+            setDownloadOnlySelected(false);
+          }}
           leads={formattedLeadsForExport}
           availableColumns={DEFAULT_LEAD_EXPORT_COLUMNS}
         />
@@ -1066,4 +1341,3 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
     </div>
   );
 }
-

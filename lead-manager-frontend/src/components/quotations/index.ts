@@ -19,4 +19,5 @@ export { QuotationReportsDashboard } from "./QuotationReportsDashboard";
 export { default as ProformaInvoiceTemplate } from "./ProformaInvoiceTemplate";
 export { buildProformaInvoicePdf } from "./buildProformaInvoicePdf";
 export { DownloadQuotationsPreviewModal } from "./DownloadQuotationsPreviewModal";
+export { QuotationFilterDrawer } from "./QuotationFilterDrawer";
 export * from "./quotationUtils";

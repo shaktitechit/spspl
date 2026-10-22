@@ -47,6 +47,7 @@ import {
   LEAD_STATUS_CONFIG,
   canViewLeadPricing,
   getFollowUpSalesRepName,
+  getFollowUpSalesReps,
 } from "./leadUtils";
 import { canViewQuotations } from "@/components/quotations/quotationUtils";
 import { useAppSelector } from "@/store/hooks";
@@ -152,7 +153,25 @@ export default function LeadManagerStatsWidgets({
             ? String((leadObj.assigned_to as any)._id)
             : String(leadObj.assigned_to)
           : null;
-        return leadAssignee === currentUserId;
+        if (leadAssignee === currentUserId) return true;
+
+        if (Array.isArray(leadObj?.assigned_users)) {
+          const inAssignedUsers = leadObj.assigned_users.some((u) => {
+            const uid = typeof u === "object" && u !== null ? String(u._id || (u as any).id) : String(u);
+            return uid === currentUserId;
+          });
+          if (inAssignedUsers) return true;
+        }
+
+        const quoteObj = typeof fu.quotation === "object" && fu.quotation !== null ? fu.quotation : null;
+        const quoteRep = quoteObj?.sales_person_user
+          ? typeof quoteObj.sales_person_user === "object"
+            ? String((quoteObj.sales_person_user as any)._id)
+            : String(quoteObj.sales_person_user)
+          : null;
+        if (quoteRep === currentUserId) return true;
+
+        return false;
       });
     }
     return followUpsData;
@@ -340,24 +359,24 @@ export default function LeadManagerStatsWidgets({
             <Link
               key={key}
               href={href}
-              className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm transition hover:border-slate-300 hover:shadow-md dark:border-white/10 dark:bg-slate-900 dark:hover:border-white/20"
+              className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border bg-card p-3.5 shadow-2xs transition-all hover:border-border/80 hover:bg-surface-muted/30 hover:shadow-xs"
             >
               <div
-                className={`absolute inset-x-0 top-0 h-1 ${accent} transition-opacity group-hover:opacity-100 opacity-80`}
+                className={`absolute inset-x-0 top-0 h-0.5 ${accent} transition-opacity opacity-70 group-hover:opacity-100`}
               />
               <div className="flex items-center justify-between gap-2">
-                <span className="text-2xs font-semibold text-slate-500 dark:text-slate-400 line-clamp-1">
+                <span className="text-[11px] font-semibold text-muted-foreground line-clamp-1">
                   {label}
                 </span>
                 <div
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${iconWrap}`}
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-105 ${iconWrap}`}
                 >
                   <Icon className={`h-3.5 w-3.5 ${iconTone}`} />
                 </div>
               </div>
-              <div className="mt-2 flex flex-col">
+              <div className="mt-2.5 flex flex-col">
                 <span
-                  className={`text-lg font-bold text-slate-900 dark:text-slate-100 ${
+                  className={`text-xl font-bold tracking-tight text-foreground ${
                     isFetching ? "opacity-40" : ""
                   }`}
                 >
@@ -365,10 +384,10 @@ export default function LeadManagerStatsWidgets({
                 </span>
                 {subValue && (
                   <span
-                    className={`text-[10px] font-semibold ${
+                    className={`text-[10px] font-medium mt-0.5 ${
                       key === "followups" && overdueCount > 0
-                        ? "text-rose-600 dark:text-rose-400"
-                        : "text-slate-400 dark:text-slate-500"
+                        ? "text-rose-600 dark:text-rose-400 font-semibold"
+                        : "text-muted-foreground"
                     }`}
                   >
                     {subValue}
@@ -381,22 +400,22 @@ export default function LeadManagerStatsWidgets({
       </div>
 
       {/* Today's Follow-up Schedule Table */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-white/10">
+      <div className="rounded-2xl border border-border bg-card p-4 shadow-2xs">
+        <div className="flex items-center justify-between border-b border-border/70 pb-3">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-600 dark:bg-teal-950/40 dark:text-teal-400">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-teal-500/20 bg-teal-500/10 text-teal-600 dark:text-teal-400">
               <Calendar className="h-4 w-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                <h4 className="text-xs font-bold text-foreground">
                   Today&apos;s Follow-up Schedule
                 </h4>
-                <span className="rounded-full bg-teal-100/80 px-2 py-0.5 text-[10px] font-bold text-teal-800 dark:bg-teal-900/40 dark:text-teal-300">
+                <span className="rounded-full border border-teal-500/20 bg-teal-500/5 px-2.5 py-0.5 text-[10px] font-semibold text-teal-700 dark:text-teal-300">
                   {followUps.length} Scheduled
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-muted-foreground">
                 Actionable interactions scheduled for today ({new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })})
               </p>
             </div>
@@ -405,7 +424,7 @@ export default function LeadManagerStatsWidgets({
           <div className="flex items-center gap-3">
             <Link
               href={`${portalHome}/leads/follow-ups`}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
             >
               <span>Full Agenda</span>
               <ArrowUpRight className="h-3 w-3" />
@@ -413,7 +432,7 @@ export default function LeadManagerStatsWidgets({
             <button
               type="button"
               onClick={() => setShowFollowUpsTable((prev) => !prev)}
-              className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 dark:hover:text-slate-200"
+              className="rounded-lg p-1 text-muted-foreground hover:bg-surface-muted hover:text-foreground transition-colors cursor-pointer"
               title={showFollowUpsTable ? "Collapse table" : "Expand table"}
             >
               {showFollowUpsTable ? (
@@ -428,39 +447,39 @@ export default function LeadManagerStatsWidgets({
         {showFollowUpsTable && (
           <div className="mt-3 overflow-x-auto">
             {isFollowUpsFetching ? (
-              <div className="py-8 text-center text-xs text-slate-400">
+              <div className="py-8 text-center text-xs text-muted-foreground">
                 Loading today&apos;s follow-up schedule...
               </div>
             ) : followUps.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-6 text-center">
-                <CheckCircle className="h-8 w-8 text-emerald-500/60 dark:text-emerald-400/40 mb-1.5" />
-                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <CheckCircle className="h-8 w-8 text-emerald-500/70 mb-2" />
+                <p className="text-xs font-bold text-foreground">
                   No follow-ups scheduled for today.
                 </p>
-                <p className="mt-0.5 text-[11px] text-slate-400">
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
                   All communications are up to date. You can schedule new follow-ups directly from any lead.
                 </p>
                 <Link
                   href={`${portalHome}/leads`}
-                  className="mt-3 inline-flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface-muted/60 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-muted transition-colors shadow-2xs"
                 >
                   View Active Leads
                 </Link>
               </div>
             ) : (
-              <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
-                <thead className="border-b border-slate-100 bg-slate-50/80 font-bold uppercase text-slate-500 dark:border-white/5 dark:bg-slate-800/40 dark:text-slate-400">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-border/80 bg-surface-muted/50 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   <tr>
                     <th className="px-3.5 py-2.5">Time / Type</th>
                     <th className="px-3.5 py-2.5">Lead / Quotation</th>
                     <th className="px-3.5 py-2.5">Phone / Email</th>
                     <th className="px-3.5 py-2.5">Sales rep</th>
-                    <th className="px-3.5 py-2.5 min-w-[200px]">Agenda & Objectives</th>
+                    <th className="px-3.5 py-2.5 min-w-[200px]">Agenda &amp; Objectives</th>
                     <th className="px-3.5 py-2.5 text-center w-28">Status</th>
                     <th className="px-3.5 py-2.5 text-right w-24">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                <tbody className="divide-y divide-border/50">
                   {followUps.map((fu: LeadFollowUpRecord) => {
                     const leadObj =
                       typeof fu.lead === "object" && fu.lead !== null
@@ -485,26 +504,26 @@ export default function LeadManagerStatsWidgets({
                     const email = leadObj?.email || (quoteObj as { email?: string })?.email;
                     const typeLabel =
                       FOLLOWUP_TYPE_CONFIG[fu.type]?.label || fu.type;
-                    const repName = getFollowUpSalesRepName(fu);
+                    const reps = getFollowUpSalesReps(fu);
 
                     const isDone = fu.status === "completed";
 
                     return (
                       <tr
                         key={fu._id || fu.id}
-                        className="hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-colors"
+                        className="hover:bg-surface-muted/40 transition-colors"
                       >
                         {/* Time & Type */}
                         <td className="px-3.5 py-2.5 font-medium">
                           <div className="flex items-center gap-2">
-                            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 dark:bg-slate-800">
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-surface-muted/60">
                               <FollowUpTypeIcon type={fu.type} />
                             </div>
                             <div>
-                              <div className="font-semibold text-slate-800 dark:text-slate-200">
+                              <div className="font-semibold text-foreground text-xs">
                                 {typeLabel}
                               </div>
-                              <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                              <div className="text-[10px] text-muted-foreground flex items-center gap-1 font-mono">
                                 <Clock className="h-2.5 w-2.5" />
                                 {fu.follow_up_time || "Today"}
                               </div>
@@ -517,7 +536,7 @@ export default function LeadManagerStatsWidgets({
                           {isQuoteFollowUp && quoteId ? (
                             <Link
                               href={`${portalHome}/quotations/${quoteId}`}
-                              className="font-bold text-slate-900 hover:text-indigo-600 dark:text-white dark:hover:text-indigo-400"
+                              className="font-bold text-foreground hover:text-primary transition-colors text-xs"
                             >
                               {customerName || "Customer"}
                               <div className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400">
@@ -527,51 +546,88 @@ export default function LeadManagerStatsWidgets({
                           ) : leadId ? (
                             <Link
                               href={`${portalHome}/leads/${leadId}`}
-                              className="font-bold text-slate-900 hover:text-blue-600 dark:text-white dark:hover:text-blue-400"
+                              className="font-bold text-foreground hover:text-primary transition-colors text-xs"
                             >
                               {leadName}
                               {companyName && (
-                                <span className="font-normal text-slate-500 dark:text-slate-400 ml-1">
+                                <span className="font-normal text-muted-foreground ml-1">
                                   ({companyName})
                                 </span>
                               )}
-                              <div className="text-[10px] font-mono text-blue-600 dark:text-blue-400">
+                              <div className="text-[10px] font-mono text-primary">
                                 #{leadNo}
                               </div>
                             </Link>
                           ) : (
-                            <span className="text-slate-500">—</span>
+                            <span className="text-muted-foreground">—</span>
                           )}
                         </td>
 
                         {/* Phone / Email */}
                         <td className="px-3.5 py-2.5 space-y-0.5 text-[11px]">
                           {phone && (
-                            <div className="flex items-center gap-1 text-slate-700 dark:text-slate-300">
-                              <Phone className="h-3 w-3 text-slate-400" />
-                              <span>{phone}</span>
+                            <div className="flex items-center gap-1 text-foreground">
+                              <Phone className="h-3 w-3 text-muted-foreground" />
+                              <span className="font-mono">{phone}</span>
                             </div>
                           )}
                           {email && (
-                            <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                              <Mail className="h-3 w-3 text-slate-400" />
+                            <div className="flex items-center gap-1 text-muted-foreground">
+                              <Mail className="h-3 w-3 text-muted-foreground" />
                               <span className="truncate max-w-[140px]">{email}</span>
                             </div>
                           )}
-                          {!phone && !email && <span className="text-slate-400">—</span>}
+                          {!phone && !email && <span className="text-muted-foreground">—</span>}
                         </td>
 
-                        {/* Executive */}
+                        {/* Executive / Sales Reps */}
                         <td className="px-3.5 py-2.5">
-                          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                            <UserCheck className="h-3 w-3 text-slate-400" />
-                            {repName}
-                          </span>
+                          {reps.length === 0 ? (
+                            <span className="text-muted-foreground italic text-xs">Unassigned</span>
+                          ) : reps.length === 1 ? (
+                            <span
+                              className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-surface-muted/60 px-2.5 py-0.5 text-[11px] font-medium text-foreground max-w-[160px] truncate"
+                              title={reps[0].name}
+                            >
+                              <UserCheck className="h-3 w-3 shrink-0 text-muted-foreground" />
+                              <span className="truncate">{reps[0].name}</span>
+                            </span>
+                          ) : (
+                            <div className="flex flex-col gap-1 max-w-[200px]">
+                              <div className="flex flex-wrap items-center gap-1">
+                                {reps.slice(0, 2).map((r, idx) => (
+                                  <span
+                                    key={r._id || r.name + idx}
+                                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                                      r.isPrimary
+                                        ? "border-primary/30 bg-primary/10 text-primary font-semibold"
+                                        : "border-border/80 bg-surface-muted/70 text-foreground"
+                                    }`}
+                                    title={r.isPrimary ? `${r.name} (Primary Rep)` : r.name}
+                                  >
+                                    <UserCheck className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />
+                                    <span className="truncate max-w-[95px]">{r.name}</span>
+                                  </span>
+                                ))}
+                                {reps.length > 2 && (
+                                  <span
+                                    className="rounded-full border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary"
+                                    title={reps.slice(2).map((r) => r.name).join(", ")}
+                                  >
+                                    +{reps.length - 2}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] font-semibold text-primary">
+                                {reps.length} reps assigned
+                              </span>
+                            </div>
+                          )}
                         </td>
 
                         {/* Agenda / Notes */}
                         <td className="px-3.5 py-2.5">
-                          <p className="text-xs text-slate-700 dark:text-slate-300 line-clamp-2">
+                          <p className="text-xs text-foreground line-clamp-2">
                             {fu.notes || "Routine lead follow-up & requirement review"}
                           </p>
                           {fu.outcome && (
@@ -584,12 +640,12 @@ export default function LeadManagerStatsWidgets({
                         {/* Status */}
                         <td className="px-3.5 py-2.5 text-center">
                           {isDone ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
                               <CheckCircle2 className="h-3 w-3" />
                               Done
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
                               <Clock className="h-3 w-3" />
                               Pending
                             </span>
@@ -601,7 +657,7 @@ export default function LeadManagerStatsWidgets({
                           {isQuoteFollowUp && quoteId ? (
                             <Link
                               href={`${portalHome}/quotations/${quoteId}`}
-                              className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-800 shadow-sm hover:bg-indigo-100 dark:border-indigo-900/40 dark:bg-indigo-950/50 dark:text-indigo-200"
+                              className="inline-flex items-center gap-1 rounded-lg border border-indigo-500/20 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-500/20 dark:text-indigo-300 transition-colors shadow-2xs"
                             >
                               <span>Quote</span>
                               <ExternalLink className="h-2.5 w-2.5" />
@@ -609,10 +665,10 @@ export default function LeadManagerStatsWidgets({
                           ) : leadId ? (
                             <Link
                               href={`${portalHome}/leads/${leadId}`}
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                              className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface-muted/60 px-2.5 py-1 text-[11px] font-semibold text-foreground hover:bg-surface-muted transition-colors shadow-2xs"
                             >
                               <span>Open</span>
-                              <ExternalLink className="h-2.5 w-2.5" />
+                              <ExternalLink className="h-2.5 w-2.5 text-muted-foreground" />
                             </Link>
                           ) : (
                             "—"

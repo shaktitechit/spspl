@@ -45,29 +45,29 @@ export function LeadsDashboardSection({
     : "Lead acquisition, qualification funnel, and conversion metrics.";
 
   return (
-    <section className="space-y-4 rounded-3xl border border-blue-200/70 bg-gradient-to-b from-blue-50/40 via-white to-white p-5 sm:p-6 shadow-xs dark:border-blue-900/30 dark:from-blue-950/20 dark:via-slate-900 dark:to-slate-900">
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-blue-100 dark:border-blue-900/40">
+    <section className="space-y-4 rounded-3xl border border-border bg-card p-5 sm:p-6 shadow-2xs transition-all">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border/70">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-sm shadow-blue-600/30">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-2xs">
             <Users className="h-5 w-5" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
+              <h2 className="text-base sm:text-lg font-bold text-foreground tracking-tight">
                 Leads Pipeline & Acquisition Hub
               </h2>
-              <span className="rounded-md bg-blue-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+              <span className="rounded-full border border-primary/20 bg-primary/5 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
                 {scopeBadge}
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{scopeHint}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{scopeHint}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <Link
             href={`${portalHome}/leads`}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-white px-3.5 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-50 dark:border-blue-900/60 dark:bg-slate-800 dark:text-blue-300 dark:hover:bg-slate-750 transition"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface-muted/50 px-3.5 py-1.5 text-xs font-semibold text-foreground hover:bg-surface-muted transition-colors shadow-2xs"
           >
             <span>{isExecutive ? "My Leads" : "View All Leads"}</span>
             <ChevronRight className="h-3.5 w-3.5" />
@@ -75,7 +75,7 @@ export function LeadsDashboardSection({
 
           <Link
             href={`${portalHome}/leads/new`}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-md shadow-blue-600/20 hover:bg-blue-700 transition"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>Create Lead</span>

@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLeadManagerRole } from "@/hooks/useLeadManagerRole";
@@ -16,7 +17,22 @@ import {
   TrendingUp,
   Users,
   X,
+  Sparkles,
 } from "lucide-react";
+
+interface NavItem {
+  label: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  isActive: boolean;
+  badge?: string;
+  show: boolean;
+}
+
+interface NavCategory {
+  title: string;
+  items: NavItem[];
+}
 
 export function Sidebar({
   mobileNavOpen,
@@ -33,243 +49,265 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const { isAdmin, isManager, isCoordinator, isExecutive, roleLabel } = useLeadManagerRole();
-  const lgW = desktopCollapsed ? "lg:w-[64px] lg:min-w-[64px]" : "lg:w-[14.5rem] lg:min-w-[14.5rem]";
 
   const companyLogoUrl = companyInfo?.logo_url || process.env.NEXT_PUBLIC_COMPANY_LOGO_URL || "";
-  const companyTitle = companyInfo?.trade_name || companyInfo?.legal_name || process.env.NEXT_PUBLIC_COMPANY_NAME || "Portal";
+  const companyTitle = companyInfo?.trade_name || companyInfo?.legal_name || process.env.NEXT_PUBLIC_COMPANY_NAME || "SPSPL";
 
+  // Active route helpers
   const isDashboardActive = pathname === "/dashboard";
-  const isLeadsActive = pathname === "/dashboard/leads" || (pathname.startsWith("/dashboard/leads") && !pathname.includes("follow-ups") && !pathname.includes("reports"));
+  const isLeadsActive =
+    pathname === "/dashboard/leads" ||
+    (pathname.startsWith("/dashboard/leads") &&
+      !pathname.includes("follow-ups") &&
+      !pathname.includes("reports"));
   const isFollowUpsActive = pathname.startsWith("/dashboard/leads/follow-ups");
   const isReportsActive = pathname.startsWith("/dashboard/leads/reports");
-  const isQuotationsActive = pathname.startsWith("/dashboard/quotations") && !pathname.includes("terms") && !pathname.includes("reports");
+  const isQuotationsActive =
+    pathname.startsWith("/dashboard/quotations") &&
+    !pathname.includes("terms") &&
+    !pathname.includes("reports");
   const isQuotationReportsActive = pathname.startsWith("/dashboard/quotations/reports");
   const isTermsActive = pathname.startsWith("/dashboard/quotations/terms");
   const isTeamManagerActive = pathname.startsWith("/dashboard/team-manager");
 
-  /** Lead pipeline reports at /dashboard/leads/reports (distinct from Quote Reports). */
-  const showLeadReportsNav = isAdmin || isManager || isCoordinator || isExecutive;
-  const leadReportsNavLabel =
-    isAdmin || isManager || isCoordinator ? "Team Sales Reports" : "My Reports";
+  const showLeadReports = isAdmin || isManager || isCoordinator || isExecutive;
+  const leadReportsLabel = isAdmin || isManager || isCoordinator ? "Team Reports" : "My Reports";
+  const canAccessQuotes = isAdmin || isManager || isCoordinator || isExecutive;
+  const canAccessCommercialMasters = isAdmin || isManager || isCoordinator;
+
+  // Grouped Navigation Structure
+  const categories: NavCategory[] = [
+    {
+      title: "Workspace",
+      items: [
+        {
+          label: "Dashboard",
+          href: "/dashboard",
+          icon: LayoutGrid,
+          isActive: isDashboardActive,
+          show: true,
+        },
+      ],
+    },
+    {
+      title: "Pipeline",
+      items: [
+        {
+          label: "Leads",
+          href: "/dashboard/leads",
+          icon: Users,
+          isActive: isLeadsActive,
+          show: true,
+        },
+        {
+          label: "Follow-Ups",
+          href: "/dashboard/leads/follow-ups",
+          icon: CalendarDays,
+          isActive: isFollowUpsActive,
+          show: true,
+        },
+        {
+          label: leadReportsLabel,
+          href: "/dashboard/leads/reports",
+          icon: BarChart3,
+          isActive: isReportsActive,
+          show: showLeadReports,
+        },
+      ],
+    },
+    {
+      title: "Commercial",
+      items: [
+        {
+          label: "Quotations",
+          href: "/dashboard/quotations",
+          icon: FileText,
+          isActive: isQuotationsActive,
+          show: canAccessQuotes,
+        },
+        {
+          label: "Quote Reports",
+          href: "/dashboard/quotations/reports",
+          icon: TrendingUp,
+          isActive: isQuotationReportsActive,
+          show: canAccessQuotes,
+        },
+        {
+          label: "Terms & Conditions",
+          href: "/dashboard/quotations/terms",
+          icon: BookOpen,
+          isActive: isTermsActive,
+          show: canAccessCommercialMasters,
+        },
+      ],
+    },
+    {
+      title: "Organization",
+      items: [
+        {
+          label: "Team Manager",
+          href: "/dashboard/team-manager",
+          icon: Network,
+          isActive: isTeamManagerActive,
+          show: canAccessCommercialMasters,
+        },
+      ],
+    },
+  ];
+
+  const lgWidth = desktopCollapsed ? "lg:w-[68px] lg:min-w-[68px]" : "lg:w-60 lg:min-w-60";
 
   return (
     <>
-      {/* Mobile Nav Overlay */}
+      {/* Mobile Drawer Backdrop */}
       <div
         aria-hidden={!mobileNavOpen}
-        className={[
-          "fixed inset-0 z-[35] bg-black/60 backdrop-blur-sm transition-opacity duration-300 lg:hidden",
-          mobileNavOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
-        ].join(" ")}
+        className={`fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-300 lg:hidden ${
+          mobileNavOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+        }`}
         onClick={() => setMobileNavOpen(false)}
       />
 
+      {/* Main Sidebar Shell */}
       <aside
         id="app-sidebar"
-        className={[
-          "fixed left-0 top-0 z-[40] flex h-[100vh] max-h-[100vh] min-h-0 w-[min(15rem,85vw)] flex-col overflow-hidden border-r border-border bg-card shadow-2xl transition-[transform,width,min-width] duration-300 ease-out",
-          "lg:relative lg:z-0 lg:h-full lg:min-h-0 lg:max-w-none lg:shrink-0 lg:translate-x-0 lg:shadow-none",
-          lgW,
-          mobileNavOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
-        ].join(" ")}
+        className={`fixed left-0 top-0 z-40 flex h-screen max-h-screen min-h-0 w-[min(16rem,85vw)] flex-col overflow-hidden border-r border-border bg-card shadow-2xl transition-[width,min-width,transform] duration-300 ease-in-out lg:relative lg:z-0 lg:h-full lg:min-h-0 lg:max-w-none lg:shrink-0 lg:translate-x-0 lg:shadow-none ${lgWidth} ${
+          mobileNavOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        }`}
       >
-        {/* Company Header with Logo, Company Name & Portal Name */}
-        <div className="relative flex shrink-0 flex-col gap-1 border-b border-border p-3.5">
-          <div className="flex items-center justify-between gap-2">
-            <Link href="/dashboard" className="flex items-center gap-2.5 min-w-0">
-              {companyLogoUrl ? (
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-surface-muted shadow-xs">
-                  <img
-                    src={companyLogoUrl}
-                    alt={companyTitle}
-                    className="h-full w-full object-contain p-1"
-                  />
-                </div>
-              ) : (
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 text-primary shadow-xs">
-                  <CheckSquare className="h-5 w-5" />
-                </div>
-              )}
-
-              {!desktopCollapsed && (
-                <div className="flex flex-col min-w-0 leading-tight">
-                  <span className="text-xs font-black tracking-tight text-foreground uppercase truncate">
-                    {companyTitle}
-                  </span>
-                  <span className="text-[10px] font-bold text-primary tracking-wider uppercase truncate mt-0.5">
-                    Lead Manager Portal
-                  </span>
-                </div>
-              )}
-            </Link>
-
-            <button
-              type="button"
-              className="rounded-lg p-1.5 text-muted hover:bg-surface-muted lg:hidden"
-              onClick={() => setMobileNavOpen(false)}
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Navigation Items */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
-          <div className={`flex items-center justify-between px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted ${desktopCollapsed ? "hidden" : "flex"}`}>
-            <span>Navigation</span>
-            <span className={`rounded-md px-1.5 py-0.5 text-[9px] font-extrabold uppercase ${
-              isAdmin
-                ? "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/20"
-                : isManager
-                ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20"
-                : isCoordinator
-                ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20"
-                : "bg-primary/15 text-primary border border-primary/20"
-            }`}>
-              {roleLabel}
-            </span>
-          </div>
-
-          {/* Dashboard Overview */}
+        {/* Company Header */}
+        <div className="relative flex h-14 shrink-0 items-center justify-between border-b border-border/80 px-3.5">
           <Link
             href="/dashboard"
+            className="flex items-center gap-2.5 min-w-0"
             onClick={() => setMobileNavOpen(false)}
-            className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
-              isDashboardActive
-                ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
-                : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
-            }`}
-            title="Dashboard Overview"
           >
-            <LayoutGrid className={`h-4 w-4 shrink-0 ${isDashboardActive ? "text-primary" : ""}`} />
-            {!desktopCollapsed && <span>Dashboard</span>}
+            {companyLogoUrl ? (
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-surface-muted p-0.5 shadow-2xs">
+                <img
+                  src={companyLogoUrl}
+                  alt={companyTitle}
+                  className="h-full w-full object-contain"
+                />
+              </div>
+            ) : (
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-primary to-primary-hover text-white shadow-2xs">
+                <CheckSquare className="h-5 w-5" />
+              </div>
+            )}
+
+            {!desktopCollapsed && (
+              <div className="flex flex-col min-w-0 leading-tight">
+                <span className="text-xs font-black tracking-tight text-foreground uppercase truncate">
+                  {companyTitle}
+                </span>
+                <span className="text-[10px] font-bold text-primary tracking-wider uppercase truncate mt-0.5">
+                  Lead Manager
+                </span>
+              </div>
+            )}
           </Link>
 
-          {/* Leads */}
-          <Link
-            href="/dashboard/leads"
-            onClick={() => setMobileNavOpen(false)}
-            className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
-              isLeadsActive
-                ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
-                : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
-            }`}
-            title="Leads Pipeline"
-          >
-            <Users className={`h-4 w-4 shrink-0 ${isLeadsActive ? "text-primary" : ""}`} />
-            {!desktopCollapsed && <span>Leads</span>}
-          </Link>
-
-          {/* Follow-ups */}
-          <Link
-            href="/dashboard/leads/follow-ups"
-            onClick={() => setMobileNavOpen(false)}
-            className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
-              isFollowUpsActive
-                ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
-                : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
-            }`}
-            title="Follow-ups Calendar"
-          >
-            <CalendarDays className={`h-4 w-4 shrink-0 ${isFollowUpsActive ? "text-primary" : ""}`} />
-            {!desktopCollapsed && <span>Follow-Ups</span>}
-          </Link>
-
-          {showLeadReportsNav && (
-            <Link
-              href="/dashboard/leads/reports"
-              onClick={() => setMobileNavOpen(false)}
-              className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
-                isReportsActive
-                  ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
-                  : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
-              }`}
-              title="Lead pipeline reports"
-            >
-              <BarChart3 className={`h-4 w-4 shrink-0 ${isReportsActive ? "text-primary" : ""}`} />
-              {!desktopCollapsed && <span>{leadReportsNavLabel}</span>}
-            </Link>
-          )}
-
-          {/* Quotations (incl. executives — view & follow-ups) */}
-          {(isAdmin || isManager || isCoordinator || isExecutive) && (
-            <Link
-              href="/dashboard/quotations"
-              onClick={() => setMobileNavOpen(false)}
-              className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
-                isQuotationsActive
-                  ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
-                  : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
-              }`}
-              title="Quotations"
-            >
-              <FileText className={`h-4 w-4 shrink-0 ${isQuotationsActive ? "text-primary" : ""}`} />
-              {!desktopCollapsed && <span>Quotations</span>}
-            </Link>
-          )}
-
-          {/* Quotation Reports (self-scoped for executives) */}
-          {(isAdmin || isManager || isCoordinator || isExecutive) && (
-            <Link
-              href="/dashboard/quotations/reports"
-              onClick={() => setMobileNavOpen(false)}
-              className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
-                isQuotationReportsActive
-                  ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
-                  : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
-              }`}
-              title="Quotation Reports & Analytics"
-            >
-              <TrendingUp className={`h-4 w-4 shrink-0 ${isQuotationReportsActive ? "text-primary" : ""}`} />
-              {!desktopCollapsed && <span>Quote Reports</span>}
-            </Link>
-          )}
-
-          {/* Master Terms & Conditions (Admin, Manager & Coordinator) */}
-          {(isAdmin || isManager || isCoordinator) && (
-            <Link
-              href="/dashboard/quotations/terms"
-              onClick={() => setMobileNavOpen(false)}
-              className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
-                isTermsActive
-                  ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
-                  : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
-              }`}
-              title="Terms & Conditions Master"
-            >
-              <BookOpen className={`h-4 w-4 shrink-0 ${isTermsActive ? "text-primary" : ""}`} />
-              {!desktopCollapsed && <span>Terms &amp; Conditions</span>}
-            </Link>
-          )}
-
-          {/* Team Manager (Admin, Manager & Coordinator) */}
-          {(isAdmin || isManager || isCoordinator) && (
-            <Link
-              href="/dashboard/team-manager"
-              onClick={() => setMobileNavOpen(false)}
-              className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
-                isTeamManagerActive
-                  ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
-                  : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
-              }`}
-              title="Team Hierarchy & Matrix"
-            >
-              <Network className={`h-4 w-4 shrink-0 ${isTeamManagerActive ? "text-primary" : ""}`} />
-              {!desktopCollapsed && <span>Team Manager</span>}
-            </Link>
-          )}
-        </div>
-
-        {/* Footer Collapse Toggle */}
-        <div className="mt-auto hidden border-t border-border p-2 lg:flex">
+          {/* Mobile Close Button */}
           <button
             type="button"
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-muted hover:bg-surface-muted hover:text-foreground transition"
+            className="rounded-lg p-1.5 text-muted hover:bg-surface-muted lg:hidden transition cursor-pointer"
+            onClick={() => setMobileNavOpen(false)}
+            aria-label="Close navigation"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Navigation Categories & Items */}
+        <div className="flex-1 overflow-y-auto px-2.5 py-3 space-y-4 scrollbar-none">
+          {categories.map((cat, catIdx) => {
+            const visibleItems = cat.items.filter((item) => item.show);
+            if (visibleItems.length === 0) return null;
+
+            return (
+              <div key={cat.title} className="space-y-1">
+                {/* Category Header (hidden when collapsed on desktop) */}
+                {!desktopCollapsed && (
+                  <div className="flex items-center justify-between px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-muted/70">
+                    <span>{cat.title}</span>
+                    {catIdx === 0 && (
+                      <span className="rounded-md bg-surface-muted px-1.5 py-0.5 text-[9px] font-bold text-primary uppercase">
+                        {roleLabel}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Nav Links */}
+                <div className="space-y-0.5">
+                  {visibleItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <div key={item.href} className="relative group">
+                        <Link
+                          href={item.href}
+                          onClick={() => setMobileNavOpen(false)}
+                          className={`relative flex items-center gap-3 rounded-xl px-2.5 py-2 text-xs font-semibold transition-all ${
+                            desktopCollapsed ? "justify-center" : "justify-start"
+                          } ${
+                            item.isActive
+                              ? "bg-primary/10 text-primary font-bold shadow-2xs border border-primary/20"
+                              : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
+                          }`}
+                        >
+                          <Icon
+                            className={`h-4 w-4 shrink-0 transition-transform group-hover:scale-105 ${
+                              item.isActive ? "text-primary" : "text-muted"
+                            }`}
+                          />
+
+                          {!desktopCollapsed && (
+                            <span className="truncate">{item.label}</span>
+                          )}
+
+                          {item.badge && !desktopCollapsed && (
+                            <span className="ml-auto rounded-full bg-primary/20 px-1.5 py-0.2 text-[9px] font-bold text-primary">
+                              {item.badge}
+                            </span>
+                          )}
+                        </Link>
+
+                        {/* Collapsed Tooltip on Desktop */}
+                        {desktopCollapsed && (
+                          <div className="pointer-events-none fixed left-[72px] z-50 hidden rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground shadow-xl opacity-0 transition-opacity group-hover:opacity-100 lg:block">
+                            <span>{item.label}</span>
+                            <span className="ml-2 text-[10px] text-muted">
+                              ({cat.title})
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer Collapse Toggle (Desktop only) */}
+        <div className="mt-auto hidden border-t border-border/80 p-2 lg:flex">
+          <button
+            type="button"
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-muted hover:bg-surface-muted hover:text-foreground transition cursor-pointer"
             onClick={() => setDesktopCollapsed((c) => !c)}
             title={desktopCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={desktopCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {desktopCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4 text-muted" />}
-            {!desktopCollapsed && <span className="text-xs font-medium">Collapse Menu</span>}
+            {desktopCollapsed ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : (
+              <>
+                <ChevronLeft className="h-4 w-4" />
+                <span className="text-xs font-semibold">Collapse Navigation</span>
+              </>
+            )}
           </button>
         </div>
       </aside>

@@ -68,6 +68,7 @@ import QuotationPdfTemplate from "./QuotationPdfTemplate";
 import { SendQuotationEmailModal } from "./SendQuotationEmailModal";
 import { QuotationLifecycleStepper } from "./QuotationLifecycleStepper";
 import { FollowUpChatPanel } from "@/components/shared/followups/FollowUpChatPanel";
+import { DetailWorkspaceSkeleton } from "@/components/shared/Skeletons";
 import { CustomerRejectQuotationModal } from "./CustomerRejectQuotationModal";
 import { ConvertQuotationModal } from "./ConvertQuotationModal";
 import { GenerateProformaModal } from "./GenerateProformaModal";
@@ -320,14 +321,7 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
   };
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-4">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-          Loading quotation details...
-        </p>
-      </div>
-    );
+    return <DetailWorkspaceSkeleton />;
   }
 
   if (isError || !quotation || !displayedQuotation) {

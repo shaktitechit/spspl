@@ -382,34 +382,122 @@ export function buildQuotationSignatoryUsers<T extends SignatoryUserRow>(
   );
 }
 
-/** Display name for follow-up owner: lead assignee, quotation sales rep, or creator. */
+export type FollowUpSalesRep = {
+  _id?: string;
+  name: string;
+  isPrimary?: boolean;
+};
+
+/**
+ * Returns all assigned sales representatives for a follow-up (supporting multiple assignees on the lead).
+ */
+export function getFollowUpSalesReps(fu: {
+  lead?: {
+    assigned_to?: { _id?: string; name?: string } | string | null;
+    assigned_users?: Array<{ _id?: string; name?: string }>;
+  } | string | null;
+  quotation?: {
+    sales_person_name?: string;
+    sales_person_user?: { _id?: string; name?: string } | string | null;
+  } | string | null;
+  created_by?: { _id?: string; name?: string } | string | null;
+}): FollowUpSalesRep[] {
+  const result: FollowUpSalesRep[] = [];
+  const seenNames = new Set<string>();
+
+  const leadObj = typeof fu.lead === "object" && fu.lead !== null ? fu.lead : null;
+
+  // Primary assignee on the lead
+  let primaryName = "";
+  let primaryId: string | undefined;
+  if (leadObj?.assigned_to && typeof leadObj.assigned_to === "object" && leadObj.assigned_to.name?.trim()) {
+    primaryName = leadObj.assigned_to.name.trim();
+    primaryId = leadObj.assigned_to._id;
+  }
+
+  // 1. Check assigned_users on the lead (co-assignees or full assignees list)
+  if (Array.isArray(leadObj?.assigned_users) && leadObj.assigned_users.length > 0) {
+    leadObj.assigned_users.forEach((u) => {
+      if (u && typeof u === "object" && u.name?.trim()) {
+        const name = u.name.trim();
+        const lower = name.toLowerCase();
+        if (!seenNames.has(lower)) {
+          seenNames.add(lower);
+          result.push({
+            _id: u._id,
+            name,
+            isPrimary: Boolean(primaryName && lower === primaryName.toLowerCase()),
+          });
+        }
+      }
+    });
+  }
+
+  // 2. Ensure primary assigned_to is included if not already in assigned_users
+  if (primaryName && !seenNames.has(primaryName.toLowerCase())) {
+    seenNames.add(primaryName.toLowerCase());
+    result.unshift({
+      _id: primaryId,
+      name: primaryName,
+      isPrimary: true,
+    });
+  } else if (primaryName) {
+    // If it was already in assigned_users, ensure it is flagged as primary
+    const found = result.find((r) => r.name.toLowerCase() === primaryName.toLowerCase());
+    if (found) found.isPrimary = true;
+  }
+
+  // 3. If quotation follow-up, check quotation sales person
+  const quoteObj = typeof fu.quotation === "object" && fu.quotation !== null ? fu.quotation : null;
+  if (quoteObj?.sales_person_name?.trim()) {
+    const name = quoteObj.sales_person_name.trim();
+    const lower = name.toLowerCase();
+    if (!seenNames.has(lower)) {
+      seenNames.add(lower);
+      result.push({ name, isPrimary: true });
+    }
+  }
+  const sp = quoteObj?.sales_person_user;
+  if (sp && typeof sp === "object" && sp.name?.trim()) {
+    const name = sp.name.trim();
+    const lower = name.toLowerCase();
+    if (!seenNames.has(lower)) {
+      seenNames.add(lower);
+      result.push({ _id: sp._id, name, isPrimary: true });
+    }
+  }
+
+  // 4. Fallback to follow-up creator if still empty
+  if (result.length === 0 && fu.created_by && typeof fu.created_by === "object" && fu.created_by.name?.trim()) {
+    result.push({
+      _id: (fu.created_by as any)._id,
+      name: fu.created_by.name.trim(),
+    });
+  }
+
+  return result;
+}
+
+/** Display name for follow-up owner: all lead assignees, quotation sales rep, or creator. */
 export function getFollowUpSalesRepName(fu: {
-  lead?: { assigned_to?: { name?: string } | string | null } | string | null;
+  lead?: {
+    assigned_to?: { name?: string } | string | null;
+    assigned_users?: Array<{ name?: string }>;
+  } | string | null;
   quotation?: {
     sales_person_name?: string;
     sales_person_user?: { name?: string } | string | null;
   } | string | null;
   created_by?: { name?: string } | string | null;
 }): string {
-  const leadObj = typeof fu.lead === "object" && fu.lead !== null ? fu.lead : null;
-  if (leadObj?.assigned_to && typeof leadObj.assigned_to === "object" && leadObj.assigned_to.name) {
-    return leadObj.assigned_to.name;
-  }
-  const quoteObj = typeof fu.quotation === "object" && fu.quotation !== null ? fu.quotation : null;
-  if (quoteObj?.sales_person_name?.trim()) {
-    return quoteObj.sales_person_name.trim();
-  }
-  const sp = quoteObj?.sales_person_user;
-  if (sp && typeof sp === "object" && sp.name) {
-    return sp.name;
-  }
-  if (fu.created_by && typeof fu.created_by === "object" && fu.created_by.name) {
-    return fu.created_by.name;
+  const reps = getFollowUpSalesReps(fu as any);
+  if (reps.length > 0) {
+    return reps.map((r) => r.name).join(", ");
   }
   return "Unassigned";
 }
 
-/** Display name for designated follow-up assignee (lead assignee or quotation sales rep). */
+/** Display name for designated follow-up assignee (all lead assignees or quotation sales rep). */
 export function getFollowUpAssigneeName(fu: {
   lead?: {
     assigned_to?: { name?: string } | string | null;
@@ -420,20 +508,9 @@ export function getFollowUpAssigneeName(fu: {
     sales_person_user?: { name?: string } | string | null;
   } | string | null;
 }): string {
-  const leadObj = typeof fu.lead === "object" && fu.lead !== null ? fu.lead : null;
-  if (leadObj?.assigned_to && typeof leadObj.assigned_to === "object" && leadObj.assigned_to.name) {
-    return leadObj.assigned_to.name;
-  }
-  if (Array.isArray(leadObj?.assigned_users) && leadObj.assigned_users.length > 0 && leadObj.assigned_users[0]?.name) {
-    return leadObj.assigned_users.map((u) => u.name).filter(Boolean).join(", ");
-  }
-  const quoteObj = typeof fu.quotation === "object" && fu.quotation !== null ? fu.quotation : null;
-  if (quoteObj?.sales_person_name?.trim()) {
-    return quoteObj.sales_person_name.trim();
-  }
-  const sp = quoteObj?.sales_person_user;
-  if (sp && typeof sp === "object" && sp.name) {
-    return sp.name;
+  const reps = getFollowUpSalesReps(fu as any);
+  if (reps.length > 0) {
+    return reps.map((r) => r.name).join(", ");
   }
   return "Unassigned";
 }
