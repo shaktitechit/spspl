@@ -136,6 +136,7 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
   const [showExtendValidityModal, setShowExtendValidityModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const [downloadingProforma, setDownloadingProforma] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   // Versioning & Comparison States
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
@@ -236,6 +237,27 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
       toast.error("Failed to generate Proforma Invoice");
     } finally {
       setDownloadingProforma(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!displayedQuotation || !canViewPdf) return;
+    try {
+      setDownloadingPdf(true);
+      const pdf = await buildQuotationPdf({
+        quotation: displayedQuotation,
+        company: companyData as any,
+        portalLabel: "Lead Manager",
+        downloadedBy,
+      });
+      const fileName = `Quotation_${displayedQuotation.ref_no || displayedQuotation.quotation_no || "Document"}${isViewingArchive ? `_v${displayedQuotation.version}` : ""}.pdf`;
+      pdf.save(fileName);
+      toast.success(`Quotation PDF (v${displayedQuotation.version || 1}) downloaded successfully`);
+    } catch (err: any) {
+      console.error("PDF download failed", err);
+      toast.error("Failed to generate Quotation PDF");
+    } finally {
+      setDownloadingPdf(false);
     }
   };
 
@@ -881,6 +903,20 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
             <Copy className="h-4 w-4 text-indigo-500" />
             Copy Quotation
           </Link>
+
+          {/* Download Vector PDF Button */}
+          <button
+            type="button"
+            disabled={!canViewPdf || downloadingPdf}
+            onClick={handleDownloadPdf}
+            title={canViewPdf ? `Download PDF (v${displayedQuotation.version || 1})` : "PDF preview is locked for non-signatories prior to approval"}
+            className={`inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer ${
+              !canViewPdf ? "opacity-60 cursor-not-allowed" : ""
+            }`}
+          >
+            <Download className="h-4 w-4 text-primary" />
+            {downloadingPdf ? "Generating..." : `Download PDF (v${displayedQuotation.version || 1})`}
+          </button>
 
           {/* Print / PDF Button (renders displayed version) */}
           <button

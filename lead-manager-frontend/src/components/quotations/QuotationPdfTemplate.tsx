@@ -184,6 +184,94 @@ export default function QuotationPdfTemplate({
         .quotation-terms-content li {
           margin: 1px 0;
         }
+
+        /* Message Rich-Text & HTML Table layout preservation */
+        .rich-text-content {
+          font-size: 8.5px;
+          line-height: 14px;
+          color: #334155;
+          word-break: break-word;
+          overflow-wrap: break-word;
+        }
+        .rich-text-content p {
+          margin: 0 0 4px 0;
+          line-height: 14px;
+        }
+        .rich-text-content p:last-child {
+          margin-bottom: 0;
+        }
+        .rich-text-content table {
+          width: 100% !important;
+          max-width: 100% !important;
+          border-collapse: collapse !important;
+          margin: 6px 0 !important;
+          box-sizing: border-box !important;
+          table-layout: auto !important;
+        }
+        .rich-text-content th,
+        .rich-text-content td {
+          border: 1px solid #cbd5e1 !important;
+          padding: 4px 6px !important;
+          font-size: 8px !important;
+          line-height: 12px !important;
+          text-align: left;
+          vertical-align: top;
+          box-sizing: border-box !important;
+          word-break: break-word;
+        }
+        .rich-text-content th {
+          background-color: #f1f5f9 !important;
+          color: #1e3a5f !important;
+          font-weight: 700 !important;
+        }
+        .rich-text-content td {
+          background-color: #ffffff !important;
+          color: #334155 !important;
+        }
+        .rich-text-content h1 {
+          font-size: 11px;
+          font-weight: 700;
+          color: #1e3a5f;
+          margin: 6px 0 2px 0;
+        }
+        .rich-text-content h2 {
+          font-size: 10px;
+          font-weight: 700;
+          color: #1e3a5f;
+          margin: 5px 0 2px 0;
+        }
+        .rich-text-content h3 {
+          font-size: 9px;
+          font-weight: 700;
+          color: #1e3a5f;
+          margin: 4px 0 1px 0;
+        }
+        .rich-text-content ul {
+          list-style-type: disc !important;
+          margin: 3px 0 4px 0 !important;
+          padding-left: 16px !important;
+        }
+        .rich-text-content ol {
+          list-style-type: decimal !important;
+          margin: 3px 0 4px 0 !important;
+          padding-left: 16px !important;
+        }
+        .rich-text-content li {
+          margin-bottom: 2px !important;
+          line-height: 13px !important;
+        }
+        .rich-text-content blockquote {
+          border-left: 2px solid #94a3b8 !important;
+          padding-left: 8px !important;
+          margin: 4px 0 !important;
+          font-style: italic;
+          color: #475569;
+        }
+        .rich-text-content hr {
+          border: none;
+          border-top: 1px solid #e2e8f0;
+          margin: 6px 0;
+        }
       `}</style>
 
       <div

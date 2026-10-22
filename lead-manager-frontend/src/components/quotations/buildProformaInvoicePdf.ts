@@ -741,8 +741,14 @@ export async function buildProformaInvoicePdf(input: BuildProformaInvoicePdfInpu
     for (let bIdx = 0; bIdx < blocks.length; bIdx += 1) {
       const block = blocks[bIdx];
 
+      if (block.type === "empty-line") {
+        checkMessagePageBreak(3.5);
+        currentY += 3.5;
+        continue;
+      }
+
       if (block.type === "divider") {
-        checkMessagePageBreak(3);
+        checkMessagePageBreak(3.5);
         pdf.setDrawColor(203, 213, 225);
         pdf.setLineWidth(0.2);
         pdf.line(M + 1, currentY, M + CONTENT_W - 2, currentY);
@@ -760,17 +766,40 @@ export async function buildProformaInvoicePdf(input: BuildProformaInvoicePdfInpu
 
         const tableX = M + 1;
         const tableW = CONTENT_W - 2;
-        const colW = tableW / maxCols;
+
+        // Smart column width calculation based on content
+        const colMaxLens = new Array(maxCols).fill(1);
+        for (const r of rows) {
+          for (let i = 0; i < maxCols; i++) {
+            const cell = r.cells[i];
+            if (cell && cell.text) {
+              const len = cell.text.trim().length;
+              if (len > colMaxLens[i]) colMaxLens[i] = len;
+            }
+          }
+        }
+        const totalLen = colMaxLens.reduce((a, b) => a + b, 0);
+        const minColW = Math.min(18, tableW / maxCols);
+        const variableW = Math.max(0, tableW - minColW * maxCols);
+        let colWidths = colMaxLens.map((len) => {
+          const weight = totalLen > 0 ? len / totalLen : 1 / maxCols;
+          return minColW + variableW * weight;
+        });
+        const currentSum = colWidths.reduce((a, b) => a + b, 0);
+        if (currentSum > 0) {
+          colWidths = colWidths.map((w) => (w / currentSum) * tableW);
+        }
 
         for (const row of rows) {
-          const cellData = row.cells.map((cell) => {
+          const cellData = row.cells.map((cell, cIdx) => {
             const isHeader = cell.isHeader;
             const fontSize = isHeader ? 7.0 : 6.5;
             const isBold = isHeader || cell.runs.some((r) => r.bold);
             pdf.setFont("helvetica", isBold ? "bold" : "normal");
             pdf.setFontSize(fontSize);
 
-            const splitLines: string[] = pdf.splitTextToSize(cell.text || "", Math.max(colW - 3, 10));
+            const thisColW = colWidths[cIdx] || (tableW / maxCols);
+            const splitLines: string[] = pdf.splitTextToSize(cell.text || "", Math.max(thisColW - 3, 8));
             return {
               cell,
               isHeader,
@@ -791,8 +820,9 @@ export async function buildProformaInvoicePdf(input: BuildProformaInvoicePdfInpu
 
           checkMessagePageBreak(rowH + 1);
 
+          let curCellX = tableX;
           for (let cIdx = 0; cIdx < maxCols; cIdx++) {
-            const cellX = tableX + cIdx * colW;
+            const thisColW = colWidths[cIdx] || (tableW / maxCols);
             const cd = cellData[cIdx];
             const isHeader = cd ? cd.isHeader : false;
 
@@ -800,37 +830,39 @@ export async function buildProformaInvoicePdf(input: BuildProformaInvoicePdfInpu
             pdf.setLineWidth(0.18);
             if (isHeader) {
               pdf.setFillColor(241, 245, 249);
-              pdf.rect(cellX, currentY, colW, rowH, "FD");
+              pdf.rect(curCellX, currentY, thisColW, rowH, "FD");
             } else {
               pdf.setFillColor(255, 255, 255);
-              pdf.rect(cellX, currentY, colW, rowH, "FD");
+              pdf.rect(curCellX, currentY, thisColW, rowH, "FD");
             }
 
-            if (!cd) continue;
+            if (cd) {
+              pdf.setFont("helvetica", cd.isBold ? "bold" : "normal");
+              pdf.setFontSize(cd.fontSize);
+              pdf.setTextColor(...(isHeader ? NAVY : TEXT));
 
-            pdf.setFont("helvetica", cd.isBold ? "bold" : "normal");
-            pdf.setFontSize(cd.fontSize);
-            pdf.setTextColor(...(isHeader ? NAVY : TEXT));
+              for (let l = 0; l < cd.splitLines.length; l++) {
+                const lineText = cd.splitLines[l];
+                if (!lineText) continue;
+                const lineY = currentY + 3.2 + l * lineStep;
 
-            for (let l = 0; l < cd.splitLines.length; l++) {
-              const lineText = cd.splitLines[l];
-              if (!lineText) continue;
-              const lineY = currentY + 3.2 + l * lineStep;
-
-              if (cd.cell.align === "center") {
-                pdf.text(lineText, cellX + colW / 2, lineY, { align: "center" });
-              } else if (cd.cell.align === "right") {
-                pdf.text(lineText, cellX + colW - 1.5, lineY, { align: "right" });
-              } else {
-                pdf.text(lineText, cellX + 1.5, lineY);
+                if (cd.cell.align === "center") {
+                  pdf.text(lineText, curCellX + thisColW / 2, lineY, { align: "center" });
+                } else if (cd.cell.align === "right") {
+                  pdf.text(lineText, curCellX + thisColW - 1.5, lineY, { align: "right" });
+                } else {
+                  pdf.text(lineText, curCellX + 1.5, lineY);
+                }
               }
             }
+
+            curCellX += thisColW;
           }
 
           currentY += rowH;
         }
 
-        currentY += 2;
+        currentY += 2.5;
         continue;
       }
 
@@ -875,7 +907,7 @@ export async function buildProformaInvoicePdf(input: BuildProformaInvoicePdfInpu
 
       for (const token of tokens) {
         if (token.text === "\n") {
-          if (currentLine.length > 0) linesOfTokens.push(currentLine);
+          linesOfTokens.push(currentLine);
           currentLine = [];
           currentLineWidth = 0;
           continue;
@@ -905,9 +937,14 @@ export async function buildProformaInvoicePdf(input: BuildProformaInvoicePdfInpu
       }
 
       for (let lIdx = 0; lIdx < linesOfTokens.length; lIdx += 1) {
+        const line = linesOfTokens[lIdx];
         checkMessagePageBreak(stepLineHeight + 1);
 
-        const line = linesOfTokens[lIdx];
+        if (line.length === 0) {
+          currentY += stepLineHeight;
+          continue;
+        }
+
         let x = M + 1;
 
         if (block.type === "list-item" && block.bullet) {
