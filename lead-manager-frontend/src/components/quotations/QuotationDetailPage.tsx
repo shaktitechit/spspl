@@ -1765,39 +1765,43 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto rounded-xl border border-slate-200/90 shadow-2xs dark:border-white/10">
+              <table className="w-full text-left text-xs min-w-[980px] border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/70 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:bg-slate-800/50">
-                    <th className="py-2.5 px-3">#</th>
-                    <th className="py-2.5 px-3 min-w-[280px]">Product / Technical Specifications</th>
-                    <th className="py-2.5 px-3">HSN Code</th>
-                    <th className="py-2.5 px-3 text-right">Qty</th>
-                    <th className="py-2.5 px-3 text-right">Unit Rate</th>
-                    <th className="py-2.5 px-3 text-right">Discount</th>
-                    <th className="py-2.5 px-3 text-right">Taxable</th>
-                    <th className="py-2.5 px-3 text-right">GST</th>
-                    <th className="py-2.5 px-3 text-right">Total</th>
+                  <tr className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:border-white/10 dark:bg-slate-800/60">
+                    <th className="py-3 px-3 w-12 text-center">#</th>
+                    <th className="py-3 px-4 min-w-[340px]">Product / Technical Specifications</th>
+                    <th className="py-3 px-3 w-28 text-center whitespace-nowrap">HSN Code</th>
+                    <th className="py-3 px-3 w-24 text-right whitespace-nowrap">Qty</th>
+                    <th className="py-3 px-3 w-32 text-right whitespace-nowrap">Unit Rate</th>
+                    <th className="py-3 px-3 w-24 text-right whitespace-nowrap">Discount</th>
+                    <th className="py-3 px-3 w-32 text-right whitespace-nowrap">Taxable</th>
+                    <th className="py-3 px-3 w-24 text-right whitespace-nowrap">GST</th>
+                    <th className="py-3 px-3 w-36 text-right whitespace-nowrap">Total</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                <tbody className="divide-y divide-slate-100 dark:divide-white/5 bg-white dark:bg-slate-900">
                   {(displayedQuotation.items || []).map((item, idx) => {
                     const gstAmount = (item.cgst_amount || 0) + (item.sgst_amount || 0) + (item.igst_amount || 0);
                     const itemTotal = (item.taxable_amount || 0) + (displayedQuotation.gst_enabled === false ? 0 : gstAmount);
                     return (
-                      <tr key={item._id || idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 align-top">
-                        <td className="py-3 px-3 font-bold text-slate-400">{idx + 1}</td>
-                        <td className="py-3 px-3">
-                          <div className="font-bold text-slate-900 dark:text-white text-xs">{item.product_name}</div>
+                      <tr key={item._id || idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 align-top transition-colors">
+                        <td className="py-3.5 px-3 text-center font-bold text-slate-400 text-xs">
+                          {idx + 1}
+                        </td>
+                        <td className="py-3.5 px-4 min-w-[340px]">
+                          <div className="font-bold text-slate-900 dark:text-white text-xs leading-snug">
+                            {item.product_name}
+                          </div>
                           {item.description ? (
-                            <div className="mt-1.5 max-w-xl">
+                            <div className="mt-2 w-full max-w-xl overflow-hidden rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 dark:border-white/10 dark:bg-slate-800/40">
                               <RichTextDisplay
                                 content={item.description}
-                                className="text-[11px] text-slate-600 dark:text-slate-300 bg-slate-50/70 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-100 dark:border-white/5 leading-relaxed"
+                                className="text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed"
                               />
                             </div>
                           ) : (
-                            <div className="text-[11px] text-slate-400 italic mt-0.5">
+                            <div className="text-[11px] text-slate-400 italic mt-1">
                               No technical specifications added
                             </div>
                           )}
@@ -1805,7 +1809,7 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
                             <button
                               type="button"
                               onClick={() => handleOpenEditItemDescription(idx)}
-                              className="mt-2 inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 transition cursor-pointer border border-blue-200/60 dark:border-blue-800/40"
+                              className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 transition cursor-pointer border border-blue-200/60 dark:border-blue-800/40"
                               title="Edit specifications with full rich text editor"
                             >
                               <Sparkles className="h-3 w-3" />
@@ -1813,25 +1817,25 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
                             </button>
                           )}
                         </td>
-                        <td className="py-3 px-3 text-slate-600 dark:text-slate-400 font-mono text-[11px]">
+                        <td className="py-3.5 px-3 text-center text-slate-600 dark:text-slate-400 font-mono text-[11px] whitespace-nowrap">
                           {item.hsn_code || "—"}
                         </td>
-                        <td className="py-3 px-3 text-right font-semibold text-slate-800 dark:text-slate-200">
+                        <td className="py-3.5 px-3 text-right font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
                           {item.quantity} {item.unit || ""}
                         </td>
-                        <td className="py-3 px-3 text-right font-medium text-slate-800 dark:text-slate-200">
+                        <td className="py-3.5 px-3 text-right font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">
                           {formatCurrencyINR(item.rate)}
                         </td>
-                        <td className="py-3 px-3 text-right text-slate-600 dark:text-slate-400">
+                        <td className="py-3.5 px-3 text-right text-slate-600 dark:text-slate-400 whitespace-nowrap">
                           {item.discount_percent ? `${item.discount_percent}%` : "—"}
                         </td>
-                        <td className="py-3 px-3 text-right font-semibold text-slate-900 dark:text-white">
+                        <td className="py-3.5 px-3 text-right font-semibold text-slate-900 dark:text-white whitespace-nowrap">
                           {formatCurrencyINR(item.taxable_amount || 0)}
                         </td>
-                        <td className="py-3 px-3 text-right text-slate-600 dark:text-slate-400">
+                        <td className="py-3.5 px-3 text-right text-slate-600 dark:text-slate-400 whitespace-nowrap">
                           {displayedQuotation.gst_enabled === false ? "Exempt" : `${item.gst_rate || 0}%`}
                         </td>
-                        <td className="py-3 px-3 text-right font-bold text-slate-900 dark:text-white">
+                        <td className="py-3.5 px-3 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
                           {formatCurrencyINR(itemTotal)}
                         </td>
                       </tr>
