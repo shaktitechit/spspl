@@ -16,7 +16,7 @@ const {
 const activityService = require('../activity/activity.service');
 const notificationService = require('../notifications/notification.service');
 const emailHelper = require('../messages/helpers/email.helper');
-const microsoftGraph = require('../../config/microsoftGraph');
+const { LEAD_MANAGER_URL } = require('../../config/env');
 const { logger } = require('../../utils/logger');
 const { ALLOWED_STATUS_TRANSITIONS } = require('./lead.constants');
 const { getVisibleLeadUserIds, asObjectId } = require('../team/teamVisibility.service');
@@ -44,9 +44,43 @@ function refId(value) {
   return String(value);
 }
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatProductsSummary(products) {
+  if (!Array.isArray(products) || products.length === 0) return 'Not specified';
+  const names = products
+    .map((p) => {
+      const name = p.product_name || p.name || (p.product && p.product.product_name) || '';
+      const qty = p.quantity ? ` (Qty: ${p.quantity})` : '';
+      return name ? `${name}${qty}` : null;
+    })
+    .filter(Boolean);
+  return names.length > 0 ? names.join(', ') : 'Not specified';
+}
+
+function formatLeadLocation(lead) {
+  const b = lead.billing_address || {};
+  const parts = [b.city, b.state, b.country].filter(Boolean);
+  return parts.length > 0 ? parts.join(', ') : 'Not specified';
+}
+
+function getLeadPortalUrl(leadId) {
+  const base = LEAD_MANAGER_URL || 'http://localhost:7010/dashboard';
+  const cleanBase = String(base).replace(/\/$/, '');
+  return `${cleanBase}/leads/${leadId}`;
+}
+
 /**
- * Best-effort in-app notification + assignment email for the lead assignee.
- * Keeps all workflow notifications; adds email only on assignment.
+ * Best-effort in-app notification + assignment / handover email for lead assignees.
+ * Handles primary assignees, co-assignees, and handover notices for unassigned/reassigned-from members.
  * Does not throw — lead actions must succeed even if alerts fail.
  */
 async function notifyLeadAssignee({
@@ -56,30 +90,66 @@ async function notifyLeadAssignee({
   recipientName,
   actor,
   isReassignment = false,
+  isHandover = false,
+  isPrimaryAssignee = true,
+  newAssigneeName = null,
+  coAssigneeNames = [],
+  notes = '',
 }) {
   const actorId = actor?._id ? String(actor._id) : null;
   const notifyUserId = recipientUserId ? String(recipientUserId) : null;
   if (!notifyUserId) return;
 
-  // Avoid self-noise when actor assigns to themselves.
+  // Avoid self-noise when actor assigns to themselves
   if (actorId && actorId === notifyUserId) return;
 
   const leadNo = lead.lead_no || '';
   const leadName = lead.name || 'Lead';
   const partyCompany = lead.company_name || 'Individual';
-  const priority = (lead.priority || 'medium').toString();
-  const actorName = actor?.name || actor?.email || 'Manager';
-  const actionVerb = isReassignment ? 'reassigned' : 'assigned';
-  const title = isReassignment ? 'Lead Reassigned to You' : 'New Lead Assigned';
-  const message = isReassignment
-    ? `Lead #${leadNo} (${leadName}) has been reassigned to you`
-    : `You have been assigned Lead #${leadNo} (${leadName} - ${partyCompany})`;
+  const priority = (lead.priority || 'medium').toString().toUpperCase();
+  const departmentName = (lead.department || 'sales').toString().toUpperCase();
+  const actorName = actor?.name || actor?.email || 'Lead Manager';
+  const location = formatLeadLocation(lead);
+  const productsInterested = formatProductsSummary(lead.products);
+  const leadPortalUrl = getLeadPortalUrl(lead._id);
+
+  let title = 'New Lead Assigned';
+  let message = `You have been assigned Lead #${leadNo} (${leadName} - ${partyCompany})`;
+  let subject = `[Lead Assigned] Lead #${leadNo} — ${leadName} (${departmentName})`;
+  let badgeLabel = 'ASSIGNED';
+  let headerSubtitle = 'A new lead has been assigned to you';
+  let introText = `Lead <strong>#${leadNo}</strong> (<strong>${leadName}</strong> — ${partyCompany}) has been assigned to you by <strong>${actorName}</strong>.`;
+  let portalHint = 'Please log in to Lead Manager to review this lead and continue the follow-up workflow.';
+
+  if (isHandover) {
+    title = 'Lead Reassigned / Handed Off';
+    message = `Lead #${leadNo} (${leadName}) has been reassigned to ${newAssigneeName || 'another team member'} by ${actorName}`;
+    subject = `[Lead Handed Off] Lead #${leadNo} — ${leadName} (${departmentName})`;
+    badgeLabel = 'HANDED OFF';
+    headerSubtitle = 'Lead Reassigned / Handed Over';
+    introText = `Lead <strong>#${leadNo}</strong> (<strong>${leadName}</strong> — ${partyCompany}) has been reassigned to <strong>${newAssigneeName || 'another team member'}</strong> by <strong>${actorName}</strong>. No further action is required from you on this lead.`;
+    portalHint = 'This lead is no longer in your active assignments. Lead records remain accessible in portal history.';
+  } else if (isReassignment) {
+    title = 'Lead Reassigned to You';
+    message = `Lead #${leadNo} (${leadName}) has been reassigned to you`;
+    subject = `[Lead Reassigned] Lead #${leadNo} — ${leadName} (${departmentName})`;
+    badgeLabel = 'REASSIGNED';
+    headerSubtitle = 'A lead has been reassigned to you';
+    introText = `Lead <strong>#${leadNo}</strong> (<strong>${leadName}</strong> — ${partyCompany}) has been reassigned to you by <strong>${actorName}</strong>.`;
+  } else if (!isPrimaryAssignee) {
+    title = `Tagged as Collaborator on Lead #${leadNo}`;
+    message = `You have been tagged as a co-assignee on Lead #${leadNo} (${leadName})`;
+    subject = `[Lead Co-Assignee] Lead #${leadNo} — ${leadName} (${departmentName})`;
+    badgeLabel = 'COLLABORATOR';
+    headerSubtitle = 'You have been tagged on a lead';
+    introText = `You have been added as a co-assignee / collaborator on Lead <strong>#${leadNo}</strong> (<strong>${leadName}</strong> — ${partyCompany}) by <strong>${actorName}</strong>.`;
+  }
 
   try {
     await notificationService.createForUser(notifyUserId, {
       title,
       message,
-      type: 'info',
+      type: isHandover ? 'warning' : 'info',
       module: 'lead',
       entity_type: 'lead',
       entity_id: lead._id,
@@ -92,27 +162,36 @@ async function notifyLeadAssignee({
 
   if (!recipientEmail) return;
 
+  const handoverNotesRowHtml = notes
+    ? `<tr><td class="label">Notes / Instructions</td><td class="value" style="font-size:12px;font-style:italic;">${escapeHtml(notes)}</td></tr>`
+    : '';
+
+  const ctaButtonHtml = `<a href="${leadPortalUrl}" style="display:inline-block;padding:10px 22px;background-color:#2563eb;color:#ffffff;text-decoration:none;font-weight:600;font-size:13px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">View Lead in Portal &rarr;</a>`;
+
   try {
     await emailHelper.sendTemplateEmail(
       recipientEmail,
       TEMPLATE_LEAD_ASSIGNED,
       {
-        subject: isReassignment
-          ? `[Lead Reassigned] Lead #${leadNo} — ${leadName}`
-          : `[Lead Assigned] Lead #${leadNo} — ${leadName}`,
+        subject,
         recipientName: recipientName || 'Team Member',
         leadNo,
         leadName,
         partyCompany,
+        department: departmentName,
+        contactPhone: lead.phone || '—',
+        location,
         priority,
-        actorName,
+        productsInterested,
         salesRepName: recipientName || resolveSalesRepFromLead(lead),
-        headerSubtitle: isReassignment
-          ? 'A lead has been reassigned to you'
-          : 'A new lead has been assigned to you',
-        badgeLabel: isReassignment ? 'REASSIGNED' : 'ASSIGNED',
-        introText: `Lead <strong>#${leadNo}</strong> (<strong>${leadName}</strong> — ${partyCompany}) has been <strong>${actionVerb}</strong> to you by <strong>${actorName}</strong>.`,
-        portalHint: 'Please log in to Lead Manager to review this lead and continue the follow-up workflow.',
+        actorName,
+        coAssignees: coAssigneeNames.length > 0 ? coAssigneeNames.join(', ') : 'None',
+        headerSubtitle,
+        badgeLabel,
+        introText,
+        portalHint,
+        handoverNotesRowHtml,
+        ctaButtonHtml,
       },
       [],
       [],
@@ -122,6 +201,90 @@ async function notifyLeadAssignee({
     logger.error(
       `[Lead Service] assignment email failed for ${recipientEmail}: ${err.message}`
     );
+  }
+}
+
+/**
+ * Dispatches differential in-app and email notifications when lead assignments change.
+ * Handles newly added assignees, promoted primary assignees, and removed/handed off assignees.
+ */
+async function handleLeadAssignmentNotifications({
+  lead,
+  oldAssignedUsers = [],
+  newAssignedUsers = [],
+  actor,
+  notes = '',
+  isNewLead = false,
+}) {
+  const { User } = getModels();
+  const actorId = actor?._id ? String(actor._id) : null;
+
+  const oldClean = oldAssignedUsers.filter(Boolean).map(String);
+  const newClean = newAssignedUsers.filter(Boolean).map(String);
+
+  const oldSet = new Set(oldClean);
+  const newSet = new Set(newClean);
+
+  const primaryAssigneeId = newClean.length > 0 ? newClean[0] : (lead.assigned_to ? String(lead.assigned_to) : null);
+
+  const allUserIds = [...new Set([...oldSet, ...newSet])];
+  if (allUserIds.length === 0) return;
+
+  const userDocs = await User.find({ _id: { $in: allUserIds } }).select('name email').lean();
+  const userMap = new Map(userDocs.map((u) => [String(u._id), u]));
+
+  const primaryDoc = primaryAssigneeId ? userMap.get(primaryAssigneeId) : null;
+  const primaryName = primaryDoc?.name || 'another team member';
+
+  // 1. Notify removed / unassigned users (Handover Notice)
+  if (!isNewLead) {
+    for (const oldUid of oldSet) {
+      if (!newSet.has(oldUid) && oldUid !== actorId) {
+        const uDoc = userMap.get(oldUid);
+        if (uDoc) {
+          await notifyLeadAssignee({
+            lead,
+            recipientUserId: oldUid,
+            recipientEmail: uDoc.email,
+            recipientName: uDoc.name,
+            actor,
+            isHandover: true,
+            newAssigneeName: newSet.size > 0 ? primaryName : 'Unassigned pool',
+            notes,
+          });
+        }
+      }
+    }
+  }
+
+  // 2. Notify added or primary assigned users
+  const coAssigneeNames = newClean
+    .map((uid) => userMap.get(uid)?.name)
+    .filter(Boolean);
+
+  for (const newUid of newSet) {
+    if (newUid === actorId) continue;
+    const isNewToLead = !oldSet.has(newUid);
+    const isPrimary = newUid === primaryAssigneeId;
+    const wasOldPrimary = oldClean.length > 0 && oldClean[0] === newUid;
+
+    if (isNewToLead || (!wasOldPrimary && isPrimary)) {
+      const uDoc = userMap.get(newUid);
+      if (uDoc) {
+        await notifyLeadAssignee({
+          lead,
+          recipientUserId: newUid,
+          recipientEmail: uDoc.email,
+          recipientName: uDoc.name,
+          actor,
+          isReassignment: !isNewLead && oldSet.size > 0,
+          isHandover: false,
+          isPrimaryAssignee: isPrimary,
+          coAssigneeNames: coAssigneeNames.filter((n) => n !== uDoc.name),
+          notes,
+        });
+      }
+    }
   }
 }
 
@@ -631,22 +794,16 @@ async function create(body, user) {
     new_value: plain,
   });
 
-  // Notify newly assigned users (in-app + email; skip actor)
+  // Notify assigned users (in-app + email; skip actor)
   if (assigned_users.length > 0) {
-    const { User } = getModels();
-    for (const uid of assigned_users) {
-      if (String(uid) !== String(user._id)) {
-        const assignee = await User.findById(uid).select('name email').lean();
-        await notifyLeadAssignee({
-          lead: plain,
-          recipientUserId: uid,
-          recipientEmail: assignee?.email || null,
-          recipientName: assignee?.name || null,
-          actor: user,
-          isReassignment: false,
-        });
-      }
-    }
+    await handleLeadAssignmentNotifications({
+      lead: plain,
+      oldAssignedUsers: [],
+      newAssignedUsers: assigned_users,
+      actor: user,
+      notes: body.notes || '',
+      isNewLead: true,
+    });
   }
 
   return plain;
@@ -698,6 +855,9 @@ async function update(id, body, user) {
   ];
 
   const oldAssignedTo = lead.assigned_to ? String(lead.assigned_to) : null;
+  const oldAssignedUsers = Array.isArray(lead.assigned_users) && lead.assigned_users.length > 0
+    ? lead.assigned_users.map(String)
+    : (oldAssignedTo ? [oldAssignedTo] : []);
   let assignmentChanged = false;
   let nextAssignedId = null;
 
@@ -765,17 +925,23 @@ async function update(id, body, user) {
     new_value: plain,
   });
 
-  // When assignee changes via update, keep workflow notification + email the assignee
-  if (assignmentChanged && nextAssignedId && nextAssignedId !== String(user._id)) {
-    const { User } = getModels();
-    const assignee = await User.findById(nextAssignedId).select('name email').lean();
-    await notifyLeadAssignee({
+  // When assignee or assigned_users changes via update, dispatch notifications (including handovers)
+  const newAssignedUsers = Array.isArray(lead.assigned_users) && lead.assigned_users.length > 0
+    ? lead.assigned_users.map(String)
+    : (lead.assigned_to ? [String(lead.assigned_to)] : []);
+
+  const usersChanged =
+    oldAssignedUsers.length !== newAssignedUsers.length ||
+    oldAssignedUsers.some((u, i) => u !== newAssignedUsers[i]);
+
+  if (assignmentChanged || usersChanged) {
+    await handleLeadAssignmentNotifications({
       lead: plain,
-      recipientUserId: nextAssignedId,
-      recipientEmail: assignee?.email || null,
-      recipientName: assignee?.name || null,
+      oldAssignedUsers,
+      newAssignedUsers,
       actor: user,
-      isReassignment: Boolean(oldAssignedTo),
+      notes: body.notes || '',
+      isNewLead: false,
     });
   }
 
@@ -810,6 +976,9 @@ async function assign(id, body, user) {
   if (!targetUser) throw new ApiError(404, 'Target user not found');
 
   const oldAssignedTo = lead.assigned_to;
+  const oldAssignedUsers = Array.isArray(lead.assigned_users) && lead.assigned_users.length > 0
+    ? lead.assigned_users.map(String)
+    : (oldAssignedTo ? [String(oldAssignedTo)] : []);
   const isReassignment = oldAssignedTo && String(oldAssignedTo) !== String(targetUserId);
 
   if (body?.department) {
@@ -841,20 +1010,15 @@ async function assign(id, body, user) {
     new_value: { assigned_to: lead.assigned_to, assigned_users: lead.assigned_users },
   });
 
-  // Notify all target users (in-app + email; excluding actor)
-  for (const uid of rawAssignedUsers) {
-    if (String(uid) !== String(user._id)) {
-      const uDoc = await User.findById(uid).select('name email').lean();
-      await notifyLeadAssignee({
-        lead,
-        recipientUserId: uid,
-        recipientEmail: uDoc?.email || null,
-        recipientName: uDoc?.name || null,
-        actor: user,
-        isReassignment,
-      });
-    }
-  }
+  // Dispatch assignment and handover notifications
+  await handleLeadAssignmentNotifications({
+    lead,
+    oldAssignedUsers,
+    newAssignedUsers: rawAssignedUsers,
+    actor: user,
+    notes: notes || '',
+    isNewLead: false,
+  });
 
   const populated = await Lead.findById(id).populate(LEAD_POPULATE).lean();
   return toPlain(populated);

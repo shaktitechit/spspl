@@ -95,10 +95,48 @@ function resolveFollowUpOwnerUserId(fu = {}) {
   return assigneeId || qRepId || qCreatorId || fallbackId;
 }
 
+/**
+ * All assignee / owner user ids for routing follow-up reminders (including co-assignees).
+ * @param {object} fu
+ * @returns {string[]}
+ */
+function resolveFollowUpAllUserIds(fu = {}) {
+  const set = new Set();
+  const lead = fu.lead && typeof fu.lead === 'object' ? fu.lead : null;
+  if (lead?.assigned_to) {
+    const id = refId(lead.assigned_to);
+    if (id) set.add(id);
+  }
+  if (Array.isArray(lead?.assigned_users)) {
+    for (const u of lead.assigned_users) {
+      const id = refId(u);
+      if (id) set.add(id);
+    }
+  }
+
+  const quotation = fu.quotation && typeof fu.quotation === 'object' ? fu.quotation : null;
+  if (quotation?.sales_person_user) {
+    const id = refId(quotation.sales_person_user);
+    if (id) set.add(id);
+  }
+  if (quotation?.created_by) {
+    const id = refId(quotation.created_by);
+    if (id) set.add(id);
+  }
+
+  if (set.size === 0 && fu.created_by) {
+    const id = refId(fu.created_by);
+    if (id) set.add(id);
+  }
+
+  return Array.from(set);
+}
+
 module.exports = {
   refId,
   resolveSalesRepFromFollowUp,
   resolveSalesRepFromLead,
   resolveSalesRepFromQuotation,
   resolveFollowUpOwnerUserId,
+  resolveFollowUpAllUserIds,
 };

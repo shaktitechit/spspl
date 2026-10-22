@@ -21,4 +21,5 @@ module.exports = {
   FOLLOWUP_REMINDER_ENABLED: process.env.FOLLOWUP_REMINDER_ENABLED ?? 'true',
   FOLLOWUP_REMINDER_CRON: process.env.FOLLOWUP_REMINDER_CRON || '0 7 * * *',
   FOLLOWUP_REMINDER_TZ: process.env.FOLLOWUP_REMINDER_TZ || 'Asia/Kolkata',
+  LEAD_MANAGER_URL: process.env.LEAD_MANAGER_URL || process.env.NEXT_PUBLIC_LEAD_MANAGER_URL || 'http://localhost:7010/dashboard',
 };

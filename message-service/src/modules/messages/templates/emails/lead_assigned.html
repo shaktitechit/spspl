@@ -173,35 +173,55 @@
               <td class="value">#{{leadNo}}</td>
             </tr>
             <tr>
-              <td class="label">Reference</td>
-              <td class="value">{{leadNo}}</td>
+              <td class="label">Department</td>
+              <td class="value"><span style="display:inline-block;padding:2px 8px;background:#e0f2fe;color:#0369a1;border-radius:4px;font-size:11px;font-weight:700;">{{department}}</span></td>
             </tr>
             <tr>
-              <td class="label">Contact / Party</td>
+              <td class="label">Contact Person</td>
               <td class="value">{{leadName}}</td>
             </tr>
             <tr>
-              <td class="label">Company</td>
+              <td class="label">Company / Org</td>
               <td class="value">{{partyCompany}}</td>
+            </tr>
+            <tr>
+              <td class="label">Phone</td>
+              <td class="value">{{contactPhone}}</td>
+            </tr>
+            <tr>
+              <td class="label">Location</td>
+              <td class="value">{{location}}</td>
             </tr>
             <tr>
               <td class="label">Priority</td>
               <td class="value">{{priority}}</td>
             </tr>
             <tr>
-              <td class="label">Sales representative</td>
+              <td class="label">Equipment / Products</td>
+              <td class="value" style="font-size:12px;max-width:280px;word-break:break-word;">{{productsInterested}}</td>
+            </tr>
+            <tr>
+              <td class="label">Primary Sales Rep</td>
               <td class="value">{{salesRepName}}</td>
             </tr>
             <tr>
               <td class="label">Assigned by</td>
               <td class="value">{{actorName}}</td>
             </tr>
+            <tr>
+              <td class="label">Co-assignees</td>
+              <td class="value" style="font-size:12px;">{{coAssignees}}</td>
+            </tr>
+            {{handoverNotesRowHtml}}
           </table>
         </div>
 
         <div class="action-box">
           <div class="action-title">Next step</div>
           <div>{{portalHint}}</div>
+          <div style="margin-top: 12px; text-align: center;">
+            {{ctaButtonHtml}}
+          </div>
         </div>
       </div>
 

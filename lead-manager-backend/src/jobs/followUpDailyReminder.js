@@ -12,6 +12,7 @@ const { logger } = require('../utils/logger');
 const {
   resolveSalesRepFromFollowUp,
   resolveFollowUpOwnerUserId,
+  resolveFollowUpAllUserIds,
 } = require('../utils/followUpSalesRep');
 
 const CLOSED_LEAD_STATUSES = new Set(['won', 'lost', 'converted']);
@@ -279,10 +280,12 @@ function groupByAssignee(rows) {
       if (qStatus && CLOSED_QUOTATION_STATUSES.has(qStatus)) continue;
     }
 
-    const userId = resolveFollowUpOwnerUserId(fu);
-    if (!userId) continue;
-    if (!byUser.has(userId)) byUser.set(userId, []);
-    byUser.get(userId).push(fu);
+    const userIds = resolveFollowUpAllUserIds(fu);
+    for (const userId of userIds) {
+      if (!userId) continue;
+      if (!byUser.has(userId)) byUser.set(userId, []);
+      byUser.get(userId).push(fu);
+    }
   }
   return byUser;
 }
