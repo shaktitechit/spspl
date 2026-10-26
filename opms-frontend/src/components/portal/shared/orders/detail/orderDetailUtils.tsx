@@ -16,6 +16,10 @@ export function pickList(raw: unknown): Record<string, unknown>[] {
     const o = raw as Record<string, unknown>;
     if (Array.isArray(o.items)) return o.items as Record<string, unknown>[];
     if (Array.isArray(o.data)) return o.data as Record<string, unknown>[];
+    if (Array.isArray(o.attachments)) return o.attachments as Record<string, unknown>[];
+    if (Array.isArray(o.rows)) return o.rows as Record<string, unknown>[];
+    if (Array.isArray(o.records)) return o.records as Record<string, unknown>[];
+    if (Array.isArray(o.documents)) return o.documents as Record<string, unknown>[];
   }
   return [];
 }
@@ -40,10 +44,12 @@ export function formatDateShort(v: unknown): string {
 
 export function detailRefId(value: unknown): string {
   if (!value) return "";
-  if (typeof value === "string") return value;
+  if (typeof value === "string") return value.trim();
   if (typeof value === "object") {
     const o = value as Record<string, unknown>;
-    return String(o._id ?? o.id ?? "");
+    return String(
+      o._id ?? o.id ?? o.party_id ?? o.partyId ?? o.customer_id ?? o.customerId ?? ""
+    ).trim();
   }
   return "";
 }
@@ -125,6 +131,7 @@ export function countDispatchVisibleAttachments(attachments: unknown[]): number 
 export const TAB_LABELS: Record<string, string> = {
   approvals: "Approvals",
   po: "Purchase Order",
+  performa: "Performa",
   cost_sheet: "Cost Sheet",
   kyc: "KYC",
   dispatches: "Dispatches",
@@ -141,6 +148,7 @@ export const TAB_LABELS: Record<string, string> = {
 export const MOBILE_TAB_SHORT_LABELS: Record<string, string> = {
   approvals: "Approvals",
   po: "PO",
+  performa: "Performa",
   cost_sheet: "Cost Sheet",
   kyc: "KYC",
   dispatches: "Dispatch",

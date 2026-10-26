@@ -17,7 +17,7 @@ type TopbarProps = { portal: string };
 
 export function Topbar({ portal }: TopbarProps) {
   const user = useAppSelector((s) => s.auth.user);
-  const { openMobileNav, mobileNavOpen } = useShellNav();
+  const { openMobileNav, mobileNavOpen, headerExtra } = useShellNav();
   const [showRemindersModal, setShowRemindersModal] = useState(false);
   const isDark = useIsDark();
 
@@ -68,7 +68,13 @@ export function Topbar({ portal }: TopbarProps) {
         {label}
       </Link>
 
-      <GlobalSearch portal={portal} />
+      <GlobalSearch portal={portal} reduced={Boolean(headerExtra)} />
+
+      {headerExtra ? (
+        <div className="min-w-0 flex-1 overflow-x-auto scrollbar-none flex items-center px-1">
+          {headerExtra}
+        </div>
+      ) : null}
 
       <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2 md:gap-3">
         <button

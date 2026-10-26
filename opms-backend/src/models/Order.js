@@ -228,6 +228,22 @@ const orderItemSchema = new mongoose.Schema(
  * ORDER
  * ======================================================= */
 
+const orderAddressSchema = new mongoose.Schema(
+  {
+    label: { type: String, trim: true, default: "" },
+    recipient_name: { type: String, trim: true, default: "" },
+    phone: { type: String, trim: true, default: "" },
+    gst_no: { type: String, uppercase: true, trim: true, default: "" },
+    address_line_1: { type: String, trim: true, default: "" },
+    address_line_2: { type: String, trim: true, default: "" },
+    city: { type: String, trim: true, default: "" },
+    state: { type: String, trim: true, default: "" },
+    pincode: { type: String, trim: true, default: "" },
+    country: { type: String, trim: true, default: "India" },
+  },
+  { _id: false }
+);
+
 const orderSchema = new mongoose.Schema(
   {
     company_id: {
@@ -264,7 +280,7 @@ const orderSchema = new mongoose.Schema(
       index: true,
     },
 
-    /* ----- Party ----- */
+    /* ----- Party & Addresses ----- */
 
     customer: {
       type: mongoose.Schema.Types.ObjectId,
@@ -283,6 +299,9 @@ const orderSchema = new mongoose.Schema(
       ref: "Lead",
       index: true,
     },
+
+    billing_address: orderAddressSchema,
+    shipping_address: orderAddressSchema,
 
     /* ----- Status (three layers) -----
      * lifecycle_status — business outcome (draft → active → partially_fulfilled → fulfilled)
@@ -548,6 +567,12 @@ const orderSchema = new mongoose.Schema(
 
     remarks: String,
     internal_notes: String,
+
+    /* ----- Performa ----- */
+    order_performa: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "OrderPerforma",
+    },
 
     /* ----- Audit ----- */
 

@@ -12,6 +12,8 @@ import {
   Trash2,
   Plus,
   ArrowLeft,
+  ArrowRight,
+  FileText,
   Check,
   History,
 } from "lucide-react";
@@ -24,6 +26,8 @@ import {
   useCreateOrderMutation,
   useListPartiesQuery,
   useListProductsQuery,
+  useCreateAttachmentMutation,
+  useUpdateOrderPerformaMutation,
 } from "@/store/api";
 import { useAppSelector } from "@/store";
 import { Button } from "@/components/ui/Button";
@@ -31,6 +35,18 @@ import {
   PreviousPartyItemsModal,
   type PreviousPartyOrderItem,
 } from "@/components/portal/shared/orders/modals/PreviousPartyItemsModal";
+import {
+  PerformaInvoiceFields,
+  type PerformaFormValues,
+  type PerformaAttachmentFiles,
+  INITIAL_PERFORMA_VALUES,
+} from "@/components/portal/shared/orders/performa/PerformaInvoiceFields";
+import {
+  OrderAddressSelector,
+  type OrderAddressData,
+  emptyOrderAddress,
+  formatAddressOneLine,
+} from "@/components/portal/shared/orders/addresses/OrderAddressSelector";
 
 const inputClass =
   "w-full rounded-lg border border-slate-200/95 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-500/25 dark:border-white/15 dark:bg-slate-950 dark:text-slate-50";
@@ -103,12 +119,32 @@ function newLine(): LineRow {
   };
 }
 
-function getPriceForRateType(p: Entity | undefined, rateType: string): number {
-  if (!p) return 0;
-  if (rateType === "SR") return Number(p.base_price ?? 0);
-  if (rateType === "SRA") return Number(p.minimum_sale_rate ?? p.base_price ?? 0);
-  if (rateType === "CR") return Number(p.mrp ?? p.base_price ?? 0);
-  return Number(p.base_price ?? 0);
+function formatMoney(v: unknown): string {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(2) : "0.00";
+}
+
+function lineGross(row: LineRow): number {
+  return Number(row.quantity || 0) * Number(row.unit_price || 0);
+}
+
+function lineDiscount(row: LineRow): number {
+  const gross = lineGross(row);
+  const percent = Number(row.discount_percent || 0);
+  if (percent > 0) return (gross * percent) / 100;
+  return Number(row.discount_amount || 0);
+}
+
+function lineTaxable(row: LineRow): number {
+  return Math.max(0, lineGross(row) - lineDiscount(row));
+}
+
+function lineGst(row: LineRow): number {
+  return (lineTaxable(row) * Number(row.gst_percent || 0)) / 100;
+}
+
+function lineTotal(row: LineRow): number {
+  return lineTaxable(row) + lineGst(row);
 }
 
 interface PartyAutocompleteProps {
@@ -191,9 +227,9 @@ function PartyAutocomplete({
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-slate-900">
+        <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-slate-900">
           {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">
+            <div className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
               No parties found
             </div>
           ) : (
@@ -201,6 +237,7 @@ function PartyAutocomplete({
               const id = String(p._id ?? p.id ?? "");
               const isSelected = id === selectedId;
               const name = String(p.party_name || "Party");
+              const code = p.party_code ? ` · ${p.party_code}` : "";
               const type = p.party_type ? ` (${p.party_type})` : "";
               return (
                 <button
@@ -210,21 +247,17 @@ function PartyAutocomplete({
                     onChange(id);
                     setIsOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-white/5 ${isSelected
-                      ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400 font-medium"
-                      : "text-slate-800 dark:text-slate-200"
+                  className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition hover:bg-slate-50 dark:hover:bg-white/5 ${isSelected
+                    ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400 font-medium"
+                    : "text-slate-800 dark:text-slate-200"
                     }`}
                 >
-                  <span>
+                  <span className="truncate">
                     {name}
-                    {type && <span className="text-xs text-slate-400 ml-1">{type}</span>}
-                    {p.sra === true && (
-                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-1.5 py-0.5 text-2xs font-bold text-emerald-700 ring-1 ring-inset ring-emerald-600/10 dark:bg-emerald-500/10 dark:text-emerald-400 ml-1.5">
-                        SRA
-                      </span>
-                    )}
+                    {code && <span className="text-2xs text-slate-500 dark:text-slate-400 ml-1">{code}</span>}
+                    {type && <span className="text-2xs text-slate-400 ml-1">{type}</span>}
                   </span>
-                  {isSelected && <Check className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+                  {isSelected && <Check className="h-3.5 w-3.5 flex-shrink-0 text-blue-600 dark:text-blue-400" />}
                 </button>
               );
             })
@@ -258,9 +291,7 @@ function ProductAutocomplete({
 
   useEffect(() => {
     if (selectedProduct) {
-      const name = String(selectedProduct.product_name || "");
-      const sku = selectedProduct.sku ? ` (${selectedProduct.sku})` : "";
-      setSearch(`${name}${sku}`);
+      setSearch(String(selectedProduct.product_name || ""));
     } else {
       setSearch("");
     }
@@ -282,9 +313,7 @@ function ProductAutocomplete({
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
         if (selectedProduct) {
-          const name = String(selectedProduct.product_name || "");
-          const sku = selectedProduct.sku ? ` (${selectedProduct.sku})` : "";
-          setSearch(`${name}${sku}`);
+          setSearch(String(selectedProduct.product_name || ""));
         } else {
           setSearch("");
         }
@@ -340,8 +369,8 @@ function ProductAutocomplete({
                     setIsOpen(false);
                   }}
                   className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition hover:bg-slate-50 dark:hover:bg-white/5 ${isSelected
-                      ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400 font-medium"
-                      : "text-slate-800 dark:text-slate-200"
+                    ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400 font-medium"
+                    : "text-slate-800 dark:text-slate-200"
                     }`}
                 >
                   <span className="truncate">
@@ -382,16 +411,135 @@ export default function CreateOrderPage() {
   const [remarks, setRemarks] = useState("");
   const [lines, setLines] = useState<LineRow[]>(() => [newLine()]);
   const [previousItemsModalOpen, setPreviousItemsModalOpen] = useState(false);
+  const [step, setStep] = useState<1 | 2>(1);
+  const [performaValues, setPerformaValues] = useState<PerformaFormValues>(INITIAL_PERFORMA_VALUES);
+  const [attachmentFiles, setAttachmentFiles] = useState<PerformaAttachmentFiles>({
+    po_file: null,
+    cost_sheet_file: null,
+    aadhaar_file: null,
+    pan_file: null,
+    gst_file: null,
+    kyc_files: [],
+  });
 
   const [createOrder, { isLoading }] = useCreateOrderMutation();
+  const [createAttachment] = useCreateAttachmentMutation();
+  const [updateOrderPerforma] = useUpdateOrderPerformaMutation();
+
+  const handleAttachmentFileChange = useCallback(
+    (field: keyof PerformaAttachmentFiles, file: File | File[] | null) => {
+      setAttachmentFiles((prev) => ({ ...prev, [field]: file }));
+    },
+    [],
+  );
 
   const selectedParty = useMemo(() => {
     return parties.find((p) => String(p._id ?? p.id ?? "") === String(partyId));
   }, [parties, partyId]);
 
+  const selectedPartyAddress = useMemo(() => {
+    if (!selectedParty) return "";
+    const addr = (selectedParty.address || selectedParty.billing_address || "") as any;
+    if (typeof addr === "string") return addr;
+    if (typeof addr === "object" && addr !== null) {
+      return [addr.address_line_1, addr.address_line_2, addr.city, addr.state, addr.pincode]
+        .filter(Boolean)
+        .join(", ");
+    }
+    return "";
+  }, [selectedParty]);
+
   const selectedPartyName = selectedParty
     ? String(selectedParty.party_name || "")
     : "";
+
+  const [billingAddress, setBillingAddress] = useState<OrderAddressData>(emptyOrderAddress);
+  const [shippingAddress, setShippingAddress] = useState<OrderAddressData>(emptyOrderAddress);
+  const [saveShippingToParty, setSaveShippingToParty] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (selectedParty) {
+      const b = (selectedParty.billing_address || selectedParty.address || {}) as any;
+      const bAddr: OrderAddressData = {
+        label: "Billing Address",
+        recipient_name: String(b.recipient_name || selectedParty.contact_person || ""),
+        phone: String(b.phone || selectedParty.mobile || ""),
+        gst_no: String(b.gst_no || selectedParty.gst_no || ""),
+        address_line_1: String(b.address_line_1 || ""),
+        address_line_2: String(b.address_line_2 || ""),
+        city: String(b.city || ""),
+        state: String(b.state || ""),
+        pincode: String(b.pincode || ""),
+        country: String(b.country || "India"),
+      };
+      setBillingAddress(bAddr);
+
+      const s = (selectedParty.shipping_address || {}) as any;
+      const sList = Array.isArray(selectedParty.shipping_addresses)
+        ? (selectedParty.shipping_addresses as any[])
+        : [];
+      const defaultInList = sList.find((item) => item.is_default);
+      const chosen = defaultInList || (s.address_line_1 ? s : null);
+
+      if (chosen) {
+        setShippingAddress({
+          label: chosen.label || "Saved Delivery Location",
+          recipient_name: chosen.recipient_name || selectedParty.contact_person || "",
+          phone: chosen.phone || selectedParty.mobile || "",
+          gst_no: chosen.gst_no || selectedParty.gst_no || "",
+          address_line_1: chosen.address_line_1 || "",
+          address_line_2: chosen.address_line_2 || "",
+          city: chosen.city || "",
+          state: chosen.state || "",
+          pincode: chosen.pincode || "",
+          country: chosen.country || "India",
+        });
+      } else {
+        setShippingAddress(bAddr);
+      }
+
+      // Prefill performa default values from party
+      const pType = String((selectedParty as any).party_type || "").toLowerCase();
+      const friendlyCustomerType =
+        pType === "hospital" ? "Hospital" :
+        pType === "dealer" ? "Dealer" :
+        pType === "distributor" ? "Distributor" :
+        pType === "institutional" ? "Institutional" :
+        pType === "government" ? "Government" :
+        "Direct Customer";
+
+      setPerformaValues((prev) => ({
+        ...prev,
+        customer_type: prev.customer_type || friendlyCustomerType,
+        payment_terms: prev.payment_terms || String((selectedParty as any).payment_terms || "30 days"),
+        freight_charges: prev.freight_charges || "Included",
+        sales_person: prev.sales_person || String(user?.name || user?.username || ""),
+        ship_to_address: prev.ship_to_address || formatAddressOneLine(chosen || bAddr),
+      }));
+    } else {
+      setBillingAddress(emptyOrderAddress);
+      setShippingAddress(emptyOrderAddress);
+    }
+  }, [selectedParty, user]);
+
+  useEffect(() => {
+    if (shippingAddress.address_line_1) {
+      const formatted = formatAddressOneLine(shippingAddress);
+      setPerformaValues((prev) => ({
+        ...prev,
+        ship_to_address: formatted,
+      }));
+    }
+  }, [shippingAddress]);
+
+  useEffect(() => {
+    if (expectedDate) {
+      setPerformaValues((prev) => ({
+        ...prev,
+        dispatch_date: prev.dispatch_date || expectedDate,
+      }));
+    }
+  }, [expectedDate]);
 
   const onPartyChange = useCallback((id: string) => {
     setPartyId(id);
@@ -425,10 +573,11 @@ export default function CreateOrderPage() {
               gst_percent: 18,
             };
           }
-          const price = getPriceForRateType(p, row.applied_rate_type);
+          const pid = String(p._id ?? p.id ?? "");
+          const defaultPrice = Number(p.standard_rate ?? p.price ?? p.unit_price ?? p.mrp ?? 0);
           return {
             ...row,
-            productId: String(p._id ?? p.id ?? ""),
+            productId: pid,
             product_name: String(p.product_name ?? ""),
             sku: String(p.sku ?? ""),
             brand: String(p.brand ?? ""),
@@ -436,7 +585,7 @@ export default function CreateOrderPage() {
             product_group: String(p.product_group ?? ""),
             product_subgroup: String(p.product_subgroup ?? ""),
             unit: String(p.unit ?? ""),
-            unit_price: price,
+            unit_price: defaultPrice,
             gst_percent: Number(p.gst_percent ?? p.default_gst_rate ?? p.gst_rate ?? 18),
           };
         }),
@@ -445,37 +594,20 @@ export default function CreateOrderPage() {
     [products],
   );
 
-  const onRateTypeChange = useCallback(
-    (key: string, rateType: string) => {
-      setLines((prev) =>
-        prev.map((row) => {
-          if (row.key !== key) return row;
-          const p = products.find(
-            (x) => String(x._id ?? x.id ?? "") === String(row.productId),
-          );
-          const price = getPriceForRateType(p, rateType);
-          return {
-            ...row,
-            applied_rate_type: rateType,
-            unit_price: price,
-          };
-        }),
-      );
-    },
-    [products],
-  );
-
   const loadPreviousItems = useCallback(
-    (items: PreviousPartyOrderItem[]) => {
-      const mappedLines: LineRow[] = items.map((item) => {
-        const prod = products.find(
-          (pr) => String(pr._id ?? pr.id ?? "") === String(item.productId),
+    (selectedItems: PreviousPartyOrderItem[]) => {
+      if (!selectedItems.length) return;
+      const mappedLines: LineRow[] = selectedItems.map((item) => {
+        const p = products.find(
+          (x) => String(x._id ?? x.id ?? "") === String(item.productId),
         );
-        const rateType = item.applied_rate_type || "SR";
-        const price = getPriceForRateType(prod, rateType);
-        const gst = prod
-          ? Number(prod.gst_percent ?? prod.default_gst_rate ?? prod.gst_rate ?? 18)
-          : item.gst_percent;
+        const price =
+          Number(item.unit_price) > 0
+            ? Number(item.unit_price)
+            : Number(p?.standard_rate ?? p?.price ?? p?.unit_price ?? p?.mrp ?? 0);
+        const gst =
+          item.gst_percent ??
+          Number(p?.gst_percent ?? p?.default_gst_rate ?? p?.gst_rate ?? 18);
 
         return {
           key:
@@ -493,10 +625,10 @@ export default function CreateOrderPage() {
           quantity: item.quantity,
           free_qty: item.free_qty,
           unit_price: price,
-          discount_percent: 0,
-          discount_amount: 0,
+          discount_percent: Number(item.discount_percent ?? 0),
+          discount_amount: Number(item.discount_amount ?? 0),
           gst_percent: gst,
-          applied_rate_type: rateType,
+          applied_rate_type: "MANUAL",
           remarks: item.remarks,
         };
       });
@@ -510,6 +642,26 @@ export default function CreateOrderPage() {
     },
     [products],
   );
+
+  const liveSummary = useMemo(() => {
+    let subtotal = 0;
+    let discount = 0;
+    let taxable = 0;
+    let gst = 0;
+    let total = 0;
+
+    for (const row of lines) {
+      if (!row.productId) continue;
+      subtotal += lineGross(row);
+      discount += lineDiscount(row);
+      taxable += lineTaxable(row);
+      gst += lineGst(row);
+      total += lineTotal(row);
+    }
+
+    const finalTotal = Math.max(0, total - Number(headerDiscount || 0));
+    return { subtotal, discount, taxable, gst, total: finalTotal };
+  }, [lines, headerDiscount]);
 
   const onSubmit = useCallback(
     async (e: FormEvent) => {
@@ -563,6 +715,40 @@ export default function CreateOrderPage() {
         return;
       }
 
+      const friendlyCustomerType = (() => {
+        const pType = String((selectedParty as any)?.party_type || "").toLowerCase();
+        if (pType === "hospital") return "Hospital";
+        if (pType === "dealer") return "Dealer";
+        if (pType === "distributor") return "Distributor";
+        if (pType === "institutional") return "Institutional";
+        if (pType === "government") return "Government";
+        return "Direct Customer";
+      })();
+
+      const finalShipTo =
+        performaValues.ship_to_address.trim() ||
+        (shippingAddress.address_line_1
+          ? formatAddressOneLine(shippingAddress)
+          : billingAddress.address_line_1
+          ? formatAddressOneLine(billingAddress)
+          : selectedPartyAddress);
+
+      const finalPerforma: PerformaFormValues = {
+        ...performaValues,
+        sales_person: performaValues.sales_person.trim() || String(user?.name || user?.username || ""),
+        dispatch_date: performaValues.dispatch_date || expectedDate,
+        ship_to_address: finalShipTo,
+        payment_terms: performaValues.payment_terms.trim() || String((selectedParty as any)?.payment_terms || "30 days"),
+        customer_type: performaValues.customer_type.trim() || friendlyCustomerType,
+        freight_charges: performaValues.freight_charges.trim() || "Included",
+        margin_sheet_attached: performaValues.margin_sheet_attached || (attachmentFiles.cost_sheet_file ? "Attached" : ""),
+        kyc_status: performaValues.kyc_status || (
+          attachmentFiles.aadhaar_file || attachmentFiles.pan_file || attachmentFiles.gst_file || (attachmentFiles.kyc_files && attachmentFiles.kyc_files.length > 0)
+            ? "Attached"
+            : ""
+        ),
+      };
+
       const body = {
         party: partyId,
         order_items: prepared,
@@ -572,10 +758,144 @@ export default function CreateOrderPage() {
         order_date: orderDate,
         expected_delivery_date: expectedDate,
         assigned_sales_user: (user?._id || user?.id) ? String(user?._id || user?.id) : undefined,
+        billing_address: billingAddress.address_line_1 ? billingAddress : undefined,
+        shipping_address: shippingAddress.address_line_1
+          ? shippingAddress
+          : billingAddress.address_line_1
+          ? billingAddress
+          : undefined,
+        save_shipping_to_party: saveShippingToParty,
+        performa: finalPerforma,
       };
 
       try {
         const data = (await createOrder(body).unwrap()) as any;
+        const createdOrderId = String(data?._id || data?.id || data?.order_id || "");
+
+        if (createdOrderId) {
+          if (attachmentFiles.po_file) {
+            const fd = new FormData();
+            fd.append("file", attachmentFiles.po_file);
+            fd.append("entity_type", "order");
+            fd.append("entity_id", createdOrderId);
+            fd.append("category", "po");
+            fd.append("remarks", "Purchase Order (PO)");
+            await createAttachment(fd).unwrap().catch((err) => {
+              console.warn("Failed to upload PO attachment:", err);
+            });
+          }
+
+          if (attachmentFiles.cost_sheet_file) {
+            const fd = new FormData();
+            fd.append("file", attachmentFiles.cost_sheet_file);
+            fd.append("entity_type", "order");
+            fd.append("entity_id", createdOrderId);
+            fd.append("category", "cost_sheet");
+            fd.append("remarks", "Cost Sheet / Margin Sheet");
+            await createAttachment(fd).unwrap().catch((err) => {
+              console.warn("Failed to upload Cost Sheet attachment:", err);
+            });
+          }
+
+          if (attachmentFiles.aadhaar_file) {
+            const fd = new FormData();
+            fd.append("file", attachmentFiles.aadhaar_file);
+            fd.append("entity_type", "order");
+            fd.append("entity_id", createdOrderId);
+            fd.append("category", "kyc_aadhaar");
+            fd.append("remarks", "Customer Aadhaar Card");
+            await createAttachment(fd).unwrap().catch((err) => {
+              console.warn("Failed to upload Aadhaar attachment:", err);
+            });
+
+            if (partyId) {
+              const pfd = new FormData();
+              pfd.append("file", attachmentFiles.aadhaar_file);
+              pfd.append("entity_type", "party");
+              pfd.append("entity_id", partyId);
+              pfd.append("category", "kyc_aadhaar");
+              pfd.append("remarks", "Customer Aadhaar Card from Order");
+              await createAttachment(pfd).unwrap().catch(() => {});
+            }
+          }
+
+          if (attachmentFiles.pan_file) {
+            const fd = new FormData();
+            fd.append("file", attachmentFiles.pan_file);
+            fd.append("entity_type", "order");
+            fd.append("entity_id", createdOrderId);
+            fd.append("category", "kyc_pan");
+            fd.append("remarks", "Customer PAN Card");
+            await createAttachment(fd).unwrap().catch((err) => {
+              console.warn("Failed to upload PAN attachment:", err);
+            });
+
+            if (partyId) {
+              const pfd = new FormData();
+              pfd.append("file", attachmentFiles.pan_file);
+              pfd.append("entity_type", "party");
+              pfd.append("entity_id", partyId);
+              pfd.append("category", "kyc_pan");
+              pfd.append("remarks", "Customer PAN Card from Order");
+              await createAttachment(pfd).unwrap().catch(() => {});
+            }
+          }
+
+          if (attachmentFiles.gst_file) {
+            const fd = new FormData();
+            fd.append("file", attachmentFiles.gst_file);
+            fd.append("entity_type", "order");
+            fd.append("entity_id", createdOrderId);
+            fd.append("category", "kyc_gst");
+            fd.append("remarks", "Customer GST Certificate");
+            await createAttachment(fd).unwrap().catch((err) => {
+              console.warn("Failed to upload GST attachment:", err);
+            });
+
+            if (partyId) {
+              const pfd = new FormData();
+              pfd.append("file", attachmentFiles.gst_file);
+              pfd.append("entity_type", "party");
+              pfd.append("entity_id", partyId);
+              pfd.append("category", "kyc_gst");
+              pfd.append("remarks", "Customer GST Certificate from Order");
+              await createAttachment(pfd).unwrap().catch(() => {});
+            }
+          }
+
+          if (attachmentFiles.kyc_files && attachmentFiles.kyc_files.length > 0) {
+            for (const file of attachmentFiles.kyc_files) {
+              const fd = new FormData();
+              fd.append("file", file);
+              fd.append("entity_type", "order");
+              fd.append("entity_id", createdOrderId);
+              fd.append("category", "kyc");
+              fd.append("remarks", "KYC Document");
+              await createAttachment(fd).unwrap().catch((err) => {
+                console.warn("Failed to upload KYC attachment:", err);
+              });
+
+              if (partyId) {
+                const pfd = new FormData();
+                pfd.append("file", file);
+                pfd.append("entity_type", "party");
+                pfd.append("entity_id", partyId);
+                pfd.append("category", "kyc");
+                pfd.append("remarks", "KYC Document from Order");
+                await createAttachment(pfd).unwrap().catch(() => {});
+              }
+            }
+          }
+
+          // Sync performa after all attachments uploaded to ensure IDs and statuses link immediately
+          await updateOrderPerforma({
+            orderId: createdOrderId,
+            data: finalPerforma,
+          }).unwrap().catch((err) => {
+            console.warn("Failed to sync performa after attachments upload:", err);
+          });
+        }
+
         toast.success(
           data?.order_no
             ? `Draft order ${data.order_no} created successfully`
@@ -588,15 +908,84 @@ export default function CreateOrderPage() {
     },
     [
       partyId,
-      createOrder,
+      lines,
+      headerDiscount,
+      remarks,
       orderDate,
       expectedDate,
-      lines,
-      remarks,
-      router,
       user,
+      performaValues,
+      attachmentFiles,
+      createOrder,
+      createAttachment,
+      updateOrderPerforma,
+      billingAddress,
+      shippingAddress,
+      saveShippingToParty,
+      selectedParty,
+      selectedPartyAddress,
+      router,
     ],
   );
+
+  const validateStep1 = useCallback(() => {
+    if (!partyId) {
+      toast.error("Select a party.");
+      return false;
+    }
+    const prepared = lines.filter((l) => l.productId);
+    if (!prepared.length) {
+      toast.error("Add at least one line with a product.");
+      return false;
+    }
+    const badQty = prepared.some(
+      (l) => !Number.isFinite(l.quantity) || l.quantity < 1,
+    );
+    if (badQty) {
+      toast.error("Each line needs quantity ≥ 1.");
+      return false;
+    }
+    if (!orderDate.trim()) {
+      toast.error("Order date is required.");
+      return false;
+    }
+    if (!expectedDate.trim()) {
+      toast.error("Expected delivery date is required.");
+      return false;
+    }
+    return true;
+  }, [partyId, lines, orderDate, expectedDate]);
+
+  const handleNextToStep2 = useCallback(() => {
+    if (!validateStep1()) return;
+
+    const pType = String((selectedParty as any)?.party_type || "").toLowerCase();
+    const friendlyCustomerType =
+      pType === "hospital" ? "Hospital" :
+      pType === "dealer" ? "Dealer" :
+      pType === "distributor" ? "Distributor" :
+      pType === "institutional" ? "Institutional" :
+      pType === "government" ? "Government" :
+      "Direct Customer";
+
+    const currentShipTo = shippingAddress.address_line_1
+      ? formatAddressOneLine(shippingAddress)
+      : billingAddress.address_line_1
+      ? formatAddressOneLine(billingAddress)
+      : selectedPartyAddress;
+
+    setPerformaValues((prev) => ({
+      ...prev,
+      sales_person: prev.sales_person || String(user?.name || user?.username || ""),
+      dispatch_date: prev.dispatch_date || expectedDate,
+      ship_to_address: prev.ship_to_address || currentShipTo,
+      payment_terms: prev.payment_terms || String((selectedParty as any)?.payment_terms || "30 days"),
+      customer_type: prev.customer_type || friendlyCustomerType,
+      freight_charges: prev.freight_charges || "Included",
+    }));
+    setStep(2);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [validateStep1, user, expectedDate, selectedParty, shippingAddress, billingAddress, selectedPartyAddress]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -611,7 +1000,7 @@ export default function CreateOrderPage() {
               Create New Order
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Create and save a new purchase or sales draft order.
+              Create and save a new purchase or sales draft order with negotiated pricing.
             </p>
           </div>
         </div>
@@ -624,9 +1013,58 @@ export default function CreateOrderPage() {
         </Link>
       </div>
 
-      <form onSubmit={onSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Party selection and Lines */}
-        <div className="lg:col-span-2 space-y-6">
+      {/* Stepper Navigation */}
+      <div className="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/70 p-1.5 dark:border-white/10 dark:bg-slate-900/60">
+        <button
+          type="button"
+          onClick={() => setStep(1)}
+          className={`flex items-center gap-2.5 rounded-lg px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+            step === 1
+              ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/90 dark:bg-slate-800 dark:text-blue-400 dark:ring-white/10"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/50 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          <span
+            className={`flex h-5 w-5 items-center justify-center rounded-full text-2xs font-bold ${
+              step === 1
+                ? "bg-blue-600 text-white"
+                : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
+            }`}
+          >
+            1
+          </span>
+          <span>Step 1: Order Details & Items</span>
+        </button>
+
+        <span className="text-slate-300 dark:text-slate-700">/</span>
+
+        <button
+          type="button"
+          onClick={handleNextToStep2}
+          className={`flex items-center gap-2.5 rounded-lg px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+            step === 2
+              ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/90 dark:bg-slate-800 dark:text-blue-400 dark:ring-white/10"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/50 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          <span
+            className={`flex h-5 w-5 items-center justify-center rounded-full text-2xs font-bold ${
+              step === 2
+                ? "bg-blue-600 text-white"
+                : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
+            }`}
+          >
+            2
+          </span>
+          <span>Step 2: Performa Invoice</span>
+        </button>
+      </div>
+
+      <form onSubmit={onSubmit} className="space-y-6">
+        {step === 1 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column: Party selection and Lines */}
+          <div className="lg:col-span-2 space-y-6">
           {/* Party Selection Card */}
           <section className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
             <header className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-white/5">
@@ -659,6 +1097,19 @@ export default function CreateOrderPage() {
             </div>
           </section>
 
+          {/* Invoicing & Delivery Destination Card */}
+          {selectedParty && (
+            <OrderAddressSelector
+              party={selectedParty}
+              billingAddress={billingAddress}
+              shippingAddress={shippingAddress}
+              onBillingAddressChange={setBillingAddress}
+              onShippingAddressChange={setShippingAddress}
+              saveShippingToParty={saveShippingToParty}
+              onSaveShippingToPartyChange={setSaveShippingToParty}
+            />
+          )}
+
           {/* Line Items Card */}
           <section className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
             <header className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3 dark:border-white/5">
@@ -669,7 +1120,7 @@ export default function CreateOrderPage() {
                     Line Items
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Catalog products to include in this order.
+                    Catalog products to include in this order with unit pricing and discounts.
                   </p>
                 </div>
               </div>
@@ -697,156 +1148,229 @@ export default function CreateOrderPage() {
             )}
 
             <div className="space-y-4">
-              {lines.map((row, idx) => (
-                <div
-                  key={row.key}
-                  className="relative space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 dark:border-white/5 dark:bg-slate-955/30"
-                >
-                  {/* Mobile delete bar */}
-                  <div className="flex items-center justify-between lg:hidden border-b border-slate-100 pb-2 dark:border-white/5">
-                    <span className="text-xs font-semibold text-slate-500">
-                      Item #{idx + 1}
-                    </span>
-                    <button
-                      type="button"
-                      className="text-xs font-semibold text-rose-500 hover:text-rose-600"
-                      disabled={lines.length <= 1}
-                      onClick={() =>
-                        setLines((prev) => prev.filter((l) => l.key !== row.key))
-                      }
-                    >
-                      Remove
-                    </button>
-                  </div>
-
-                  {/* Tier 1 Grid: Product, Qty, Free, Rate Type */}
-                  <div className="grid gap-3 grid-cols-1 lg:grid-cols-12">
-                    {/* Product */}
-                    <div className="space-y-1 lg:col-span-6">
-                      <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                        Product
+              {lines.map((row, idx) => {
+                return (
+                  <div
+                    key={row.key}
+                    className="relative space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 dark:border-white/5 dark:bg-slate-955/30"
+                  >
+                    {/* Mobile delete bar */}
+                    <div className="flex items-center justify-between lg:hidden border-b border-slate-100 pb-2 dark:border-white/5">
+                      <span className="text-xs font-semibold text-slate-500">
+                        Item #{idx + 1}
                       </span>
-                      <ProductAutocomplete
-                        products={products}
-                        selectedId={row.productId}
-                        onChange={(val) => onProductRowChange(row.key, val)}
-                        className={inputClass}
-                      />
-                    </div>
-
-                    {/* Qty */}
-                    <div className="space-y-1 lg:col-span-2">
-                      <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                        Qty
-                      </span>
-                      <input
-                        type="number"
-                        min={1}
-                        step={1}
-                        value={row.quantity}
-                        onChange={(e) =>
-                          setLines((prev) =>
-                            prev.map((l) =>
-                              l.key === row.key
-                                ? {
-                                  ...l,
-                                  quantity: Number(e.target.value) || 0,
-                                }
-                                : l,
-                            ),
-                          )
-                        }
-                        className={inputClass}
-                      />
-                    </div>
-
-                    {/* Free Qty */}
-                    <div className="space-y-1 lg:col-span-2">
-                      <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                        Free
-                      </span>
-                      <input
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={row.free_qty}
-                        onChange={(e) =>
-                          setLines((prev) =>
-                            prev.map((l) =>
-                              l.key === row.key
-                                ? {
-                                  ...l,
-                                  free_qty: Number(e.target.value) || 0,
-                                }
-                                : l,
-                            ),
-                          )
-                        }
-                        className={inputClass}
-                      />
-                    </div>
-
-                    {/* Rate Type */}
-                    <div className="space-y-1 lg:col-span-2">
-                      <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                        Rate Type
-                      </span>
-                      <select
-                        value={row.applied_rate_type}
-                        onChange={(e) =>
-                          onRateTypeChange(row.key, e.target.value)
-                        }
-                        className={inputClass}
-                      >
-                        <option value="SR">SR</option>
-                        <option value="SRA">SRA</option>
-                        <option value="CR">CR</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Tier 2 Grid: Remarks & Action */}
-                  <div className="grid gap-3 grid-cols-1 lg:grid-cols-12 pt-2 border-t border-slate-100/50 dark:border-white/5">
-                    {/* Remarks */}
-                    <div className="space-y-1 lg:col-span-11">
-                      <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                        Line Remarks
-                      </span>
-                      <input
-                        placeholder="Internal item specifications..."
-                        value={row.remarks}
-                        onChange={(e) =>
-                          setLines((prev) =>
-                            prev.map((l) =>
-                              l.key === row.key
-                                ? {
-                                  ...l,
-                                  remarks: e.target.value,
-                                }
-                                : l,
-                            ),
-                          )
-                        }
-                        className={inputClass}
-                      />
-                    </div>
-
-                    {/* Actions */}
-                    <div className="hidden lg:flex lg:col-span-1 items-end justify-end pb-0.5">
                       <button
                         type="button"
-                        className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-slate-200/95 bg-white p-2 text-xs font-semibold text-rose-600 shadow-sm transition hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:bg-slate-955 dark:text-rose-400 dark:hover:bg-rose-950/20"
+                        className="text-xs font-semibold text-rose-500 hover:text-rose-600"
                         disabled={lines.length <= 1}
                         onClick={() =>
                           setLines((prev) => prev.filter((l) => l.key !== row.key))
                         }
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        Remove
                       </button>
                     </div>
+
+                    {/* Tier 1 Grid: Product, Qty, Free, Price, Disc, GST */}
+                    <div className="grid gap-3 grid-cols-1 lg:grid-cols-12">
+                      {/* Product */}
+                      <div className="space-y-1 lg:col-span-5">
+                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          Product
+                        </span>
+                        <ProductAutocomplete
+                          products={products}
+                          selectedId={row.productId}
+                          onChange={(val) => onProductRowChange(row.key, val)}
+                          className={inputClass}
+                        />
+                      </div>
+
+                      {/* Qty */}
+                      <div className="space-y-1 lg:col-span-2">
+                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          Qty
+                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={row.quantity}
+                          onChange={(e) =>
+                            setLines((prev) =>
+                              prev.map((l) =>
+                                l.key === row.key
+                                  ? {
+                                    ...l,
+                                    quantity: Number(e.target.value) || 0,
+                                  }
+                                  : l,
+                              ),
+                            )
+                          }
+                          className={inputClass}
+                        />
+                      </div>
+
+                      {/* Free Qty */}
+                      <div className="space-y-1 lg:col-span-1">
+                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          Free
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={row.free_qty}
+                          onChange={(e) =>
+                            setLines((prev) =>
+                              prev.map((l) =>
+                                l.key === row.key
+                                  ? {
+                                    ...l,
+                                    free_qty: Number(e.target.value) || 0,
+                                  }
+                                  : l,
+                              ),
+                            )
+                          }
+                          className={inputClass}
+                        />
+                      </div>
+
+                      {/* Unit Price */}
+                      <div className="space-y-1 lg:col-span-2">
+                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          Price (₹)
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="any"
+                          value={row.unit_price}
+                          onChange={(e) =>
+                            setLines((prev) =>
+                              prev.map((l) =>
+                                l.key === row.key
+                                  ? {
+                                    ...l,
+                                    unit_price: Number(e.target.value) || 0,
+                                  }
+                                  : l,
+                              ),
+                            )
+                          }
+                          className={inputClass}
+                        />
+                      </div>
+
+                      {/* Disc % */}
+                      <div className="space-y-1 lg:col-span-1">
+                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          Disc %
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="any"
+                          value={row.discount_percent}
+                          onChange={(e) =>
+                            setLines((prev) =>
+                              prev.map((l) =>
+                                l.key === row.key
+                                  ? {
+                                    ...l,
+                                    discount_percent: Number(e.target.value) || 0,
+                                  }
+                                  : l,
+                              ),
+                            )
+                          }
+                          className={inputClass}
+                        />
+                      </div>
+
+                      {/* GST % */}
+                      <div className="space-y-1 lg:col-span-1">
+                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          GST %
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="any"
+                          value={row.gst_percent}
+                          onChange={(e) =>
+                            setLines((prev) =>
+                              prev.map((l) =>
+                                l.key === row.key
+                                  ? {
+                                    ...l,
+                                    gst_percent: Number(e.target.value) || 0,
+                                  }
+                                  : l,
+                              ),
+                            )
+                          }
+                          className={inputClass}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Tier 2 Grid: Remarks, Line Total & Action */}
+                    <div className="grid gap-3 grid-cols-1 lg:grid-cols-12 pt-2 border-t border-slate-100/50 dark:border-white/5">
+                      {/* Remarks */}
+                      <div className="space-y-1 lg:col-span-9">
+                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          Line Remarks
+                        </span>
+                        <input
+                          placeholder="Internal item specifications..."
+                          value={row.remarks}
+                          onChange={(e) =>
+                            setLines((prev) =>
+                              prev.map((l) =>
+                                l.key === row.key
+                                  ? {
+                                    ...l,
+                                    remarks: e.target.value,
+                                  }
+                                  : l,
+                              ),
+                            )
+                          }
+                          className={inputClass}
+                        />
+                      </div>
+
+                      {/* Line Total */}
+                      <div className="space-y-1 lg:col-span-2">
+                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                          Line Total
+                        </span>
+                        <div className="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2 text-sm font-semibold tabular-nums text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-slate-50 h-[38px] flex items-center">
+                          ₹{formatMoney(lineTotal(row))}
+                        </div>
+                      </div>
+
+                      {/* Actions (Trash) */}
+                      <div className="hidden lg:flex lg:col-span-1 items-end justify-end pb-0.5">
+                        <button
+                          type="button"
+                          className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-slate-200/95 bg-white p-2 text-xs font-semibold text-rose-600 shadow-sm transition hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:bg-slate-955 dark:text-rose-400 dark:hover:bg-rose-950/20"
+                          disabled={lines.length <= 1}
+                          onClick={() =>
+                            setLines((prev) => prev.filter((l) => l.key !== row.key))
+                          }
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Add Line */}
@@ -917,29 +1441,143 @@ export default function CreateOrderPage() {
                   placeholder="Notes, instructions or special considerations..."
                 />
               </div>
+            </section>
 
-              <div className="pt-3 border-t border-border">
+            {/* Order Summary & Actions */}
+            <section className="rounded-xl border border-blue-100 bg-blue-50/20 p-5 shadow-sm dark:border-blue-900/30 dark:bg-blue-950/10">
+              <header className="mb-4 border-b border-blue-100/50 pb-3 dark:border-blue-900/20">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-50">
+                  Order Summary
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Calculated financial estimate of current items.
+                </p>
+              </header>
+
+              <div className="space-y-2.5 text-sm">
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                  <span>Gross Subtotal</span>
+                  <span className="font-medium tabular-nums">₹{formatMoney(liveSummary.subtotal)}</span>
+                </div>
+                <div className="flex justify-between text-rose-600 dark:text-rose-400">
+                  <span>Total Discount</span>
+                  <span className="font-medium tabular-nums">-₹{formatMoney(liveSummary.discount)}</span>
+                </div>
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                  <span>Taxable Amount</span>
+                  <span className="font-medium tabular-nums">₹{formatMoney(liveSummary.taxable)}</span>
+                </div>
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                  <span>Estimated GST</span>
+                  <span className="font-medium tabular-nums">₹{formatMoney(liveSummary.gst)}</span>
+                </div>
+                <div className="border-t border-blue-100 pt-3 dark:border-blue-900/20">
+                  <div className="flex justify-between text-base font-bold text-blue-600 dark:text-blue-400">
+                    <span>Grand Total</span>
+                    <span className="text-lg tabular-nums">₹{formatMoney(liveSummary.total)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 pt-3 border-t border-blue-100/50 dark:border-blue-900/20 flex flex-col gap-2">
                 <Button
+                  type="button"
+                  variant="primary"
+                  onClick={handleNextToStep2}
+                  className="w-full font-semibold shadow-md shadow-primary/25 gap-2 cursor-pointer"
+                >
+                  <span>Next: Performa Invoice</span>
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+                <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full font-semibold shadow-md shadow-primary/25"
+                  className="w-full py-2 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition cursor-pointer"
                 >
-                  {isLoading ? (
-                    <>
-                      <svg className="h-4 w-4 animate-spin text-primary-foreground" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      Saving draft...
-                    </>
-                  ) : (
-                    "Save draft order"
-                  )}
-                </Button>
+                  {isLoading ? "Saving..." : "Or save draft now without Performa"}
+                </button>
               </div>
             </section>
           </div>
         </div>
+      </div>
+      )}
+
+        {/* Step 2: Performa Invoice */}
+        {step === 2 && (
+          <div className="space-y-6">
+            {/* Step 2 Overview Banner */}
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-50">
+                    Step 2: Performa Invoice Details
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Provide commercial, transport, payment terms, and KYC compliance info.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <div className="rounded-lg bg-slate-50 px-3 py-1.5 border border-slate-200/80 dark:bg-slate-800 dark:border-white/5">
+                  <span className="text-slate-500 dark:text-slate-400">Party: </span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{selectedPartyName || "—"}</span>
+                </div>
+                <div className="rounded-lg bg-slate-50 px-3 py-1.5 border border-slate-200/80 dark:bg-slate-800 dark:border-white/5">
+                  <span className="text-slate-500 dark:text-slate-400">Items: </span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{lines.filter(l => l.productId).length}</span>
+                </div>
+                <div className="rounded-lg bg-emerald-50 px-3 py-1.5 border border-emerald-200/80 dark:bg-emerald-950/40 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-bold">
+                  Total: ₹{formatMoney(liveSummary.total)}
+                </div>
+              </div>
+            </div>
+
+            {/* Performa Form Fields */}
+            <PerformaInvoiceFields
+              values={performaValues}
+              onChange={(f, v) => setPerformaValues((prev) => ({ ...prev, [f]: v }))}
+              billingAddress={selectedPartyAddress}
+              attachmentFiles={attachmentFiles}
+              onAttachmentFileChange={handleAttachmentFileChange}
+            />
+
+            {/* Navigation and Submit Footer */}
+            <div className="flex items-center justify-between gap-4 border-t border-slate-200/80 pt-4 dark:border-white/10">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setStep(1)}
+                className="gap-1.5 cursor-pointer"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Order Items
+              </Button>
+
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="font-semibold shadow-md shadow-primary/25 min-w-[160px] cursor-pointer"
+              >
+                {isLoading ? (
+                  <>
+                    <svg className="h-4 w-4 animate-spin text-primary-foreground" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Saving draft order...
+                  </>
+                ) : (
+                  "Save draft order"
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
       </form>
 
       <PreviousPartyItemsModal
@@ -947,7 +1585,6 @@ export default function CreateOrderPage() {
         onClose={() => setPreviousItemsModalOpen(false)}
         partyId={partyId}
         partyName={selectedPartyName}
-        hidePrice
         onLoad={loadPreviousItems}
       />
     </div>

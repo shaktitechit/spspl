@@ -48,7 +48,7 @@ export function AssignmentsTab({ detail }: AssignmentsTabProps) {
           <div className="space-y-1">
             <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">
               {String(
-                assignedUser.name || assignedUser.username || "Unnamed Operator"
+                assignedUser.name || assignedUser.username || "Assigned User"
               )}
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400 flex flex-col gap-0.5 font-sans font-normal">

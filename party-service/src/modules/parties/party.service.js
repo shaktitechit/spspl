@@ -31,6 +31,7 @@ const PATCHABLE_KEYS = Object.freeze([
   'drug_license_no',
   'billing_address',
   'shipping_address',
+  'shipping_addresses',
   'district',
   'state',
   'country_id',
@@ -69,6 +70,27 @@ function sanitizeContacts(contacts) {
     );
 }
 
+function sanitizeShippingAddresses(addresses) {
+  if (!Array.isArray(addresses)) return [];
+  return addresses
+    .filter((a) => a && typeof a === 'object')
+    .map((a) => ({
+      ...(a._id ? { _id: a._id } : {}),
+      label: a.label != null ? String(a.label).trim() : '',
+      recipient_name: a.recipient_name != null ? String(a.recipient_name).trim() : '',
+      phone: a.phone != null ? String(a.phone).trim() : '',
+      gst_no: a.gst_no != null ? String(a.gst_no).trim().toUpperCase() : '',
+      address_line_1: a.address_line_1 != null ? String(a.address_line_1).trim() : '',
+      address_line_2: a.address_line_2 != null ? String(a.address_line_2).trim() : '',
+      city: a.city != null ? String(a.city).trim() : '',
+      state: a.state != null ? String(a.state).trim() : '',
+      pincode: a.pincode != null ? String(a.pincode).trim() : '',
+      country: a.country != null ? String(a.country).trim() : 'India',
+      is_default: Boolean(a.is_default),
+    }))
+    .filter((a) => a.address_line_1 || a.city || a.label || a.state || a.pincode);
+}
+
 function primaryContactFields(contacts) {
   const primary = contacts[0];
   if (!primary) {
@@ -97,6 +119,22 @@ function sanitizePatch(patch) {
         v = sanitizeContacts(v);
         Object.assign(out, primaryContactFields(v));
         out.contacts = v;
+        continue;
+      }
+      if (k === 'shipping_addresses') {
+        const sanitizedList = sanitizeShippingAddresses(v);
+        out.shipping_addresses = sanitizedList;
+        const defaultShip = sanitizedList.find((a) => a.is_default);
+        if (defaultShip) {
+          out.shipping_address = {
+            address_line_1: defaultShip.address_line_1,
+            address_line_2: defaultShip.address_line_2,
+            city: defaultShip.city,
+            state: defaultShip.state,
+            pincode: defaultShip.pincode,
+            country: defaultShip.country,
+          };
+        }
         continue;
       }
       if (k === 'sra_from_date' || k === 'sra_to_date') {
@@ -319,7 +357,11 @@ async function create(body, user) {
     gst_no: gst,
     drug_license_no: body.drug_license_no != null ? String(body.drug_license_no).trim() : '',
     billing_address: body.billing_address && typeof body.billing_address === 'object' ? body.billing_address : {},
-    shipping_address: body.shipping_address && typeof body.shipping_address === 'object' ? body.shipping_address : {},
+    shipping_address:
+      body.shipping_address && typeof body.shipping_address === 'object'
+        ? body.shipping_address
+        : (sanitizeShippingAddresses(body.shipping_addresses).find((a) => a.is_default) || {}),
+    shipping_addresses: sanitizeShippingAddresses(body.shipping_addresses),
     district: body.district != null ? String(body.district).trim() : '',
     state: body.state != null ? String(body.state).trim() : '',
     country_id: body.country_id || undefined,

@@ -41,6 +41,7 @@ export * from "./slices/unbilledOrderApi";
 export * from "./slices/finalOrderStatementApi";
 export * from "./slices/remindersApi";
 export * from "./slices/transportPlansApi";
+export * from "./slices/orderPerformaApi";
 
 export * from "./slices/zonesApi";
 export * from "./slices/partyCountriesApi";

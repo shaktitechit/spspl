@@ -111,6 +111,7 @@ type PartyRow = {
   sra?: boolean;
   sra_from_date?: string;
   sra_to_date?: string;
+  shipping_addresses?: any[];
 };
 
 function rowKey(row: unknown): string {
@@ -760,11 +761,18 @@ export default function ListPartiesPage({ portalHome }: ListPartiesPageProps) {
                           </div>
                         </td>
                         <td className="px-4 py-3 align-top text-slate-600 dark:text-slate-400">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                            <span className="truncate font-medium text-slate-800 dark:text-slate-200" title={locationText}>
-                              {locationText}
-                            </span>
+                          <div className="flex flex-col min-w-0">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                              <span className="truncate font-medium text-slate-800 dark:text-slate-200" title={locationText}>
+                                {locationText}
+                              </span>
+                            </div>
+                            {Array.isArray(p.shipping_addresses) && p.shipping_addresses.length > 0 && (
+                              <span className="text-3xs text-blue-600 dark:text-blue-400 font-semibold pl-5">
+                                {p.shipping_addresses.length} delivery location{p.shipping_addresses.length > 1 ? "s" : ""}
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="px-4 py-3 align-top whitespace-nowrap text-right">

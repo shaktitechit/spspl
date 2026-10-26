@@ -1,6 +1,8 @@
 "use client";
 
 import { LargeModalPortal } from "@/components/portal/shared/ui/modals/LargeModalPortal";
+import { MapPin } from "lucide-react";
+
 interface OrderDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -8,6 +10,7 @@ interface OrderDetailsModalProps {
   createdBy: string;
   resolveUser: (userVal: unknown) => { name: string; phone: string };
   activeTransportInfo?: { agentName?: string; scheduledDate?: string } | null;
+  onEditAddress?: () => void;
 }
 
 function formatDate(v: unknown): string {
@@ -17,6 +20,23 @@ function formatDate(v: unknown): string {
   return d.toLocaleString();
 }
 
+function formatAddress(addr: unknown): string {
+  if (!addr || typeof addr !== "object") return "—";
+  const a = addr as Record<string, unknown>;
+  const parts: string[] = [];
+  if (a.address_line_1) parts.push(String(a.address_line_1).trim());
+  if (a.address_line_2) parts.push(String(a.address_line_2).trim());
+  const cityLine = [a.city, a.state, a.pincode]
+    .map((x) => (x ? String(x).trim() : ""))
+    .filter(Boolean)
+    .join(", ");
+  if (cityLine) parts.push(cityLine);
+  if (a.country && String(a.country).trim() !== "India") {
+    parts.push(String(a.country).trim());
+  }
+  return parts.length ? parts.join("\n") : "—";
+}
+
 export default function OrderDetailsModal({
   isOpen,
   onClose,
@@ -24,6 +44,7 @@ export default function OrderDetailsModal({
   createdBy,
   resolveUser,
   activeTransportInfo,
+  onEditAddress,
 }: OrderDetailsModalProps) {
   if (!isOpen || !detail) return null;
 
@@ -169,6 +190,51 @@ export default function OrderDetailsModal({
                   ? detail.remarks
                   : "—"}
               </dd>
+            </div>
+
+            <div className="sm:col-span-2 pt-2 border-t border-slate-100 dark:border-white/5">
+              <div className="flex items-center justify-between mb-2">
+                <dt className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Order Billing & Shipping Addresses (Snapshot)
+                </dt>
+                {onEditAddress && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onEditAddress();
+                    }}
+                    className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-2xs font-semibold text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 transition cursor-pointer"
+                  >
+                    <MapPin className="h-3 w-3" />
+                    <span>Update Address</span>
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="rounded-lg bg-slate-50 dark:bg-slate-900/40 p-3 border border-slate-100 dark:border-white/5">
+                  <div className="font-semibold text-slate-800 dark:text-slate-200 mb-1">Billing Address</div>
+                  <div className="whitespace-pre-line text-slate-600 dark:text-slate-400">
+                    {formatAddress(detail.billing_address || detail.party?.billing_address || detail.customer?.billing_address)}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-slate-50 dark:bg-slate-900/40 p-3 border border-slate-100 dark:border-white/5">
+                  <div className="font-semibold text-slate-800 dark:text-slate-200 mb-1">Shipping / Delivery Address</div>
+                  {(detail.shipping_address?.recipient_name || detail.shipping_address?.phone) && (
+                    <div className="text-2xs font-semibold text-blue-600 dark:text-blue-400">
+                      Contact: {detail.shipping_address.recipient_name} {detail.shipping_address.phone ? `(${detail.shipping_address.phone})` : ""}
+                    </div>
+                  )}
+                  {detail.shipping_address?.gst_no && (
+                    <div className="text-2xs font-mono text-slate-500">
+                      GSTIN: {detail.shipping_address.gst_no}
+                    </div>
+                  )}
+                  <div className="whitespace-pre-line text-slate-600 dark:text-slate-400 mt-0.5">
+                    {formatAddress(detail.shipping_address || detail.party?.shipping_address || detail.customer?.shipping_address)}
+                  </div>
+                </div>
+              </div>
             </div>
           </dl>
         </div>

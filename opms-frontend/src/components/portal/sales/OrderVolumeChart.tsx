@@ -18,14 +18,34 @@ interface OrderVolumeChartProps {
   categoryOptions?: SalesOrderCategoryOptions;
 }
 
-const CHART_CATEGORY_KEYS = SALES_CHART_TABS.map((tab) => tab.id);
+function formatMoney(v: number): string {
+  return v.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatMoneyAbbr(v: number): string {
+  if (v >= 10000000) return `${(v / 10000000).toFixed(1)}Cr`;
+  if (v >= 100000) return `${(v / 100000).toFixed(1)}L`;
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}K`;
+  return String(Math.round(v));
+}
+
+function orderAmount(order: any): number {
+  return Number(order?.grand_total ?? order?.total ?? order?.total_amount ?? 0);
+}
+
+const CHART_CATEGORY_KEYS: SalesOrderTabCategory[] = SALES_CHART_TABS.map(
+  (tab) => tab.id as SalesOrderTabCategory,
+);
 
 export default function OrderVolumeChart({
   orders,
   isOrdersFetching,
   categoryOptions,
 }: OrderVolumeChartProps) {
-  const [showMetric, setShowMetric] = useState<"orders" | "quantities">("orders");
+  const [showMetric, setShowMetric] = useState<"orders" | "quantities" | "volume">("orders");
   const [timeframe, setTimeframe] = useState<"monthly" | "daily">("monthly");
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
 
@@ -37,6 +57,7 @@ export default function OrderVolumeChart({
       label: string;
       ordersCount: number;
       totalQty: number;
+      totalVolume: number;
       breakdown: SalesOrderStats;
     };
     const months: ChartBucket[] = [];
@@ -49,6 +70,7 @@ export default function OrderVolumeChart({
         label: d.toLocaleDateString("en-US", { month: "short" }),
         ordersCount: 0,
         totalQty: 0,
+        totalVolume: 0,
         breakdown: createEmptySalesOrderStats(),
       });
     }
@@ -69,8 +91,11 @@ export default function OrderVolumeChart({
         items.forEach((item: any) => {
           orderQty += Number(item.ordered_quantity ?? item.quantity ?? 0);
         });
+        const amt = orderAmount(o);
         bucket.totalQty += orderQty;
         bucket.breakdown[cat].quantity += orderQty;
+        bucket.totalVolume += amt;
+        bucket.breakdown[cat].amount += amt;
       }
     });
 
@@ -83,6 +108,7 @@ export default function OrderVolumeChart({
       label: string;
       ordersCount: number;
       totalQty: number;
+      totalVolume: number;
       breakdown: SalesOrderStats;
     };
     const days: ChartBucket[] = [];
@@ -95,6 +121,7 @@ export default function OrderVolumeChart({
         label: `${d.getDate()} ${d.toLocaleDateString("en-US", { month: "short" })}`,
         ordersCount: 0,
         totalQty: 0,
+        totalVolume: 0,
         breakdown: createEmptySalesOrderStats(),
       });
     }
@@ -115,8 +142,11 @@ export default function OrderVolumeChart({
         items.forEach((item: any) => {
           orderQty += Number(item.ordered_quantity ?? item.quantity ?? 0);
         });
+        const amt = orderAmount(o);
         bucket.totalQty += orderQty;
         bucket.breakdown[cat].quantity += orderQty;
+        bucket.totalVolume += amt;
+        bucket.breakdown[cat].amount += amt;
       }
     });
 
@@ -126,7 +156,13 @@ export default function OrderVolumeChart({
   const activeData = timeframe === "monthly" ? monthlyData : dailyData;
 
   const maxVal = useMemo(() => {
-    const vals = activeData.map((d) => (showMetric === "orders" ? d.ordersCount : d.totalQty));
+    const vals = activeData.map((d) =>
+      showMetric === "orders"
+        ? d.ordersCount
+        : showMetric === "quantities"
+          ? d.totalQty
+          : d.totalVolume,
+    );
     const max = Math.max(...vals, 1);
     if (max <= 5) return 5;
     if (max <= 10) return 10;
@@ -175,6 +211,17 @@ export default function OrderVolumeChart({
               }`}
             >
               Item Quantities
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowMetric("volume")}
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                showMetric === "volume"
+                  ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-slate-100"
+                  : "text-slate-600 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-200"
+              }`}
+            >
+              Order Value (₹)
             </button>
           </div>
 
@@ -254,7 +301,7 @@ export default function OrderVolumeChart({
                     textAnchor="end"
                     className="text-2xs font-semibold fill-slate-400 dark:fill-slate-500 font-mono"
                   >
-                    {Math.round(tick)}
+                    {showMetric === "volume" ? formatMoneyAbbr(tick) : Math.round(tick)}
                   </text>
                 </g>
               );
@@ -290,7 +337,12 @@ export default function OrderVolumeChart({
                 >
                   {statusKeys.map((statusKey) => {
                     const stats = d.breakdown[statusKey];
-                    const segmentVal = showMetric === "orders" ? stats.count : stats.quantity;
+                    const segmentVal =
+                      showMetric === "orders"
+                        ? stats.count
+                        : showMetric === "quantities"
+                          ? stats.quantity
+                          : stats.amount;
 
                     if (segmentVal <= 0) return null;
 
@@ -334,7 +386,12 @@ export default function OrderVolumeChart({
             {hoveredBarIndex !== null &&
               (() => {
                 const item = activeData[hoveredBarIndex];
-                const val = showMetric === "orders" ? item.ordersCount : item.totalQty;
+                const val =
+                  showMetric === "orders"
+                    ? item.ordersCount
+                    : showMetric === "quantities"
+                      ? item.totalQty
+                      : item.totalVolume;
                 const barHeight = (val / maxVal) * 155;
                 const barY = 15 + 155 - barHeight;
                 const slotWidth = 440 / activeData.length;
@@ -343,7 +400,12 @@ export default function OrderVolumeChart({
                 const activeBreakdowns = CHART_CATEGORY_KEYS
                   .map((key) => {
                     const stats = item.breakdown[key];
-                    const segmentVal = showMetric === "orders" ? stats.count : stats.quantity;
+                    const segmentVal =
+                      showMetric === "orders"
+                        ? stats.count
+                        : showMetric === "quantities"
+                          ? stats.quantity
+                          : stats.amount;
                     return {
                       key,
                       label: SALES_STATUS_COLORS[key].label,
@@ -400,7 +462,9 @@ export default function OrderVolumeChart({
                             textAnchor="end"
                             className="text-2xs font-bold fill-slate-300 font-mono"
                           >
-                            {ab.val.toLocaleString()}
+                            {showMetric === "volume"
+                              ? `₹${formatMoneyAbbr(ab.val)}`
+                              : ab.val.toLocaleString()}
                           </text>
                         </g>
                       );

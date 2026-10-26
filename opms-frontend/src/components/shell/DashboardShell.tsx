@@ -22,11 +22,14 @@ export function DashboardShell({ portal, children }: DashboardShellProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useDesktopSidebarCollapsed();
 
+  const [headerExtra, setHeaderExtra] = useState<ReactNode | null>(null);
+
   const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
   const openMobileNav = useCallback(() => setMobileNavOpen(true), []);
 
   useEffect(() => {
     closeMobileNav();
+    setHeaderExtra(null);
   }, [pathname, closeMobileNav]);
 
   useEffect(() => {
@@ -54,8 +57,10 @@ export function DashboardShell({ portal, children }: DashboardShellProps) {
       closeMobileNav,
       desktopCollapsed,
       setDesktopCollapsed,
+      headerExtra,
+      setHeaderExtra,
     }),
-    [mobileNavOpen, openMobileNav, closeMobileNav, desktopCollapsed, setDesktopCollapsed],
+    [mobileNavOpen, openMobileNav, closeMobileNav, desktopCollapsed, setDesktopCollapsed, headerExtra],
   );
 
   return (

@@ -298,22 +298,38 @@ async function create(body, user, options = {}) {
     await supersedePreviousCurrentSheets(body.order);
   }
 
-  const dueSheetNo = body.due_sheet_no || await generateDueSheetNo(
-    orderDoc.party,
-    body.sheet_date || new Date()
-  );
+  let doc;
+  let attempts = 0;
+  while (attempts < 3) {
+    attempts++;
+    const dueSheetNo = (attempts === 1 && body.due_sheet_no)
+      ? body.due_sheet_no
+      : await generateDueSheetNo(orderDoc.party, body.sheet_date || new Date());
 
-  const doc = await OrderDueSheet.create({
-    due_sheet_no: dueSheetNo,
-    order: body.order,
-    document: documentId,
-    sheet_date: body.sheet_date ? new Date(body.sheet_date) : new Date(),
-    revision_number: revisionNumber,
-    is_current: isCurrent,
-    status: isCurrent ? DUE_SHEET_STATUS.ACTIVE : status,
-    remarks: body.remarks || '',
-    created_by: user._id,
-  });
+    try {
+      doc = await OrderDueSheet.create({
+        due_sheet_no: dueSheetNo,
+        order: body.order,
+        document: documentId,
+        sheet_date: body.sheet_date ? new Date(body.sheet_date) : new Date(),
+        revision_number: revisionNumber,
+        is_current: isCurrent,
+        status: isCurrent ? DUE_SHEET_STATUS.ACTIVE : status,
+        remarks: body.remarks || '',
+        created_by: user._id,
+      });
+      break;
+    } catch (err) {
+      const isDup = err.code === 11000 && (
+        err.keyPattern?.due_sheet_no ||
+        String(err.message || '').includes('due_sheet_no')
+      );
+      if (isDup && attempts < 3) {
+        continue;
+      }
+      throw err;
+    }
+  }
 
   if (documentId) {
     await Attachment.updateOne(

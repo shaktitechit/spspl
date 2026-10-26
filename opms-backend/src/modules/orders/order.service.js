@@ -74,6 +74,9 @@ const PAYMENT_STATUS_VALUES = new Set(['unpaid', 'paid']);
 
 const ORDER_PATCH_KEYS = new Set([
   'party',
+  'billing_address',
+  'shipping_address',
+  'save_shipping_to_party',
   'order_date',
   'payment_status',
   'notes',
@@ -83,6 +86,8 @@ const ORDER_PATCH_KEYS = new Set([
   'expected_delivery_date',
   'remarks',
   'assigned_sales_user',
+  'performa',
+  'order_performa',
 ]);
 
 function assertSafePlainPatch(patch) {
@@ -109,8 +114,31 @@ function assertSafePlainPatch(patch) {
 /**
  * Apply only allowlisted PATCH fields to a live Mongoose document (never touch `status` / operators).
  */
+function cleanOrderAddress(addr) {
+  if (!addr || typeof addr !== 'object') return null;
+  const cleaned = {
+    label: addr.label != null ? String(addr.label).trim() : '',
+    recipient_name: addr.recipient_name != null ? String(addr.recipient_name).trim() : '',
+    phone: addr.phone != null ? String(addr.phone).trim() : '',
+    gst_no: addr.gst_no != null ? String(addr.gst_no).trim().toUpperCase() : '',
+    address_line_1: addr.address_line_1 != null ? String(addr.address_line_1).trim() : '',
+    address_line_2: addr.address_line_2 != null ? String(addr.address_line_2).trim() : '',
+    city: addr.city != null ? String(addr.city).trim() : '',
+    state: addr.state != null ? String(addr.state).trim() : '',
+    pincode: addr.pincode != null ? String(addr.pincode).trim() : '',
+    country: addr.country != null ? String(addr.country).trim() : 'India',
+  };
+  return (cleaned.address_line_1 || cleaned.city || cleaned.state || cleaned.pincode) ? cleaned : null;
+}
+
 function applyWhitelistedPatchToMongooseDoc(doc, patch) {
   if (patch.party !== undefined) doc.set('party', patch.party || null);
+  if (patch.billing_address !== undefined) {
+    doc.set('billing_address', cleanOrderAddress(patch.billing_address));
+  }
+  if (patch.shipping_address !== undefined) {
+    doc.set('shipping_address', cleanOrderAddress(patch.shipping_address));
+  }
   if (patch.order_date !== undefined)
     doc.set('order_date', patch.order_date ? new Date(patch.order_date) : new Date());
   if (patch.payment_status !== undefined) doc.set('payment_status', patch.payment_status);
@@ -600,7 +628,7 @@ function normalizeItems(items) {
       delivered_quantity: Number(line.delivered_quantity || 0),
       returned_quantity: Number(line.returned_quantity || 0),
       free_quantity: Number(line.free_quantity ?? line.free_qty ?? 0),
-      unit_price: Number(line.unit_price),
+      unit_price: Number.isFinite(Number(line.unit_price)) ? Number(line.unit_price) : 0,
       applied_rate_type: line.applied_rate_type || 'MANUAL',
       pricing_reference: line.pricing_reference || undefined,
       pricing_validity_start: line.pricing_validity_start ? new Date(line.pricing_validity_start) : undefined,
@@ -610,8 +638,8 @@ function normalizeItems(items) {
       approval_reason: line.approval_reason || '',
       approved_by: line.approved_by || undefined,
       approved_at: line.approved_at ? new Date(line.approved_at) : undefined,
-      discount_percent: Number(line.discount_percent || 0),
-      discount_amount: Number(line.discount_amount || 0),
+      discount_percent: Number.isFinite(Number(line.discount_percent)) ? Number(line.discount_percent) : 0,
+      discount_amount: Number.isFinite(Number(line.discount_amount)) ? Number(line.discount_amount) : 0,
       taxable_amount: 0,
       gst_amount: 0,
       total_amount: 0,
@@ -990,13 +1018,36 @@ async function getWorkflowStats(query = {}, user) {
 async function getById(id, user) {
   const q = { _id: id };
   applyAccessFilter(q, user);
-  const row = await getModels().Order.findOne(q).lean();
+  const row = await getModels().Order.findOne(q)
+    .populate('created_by', 'name username email department')
+    .populate('assigned_sales_user', 'name username email department')
+    .populate('party', 'name code sra sra_from_date legal_name trade_name billing_address shipping_address')
+    .lean();
   if (!row) throw new ApiError(404, 'Order not found');
   const plain = applyDerivedPriorityToOrder(toPlain(row));
   const enrichedPending = await enrichOrdersWithApprovalPending([plain], getModels());
   const enrichedDueSheet = await enrichOrdersWithDueSheetStatus(enrichedPending, getModels());
   const enrichedFlag = await enrichOrdersWithFlagStatus(enrichedDueSheet, getModels());
-  return enrichedFlag[0];
+  const result = enrichedFlag[0];
+  if (result) {
+    if (!result.billing_address || !result.billing_address.address_line_1) {
+      if (result.party && typeof result.party === 'object' && result.party.billing_address) {
+        result.billing_address = result.party.billing_address;
+      }
+    }
+    if (!result.shipping_address || !result.shipping_address.address_line_1) {
+      if (result.party && typeof result.party === 'object' && result.party.shipping_address) {
+        result.shipping_address = result.party.shipping_address;
+      }
+    }
+    try {
+      const orderPerformaService = require('./orderPerforma.service');
+      result.order_performa = await orderPerformaService.getOrderPerforma(result._id, user);
+    } catch (_e) {
+      // Non-blocking
+    }
+  }
+  return result;
 }
 
 async function resolveNegotiatedRates(orderItems, partyId) {
@@ -1015,7 +1066,7 @@ async function resolveNegotiatedRates(orderItems, partyId) {
       item.pricing_validity_start = rateInfo.validityStart;
       item.pricing_validity_end = rateInfo.validityEnd;
       item.manual_price_override = false;
-    } else {
+    } else if (item.unit_price == null || Number.isNaN(Number(item.unit_price)) || Number(item.unit_price) === 0) {
       item.unit_price = 0;
       item.pricing_reference = undefined;
       item.pricing_validity_start = undefined;
@@ -1033,13 +1084,29 @@ async function create(body, user) {
   policy.assertMayEditOrderPricing(user, { status: ORDER_STATUS.DRAFT });
   if (!body.party) throw new ApiError(400, 'party is required');
 
-  const partyOk = await getModels().Party.exists({ _id: body.party, deletedAt: null });
-  if (!partyOk) throw new ApiError(400, 'Party not found');
+  const partyDoc = await getModels().Party.findOne({ _id: body.party, deletedAt: null }).lean();
+  if (!partyDoc) throw new ApiError(400, 'Party not found');
+
+  const billing_address = cleanOrderAddress(body.billing_address) || cleanOrderAddress(partyDoc.billing_address);
+  const shipping_address =
+    cleanOrderAddress(body.shipping_address) ||
+    cleanOrderAddress(partyDoc.shipping_address) ||
+    cleanOrderAddress((partyDoc.shipping_addresses || []).find((a) => a.is_default)) ||
+    billing_address;
+
+  if (body.save_shipping_to_party === true && shipping_address) {
+    try {
+      await getModels().Party.updateOne(
+        { _id: body.party },
+        { $push: { shipping_addresses: { ...shipping_address, is_default: false } } }
+      );
+    } catch (_e) {}
+  }
 
   const order_items = normalizeItems(body.order_items);
   if (order_items.length === 0) throw new ApiError(400, 'order_items required');
 
-  if (!isOpmsAdmin(user)) {
+  if (!isOpmsAdmin(user) && !hasAnyOpmsRole(user, [ROLES.SALES, ROLES.SUPER_ADMIN, ROLES.FINANCE, ROLES.ACCOUNT])) {
     await resolveNegotiatedRates(order_items, body.party);
   }
 
@@ -1051,6 +1118,8 @@ async function create(body, user) {
   let payload = {
     order_no: orderNo,
     party: body.party,
+    billing_address,
+    shipping_address,
     order_date: body.order_date ? new Date(body.order_date) : new Date(),
     billing_date: body.billing_date ? new Date(body.billing_date) : null,
     payment_status: paymentStatus,
@@ -1111,6 +1180,19 @@ async function create(body, user) {
     new_value: { order_no: plain.order_no },
   });
 
+  try {
+    const orderPerformaService = require('./orderPerforma.service');
+    const perf = await orderPerformaService.saveOrderPerforma(
+      plain._id,
+      body.performa || body.order_performa || {},
+      user
+    );
+    plain.order_performa = perf;
+  } catch (perfErr) {
+    const { logger } = require('../../config/logger');
+    if (logger) logger.warn(`[create] Failed to save performa for order ${plain._id}: ${perfErr?.message}`);
+  }
+
   const submitOnCreate = body.submit_on_create === true || body.submit_on_create === 'true';
   if (submitOnCreate) {
     // Synchronous submit + approval: admin create must not depend on Redis/workers
@@ -1164,7 +1246,13 @@ async function create(body, user) {
     }
 
     const refreshed = await getModels().Order.findById(plain._id).lean();
-    if (refreshed) Object.assign(plain, toPlain(refreshed));
+    if (refreshed) {
+      const perfSnapshot = plain.order_performa;
+      Object.assign(plain, toPlain(refreshed));
+      if (perfSnapshot && typeof perfSnapshot === 'object') {
+        plain.order_performa = perfSnapshot;
+      }
+    }
     plain.submitted = true;
   }
 
@@ -1269,7 +1357,13 @@ async function update(id, patch, user) {
 
   if (
     p.order_items &&
-    !hasAnyOpmsRole(user, [ROLES.ADMIN, ROLES.SUPER_ADMIN, ROLES.FINANCE, ROLES.ACCOUNT])
+    !hasAnyOpmsRole(user, [
+      ROLES.ADMIN,
+      ROLES.SUPER_ADMIN,
+      ROLES.SALES,
+      ROLES.FINANCE,
+      ROLES.ACCOUNT,
+    ])
   ) {
     await resolveNegotiatedRates(recalcBase.order_items, p.party || order.party);
   }
@@ -1296,6 +1390,25 @@ async function update(id, patch, user) {
     type: 'sync_party_rates',
     payload: { orderId: out._id },
   });
+
+  if (p.save_shipping_to_party === true && out.shipping_address && out.party) {
+    try {
+      await getModels().Party.updateOne(
+        { _id: out.party },
+        { $push: { shipping_addresses: { ...out.shipping_address, is_default: false } } }
+      );
+    } catch (_e) {}
+  }
+
+  if (p.performa || p.order_performa) {
+    const orderPerformaService = require('./orderPerforma.service');
+    out.order_performa = await orderPerformaService.saveOrderPerforma(
+      out._id,
+      p.performa || p.order_performa,
+      user
+    );
+  }
+
   return out;
 }
 

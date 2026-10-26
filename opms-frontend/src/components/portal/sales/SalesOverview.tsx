@@ -136,6 +136,7 @@ export default function SalesOverview() {
         queueCounts={summary?.queueCounts}
         isOrdersFetching={isSummaryFetching}
         role="sales"
+        showPricing={true}
         selectedYears={selectedYears}
         selectedMonths={selectedMonths}
         dateFilter={dateFilter}
@@ -147,7 +148,6 @@ export default function SalesOverview() {
       <MonthlyPerformanceChart
         monthly={summary?.monthly}
         isOrdersFetching={isSummaryFetching}
-        forceMetric="quantity"
         qtyBasis={qtyBasis}
       />
 
@@ -155,14 +155,12 @@ export default function SalesOverview() {
         <ProductLeaderboard
           rows={summary?.leaderboards.products}
           isOrdersFetching={isSummaryFetching}
-          forceMetric="quantity"
           externalFilterCaption={filterCaption}
           qtyBasis={qtyBasis}
         />
         <PartyLeaderboard
           rows={summary?.leaderboards.parties}
           isOrdersFetching={isSummaryFetching}
-          forceMetric="quantity"
           externalFilterCaption={filterCaption}
           qtyBasis={qtyBasis}
         />
@@ -173,7 +171,6 @@ export default function SalesOverview() {
           orders={[]}
           contributions={summary?.contributions}
           isOrdersFetching={isSummaryFetching}
-          forceMetric="quantity"
           forceSalesUserId={user?._id || user?.id ? String(user?._id || user?.id) : undefined}
           forceSalesUserName={userName}
           externalFilterCaption={filterCaption}

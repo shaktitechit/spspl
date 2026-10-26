@@ -42,6 +42,7 @@ interface OverviewWidgetsProps {
   customDateFrom?: string;
   customDateTo?: string;
   qtyBasis?: QtyBasis;
+  showPricing?: boolean;
 }
 
 const APPROVAL_PENDING_PIPELINE_TABS: OrderWorkflowTabCategory[] = [
@@ -98,6 +99,7 @@ export default function OverviewWidgets({
   customDateFrom,
   customDateTo,
   qtyBasis = "approved",
+  showPricing,
 }: OverviewWidgetsProps) {
   const tabStats = useMemo(
     () =>
@@ -266,8 +268,8 @@ export default function OverviewWidgets({
   }, [kpis, role]);
 
   const handleDownload = () => {
-    const isSales = role === "sales";
-    const headers = isSales
+    const showAmount = showPricing ?? role !== "sales";
+    const headers = !showAmount
       ? ["Metric Category", "Quantity (Items)", "Kit Quantity", "Order Count"]
       : [
           "Metric Category",
@@ -278,7 +280,7 @@ export default function OverviewWidgets({
         ];
 
     const rows = cards.map((card) =>
-      isSales
+      !showAmount
         ? [
             card.label,
             formatQty(card.quantity),
@@ -333,7 +335,7 @@ export default function OverviewWidgets({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {cards.map((card) => {
             const { Icon } = card;
-            const isSales = role === "sales";
+            const showAmount = showPricing ?? role !== "sales";
             const orderLabel = `${card.count.toLocaleString("en-IN")} ${
               card.count === 1 ? "order" : "orders"
             }`;
@@ -361,7 +363,7 @@ export default function OverviewWidgets({
                   <h3 className="font-sans text-xl font-bold text-slate-900 dark:text-slate-100">
                     {isOrdersFetching ? (
                       <span className="inline-block h-6 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-800" />
-                    ) : isSales ? (
+                    ) : !showAmount ? (
                       formatQty(card.quantity)
                     ) : (
                       `₹${formatMoney(card.amount)}`
@@ -370,7 +372,7 @@ export default function OverviewWidgets({
                   <p className="mt-1 text-2xs font-medium text-slate-500 dark:text-slate-400">
                     {isOrdersFetching ? (
                       <span className="inline-block h-3 w-28 animate-pulse rounded bg-slate-200 dark:bg-slate-800" />
-                    ) : isSales ? (
+                    ) : !showAmount ? (
                       <>
                         {orderLabel}
                         {kitLabel ? (

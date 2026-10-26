@@ -155,16 +155,19 @@ export function normalizeSalesTabFromUrl(
 
 export type SalesOrderStats = Record<
   SalesOrderTabCategory,
-  { count: number; quantity: number }
+  { count: number; quantity: number; amount: number }
 >;
 
 export function createEmptySalesOrderStats(): SalesOrderStats {
   return Object.fromEntries(
-    Object.keys(SALES_ORDER_TAB_LABELS).map((id) => [id, { count: 0, quantity: 0 }]),
+    Object.keys(SALES_ORDER_TAB_LABELS).map((id) => [
+      id,
+      { count: 0, quantity: 0, amount: 0 },
+    ]),
   ) as SalesOrderStats;
 }
 
-/** Aggregate order counts and line quantities by sales tab bucket. */
+/** Aggregate order counts, line quantities, and amounts by sales tab bucket. */
 export function computeSalesOrderStats(
   orders: unknown[],
   options?: SalesOrderCategoryOptions,
@@ -175,19 +178,27 @@ export function computeSalesOrderStats(
     if (!order || typeof order !== "object") continue;
 
     const cat = getOrderTabCategory(order, options);
-    const row = order as { order_items?: unknown[] };
+    const row = order as {
+      order_items?: unknown[];
+      grand_total?: unknown;
+      total?: unknown;
+      total_amount?: unknown;
+    };
     const items = Array.isArray(row.order_items) ? row.order_items : [];
     let orderQty = 0;
     for (const item of items) {
       const line = item as { ordered_quantity?: unknown; quantity?: unknown };
       orderQty += Number(line.ordered_quantity ?? line.quantity ?? 0);
     }
+    const orderAmt = Number(row.grand_total ?? row.total ?? row.total_amount ?? 0);
 
     stats.all.count += 1;
     stats.all.quantity += orderQty;
+    stats.all.amount += orderAmt;
 
     stats[cat].count += 1;
     stats[cat].quantity += orderQty;
+    stats[cat].amount += orderAmt;
   }
 
   return stats;

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 
 /**
  * Mobile drawer + desktop persistent sidebar orchestration (see {@link DashboardShell}).
@@ -17,6 +17,9 @@ export type ShellNavContextValue = {
   /** Desktop-only: whether the sidebar is in its narrow/icon-only collapsed state. */
   desktopCollapsed: boolean;
   setDesktopCollapsed: Dispatch<SetStateAction<boolean>>;
+  /** Optional custom header content injected by pages (e.g., OrderDetailsPage) */
+  headerExtra: ReactNode | null;
+  setHeaderExtra: (node: ReactNode | null) => void;
 };
 
 export const ShellNavContext = createContext<ShellNavContextValue>({
@@ -25,6 +28,8 @@ export const ShellNavContext = createContext<ShellNavContextValue>({
   closeMobileNav: noop,
   desktopCollapsed: true,
   setDesktopCollapsed: noop,
+  headerExtra: null,
+  setHeaderExtra: noop,
 });
 
 export function useShellNav() {

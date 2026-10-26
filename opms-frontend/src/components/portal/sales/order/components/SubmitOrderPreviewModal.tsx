@@ -42,6 +42,36 @@ function formatDate(v: unknown): string {
   });
 }
 
+function formatMoney(v: unknown): string {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(2) : "0.00";
+}
+
+function lineGross(line: Record<string, unknown>): number {
+  const qty = Number(line.ordered_quantity ?? line.quantity ?? 0);
+  const price = Number(line.unit_price ?? 0);
+  return qty * price;
+}
+
+function lineDiscount(line: Record<string, unknown>): number {
+  const gross = lineGross(line);
+  const percent = Number(line.discount_percent ?? 0);
+  if (percent > 0) return (gross * percent) / 100;
+  return Number(line.discount_amount ?? 0);
+}
+
+function lineTaxable(line: Record<string, unknown>): number {
+  return Math.max(0, lineGross(line) - lineDiscount(line));
+}
+
+function lineGst(line: Record<string, unknown>): number {
+  return (lineTaxable(line) * Number(line.gst_percent ?? 0)) / 100;
+}
+
+function lineTotal(line: Record<string, unknown>): number {
+  return lineTaxable(line) + lineGst(line);
+}
+
 export default function SubmitOrderPreviewModal({
   isOpen,
   onClose,
@@ -61,6 +91,31 @@ export default function SubmitOrderPreviewModal({
     return detail.order_items as Record<string, unknown>[];
   }, [detail.order_items]);
 
+  const totals = useMemo(() => {
+    let subtotal = 0;
+    let discount = 0;
+    let taxable = 0;
+    let gst = 0;
+    let total = 0;
+
+    for (const item of items) {
+      subtotal += lineGross(item);
+      discount += lineDiscount(item);
+      taxable += lineTaxable(item);
+      gst += lineGst(item);
+      total += lineTotal(item);
+    }
+
+    const headerDisc = Number(detail.discount_amount ?? 0);
+    const grandTotal = Number(
+      detail.grand_total ??
+      detail.total ??
+      Math.max(0, total - headerDisc)
+    );
+
+    return { subtotal, discount, taxable, gst, grandTotal };
+  }, [items, detail]);
+
   const needsRetry = Boolean(submitIssue);
 
   if (!isOpen) return null;
@@ -75,14 +130,14 @@ export default function SubmitOrderPreviewModal({
               Review order before submit
             </h3>
             <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
-              Confirm the details below, then submit for admin review.
+              Confirm item pricing, quantities, and totals before submitting for admin review.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-white/5"
+            className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-white/5 cursor-pointer"
           >
             <span className="sr-only">Close</span>
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -142,19 +197,23 @@ export default function SubmitOrderPreviewModal({
           </dl>
 
           <div className="mt-5 overflow-x-auto rounded-lg ring-1 ring-slate-200/90 dark:ring-white/10">
-            <table className="w-full min-w-[500px] text-left text-xs">
+            <table className="w-full min-w-[720px] text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 dark:bg-slate-950/50">
                 <tr>
                   <th className="px-3 py-2 font-medium">Product</th>
                   <th className="px-3 py-2 font-medium text-right">Qty</th>
                   <th className="px-3 py-2 font-medium text-right">Free</th>
                   <th className="px-3 py-2 font-medium text-right">Rate Type</th>
+                  <th className="px-3 py-2 font-medium text-right">Unit Price</th>
+                  <th className="px-3 py-2 font-medium text-right">Discount</th>
+                  <th className="px-3 py-2 font-medium text-right">GST</th>
+                  <th className="px-3 py-2 font-medium text-right">Line Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200/80 dark:divide-white/10">
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-3 py-6 text-center text-slate-500">
+                    <td colSpan={8} className="px-3 py-6 text-center text-slate-500">
                       No line items on this order.
                     </td>
                   </tr>
@@ -180,10 +239,26 @@ export default function SubmitOrderPreviewModal({
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">{qty}</td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {Number(line.free_qty ?? 0)}
+                          {Number(line.free_qty ?? line.free_quantity ?? 0)}
                         </td>
                         <td className="px-3 py-2 text-right">
                           {typeof line.applied_rate_type === "string" ? line.applied_rate_type : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          ₹{formatMoney(line.unit_price ?? 0)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {Number(line.discount_percent ?? 0) > 0
+                            ? `${line.discount_percent}%`
+                            : Number(line.discount_amount ?? 0) > 0
+                              ? `₹${formatMoney(line.discount_amount)}`
+                              : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {Number(line.gst_percent ?? 0)}%
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                          ₹{formatMoney(lineTotal(line))}
                         </td>
                       </tr>
                     );
@@ -191,6 +266,41 @@ export default function SubmitOrderPreviewModal({
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Financial Breakdown */}
+          <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/20 p-4 dark:border-blue-900/30 dark:bg-blue-950/10">
+            <h4 className="mb-2 text-2xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Order Financial Summary
+            </h4>
+            <div className="grid gap-3 sm:grid-cols-4 font-sans text-xs">
+              <div>
+                <span className="text-slate-500 dark:text-slate-400 block">Gross Subtotal</span>
+                <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-200">
+                  ₹{formatMoney(totals.subtotal)}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 dark:text-slate-400 block">Total Discount</span>
+                <span className="text-sm font-semibold tabular-nums text-rose-600 dark:text-rose-400">
+                  -₹{formatMoney(totals.discount)}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 dark:text-slate-400 block">Estimated GST</span>
+                <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-200">
+                  ₹{formatMoney(totals.gst)}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 dark:text-slate-400 block font-semibold text-emerald-600 dark:text-emerald-400">
+                  Grand Total
+                </span>
+                <span className="text-base font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                  ₹{formatMoney(totals.grandTotal)}
+                </span>
+              </div>
+            </div>
           </div>
 
           <div className="mt-5">
@@ -222,7 +332,7 @@ export default function SubmitOrderPreviewModal({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="rounded-lg border border-slate-200/95 px-4 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-50 dark:border-white/15 dark:text-slate-100 dark:hover:bg-white/5"
+            className="rounded-lg border border-slate-200/95 px-4 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-50 dark:border-white/15 dark:text-slate-100 dark:hover:bg-white/5 cursor-pointer"
           >
             Cancel
           </button>
@@ -231,7 +341,7 @@ export default function SubmitOrderPreviewModal({
               type="button"
               onClick={() => (onRetry ? onRetry() : onSubmit())}
               disabled={isSubmitting || items.length === 0}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             >
               {isSubmitting ? (
                 <>
@@ -252,7 +362,7 @@ export default function SubmitOrderPreviewModal({
               type="button"
               onClick={onSubmit}
               disabled={isSubmitting || items.length === 0}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-500 dark:hover:bg-emerald-400 cursor-pointer"
             >
               {isSubmitting ? (
                 <>

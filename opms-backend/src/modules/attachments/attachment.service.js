@@ -40,6 +40,62 @@ async function create(body, user) {
     message: body.original_name || 'Attachment stored',
   });
 
+  // Auto-link to OrderPerforma if entity is an order
+  if (body.entity_type === 'order' && body.entity_id) {
+    try {
+      const { OrderPerforma } = getModels();
+      if (OrderPerforma) {
+        const cat = String(body.category || '').toLowerCase();
+        const rem = String(body.remarks || '').toLowerCase();
+        const fn = String(body.original_name || body.file_name || '').toLowerCase();
+
+        const updateFields = {};
+        if (cat === 'po' || rem.startsWith('[po]') || fn.startsWith('po_') || fn.includes('purchase_order')) {
+          updateFields.po_attachment = plain._id;
+        } else if (
+          cat === 'cost_sheet' ||
+          cat === 'margin_sheet' ||
+          rem.includes('cost_sheet') ||
+          rem.includes('margin_sheet') ||
+          fn.includes('cost_sheet') ||
+          fn.includes('margin_sheet')
+        ) {
+          updateFields.cost_sheet_attachment = plain._id;
+          updateFields.margin_sheet_attached = 'Attached';
+        } else if (
+          cat === 'kyc_aadhaar' ||
+          cat === 'aadhaar' ||
+          cat === 'adhaar' ||
+          rem.includes('aadhaar') ||
+          rem.includes('adhaar') ||
+          fn.includes('aadhaar') ||
+          fn.includes('adhaar')
+        ) {
+          updateFields.aadhaar_attachment = plain._id;
+          updateFields.kyc_status = 'Attached';
+        } else if (cat === 'kyc_pan' || cat === 'pan' || rem.includes('pan') || fn.includes('pan')) {
+          updateFields.pan_attachment = plain._id;
+          updateFields.kyc_status = 'Attached';
+        } else if (cat === 'kyc_gst' || cat === 'gst' || rem.includes('gst') || fn.includes('gst')) {
+          updateFields.gst_attachment = plain._id;
+          updateFields.kyc_status = 'Attached';
+        } else if (cat.startsWith('kyc') || rem.includes('kyc') || fn.includes('kyc')) {
+          updateFields.kyc_status = 'Attached';
+        }
+
+        if (Object.keys(updateFields).length > 0) {
+          if (user && user._id) {
+            updateFields.updated_by = user._id;
+          }
+          await OrderPerforma.findOneAndUpdate(
+            { order: body.entity_id, deletedAt: null },
+            { $set: updateFields }
+          );
+        }
+      }
+    } catch (_) {}
+  }
+
   return plain;
 }
 

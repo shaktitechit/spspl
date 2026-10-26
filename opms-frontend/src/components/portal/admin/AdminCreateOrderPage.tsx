@@ -17,6 +17,8 @@ import {
   Trash2,
   Plus,
   ArrowLeft,
+  ArrowRight,
+  FileText,
   Check,
   History,
   X,
@@ -39,6 +41,18 @@ import {
 } from "@/components/portal/shared/orders/modals/PreviousPartyItemsModal";
 import { Button } from "@/components/ui/Button";
 import {
+  PerformaInvoiceFields,
+  type PerformaFormValues,
+  type PerformaAttachmentFiles,
+  INITIAL_PERFORMA_VALUES,
+} from "@/components/portal/shared/orders/performa/PerformaInvoiceFields";
+import {
+  OrderAddressSelector,
+  type OrderAddressData,
+  emptyOrderAddress,
+  formatAddressOneLine,
+} from "@/components/portal/shared/orders/addresses/OrderAddressSelector";
+import {
   LineRateStatusBadge,
   rateLookupKey,
   resolveLineUnitPrice,
@@ -50,6 +64,8 @@ import {
   useListPartiesQuery,
   useListProductsQuery,
   useListUsersQuery,
+  useCreateAttachmentMutation,
+  useUpdateOrderPerformaMutation,
 } from "@/store/api";
 import type { CheckOrderRatesItem } from "@/store/api/slices/partyOrderProductsRateApi";
 import { useAppSelector } from "@/store";
@@ -807,6 +823,16 @@ export default function AdminCreateOrderPage({
   const [mapTarget, setMapTarget] = useState<MapOrderLinePriceTarget | null>(null);
   const [mapModalOpen, setMapModalOpen] = useState(false);
   const [previousItemsModalOpen, setPreviousItemsModalOpen] = useState(false);
+  const [step, setStep] = useState<1 | 2>(1);
+  const [performaValues, setPerformaValues] = useState<PerformaFormValues>(INITIAL_PERFORMA_VALUES);
+  const [attachmentFiles, setAttachmentFiles] = useState<PerformaAttachmentFiles>({
+    po_file: null,
+    cost_sheet_file: null,
+    aadhaar_file: null,
+    pan_file: null,
+    gst_file: null,
+    kyc_files: [],
+  });
   const [emailOptions, setEmailOptions] = useState<WorkflowEmailOptions>({
     send_email: false,
     send_to_party: false,
@@ -814,6 +840,15 @@ export default function AdminCreateOrderPage({
   });
 
   const [createOrder, { isLoading: isCreating }] = useCreateOrderMutation();
+  const [createAttachment] = useCreateAttachmentMutation();
+  const [updateOrderPerforma] = useUpdateOrderPerformaMutation();
+
+  const handleAttachmentFileChange = useCallback(
+    (field: keyof PerformaAttachmentFiles, file: File | File[] | null) => {
+      setAttachmentFiles((prev) => ({ ...prev, [field]: file }));
+    },
+    [],
+  );
 
   const isLoading = isCreating;
   const canMapPrice = Boolean(partyId);
@@ -829,6 +864,108 @@ export default function AdminCreateOrderPage({
   const selectedPartyName = selectedParty
     ? String(selectedParty.party_name || "")
     : "";
+
+  const selectedPartyAddress = useMemo(() => {
+    if (!selectedParty) return "";
+    const addr = (selectedParty.address || selectedParty.billing_address || "") as any;
+    if (typeof addr === "string") return addr;
+    if (typeof addr === "object" && addr !== null) {
+      return [addr.address_line_1, addr.address_line_2, addr.city, addr.state, addr.pincode]
+        .filter(Boolean)
+        .join(", ");
+    }
+    return "";
+  }, [selectedParty]);
+
+  const [billingAddress, setBillingAddress] = useState<OrderAddressData>(emptyOrderAddress);
+  const [shippingAddress, setShippingAddress] = useState<OrderAddressData>(emptyOrderAddress);
+  const [saveShippingToParty, setSaveShippingToParty] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (selectedParty) {
+      const b = (selectedParty.billing_address || selectedParty.address || {}) as any;
+      const bAddr: OrderAddressData = {
+        label: "Billing Address",
+        recipient_name: String(b.recipient_name || selectedParty.contact_person || ""),
+        phone: String(b.phone || selectedParty.mobile || ""),
+        gst_no: String(b.gst_no || selectedParty.gst_no || ""),
+        address_line_1: String(b.address_line_1 || ""),
+        address_line_2: String(b.address_line_2 || ""),
+        city: String(b.city || ""),
+        state: String(b.state || ""),
+        pincode: String(b.pincode || ""),
+        country: String(b.country || "India"),
+      };
+      setBillingAddress(bAddr);
+
+      const s = (selectedParty.shipping_address || {}) as any;
+      const sList = Array.isArray(selectedParty.shipping_addresses)
+        ? (selectedParty.shipping_addresses as any[])
+        : [];
+      const defaultInList = sList.find((item) => item.is_default);
+      const chosen = defaultInList || (s.address_line_1 ? s : null);
+
+      if (chosen) {
+        setShippingAddress({
+          label: chosen.label || "Saved Delivery Location",
+          recipient_name: chosen.recipient_name || selectedParty.contact_person || "",
+          phone: chosen.phone || selectedParty.mobile || "",
+          gst_no: chosen.gst_no || selectedParty.gst_no || "",
+          address_line_1: chosen.address_line_1 || "",
+          address_line_2: chosen.address_line_2 || "",
+          city: chosen.city || "",
+          state: chosen.state || "",
+          pincode: chosen.pincode || "",
+          country: chosen.country || "India",
+        });
+      } else {
+        setShippingAddress(bAddr);
+      }
+
+      // Prefill performa default values from party
+      const pType = String((selectedParty as any).party_type || "").toLowerCase();
+      const friendlyCustomerType =
+        pType === "hospital" ? "Hospital" :
+        pType === "dealer" ? "Dealer" :
+        pType === "distributor" ? "Distributor" :
+        pType === "institutional" ? "Institutional" :
+        pType === "government" ? "Government" :
+        "Direct Customer";
+
+      const salesName = selectedSalesUser?.name || selectedSalesUser?.username || user?.name || user?.username || "";
+
+      setPerformaValues((prev) => ({
+        ...prev,
+        customer_type: prev.customer_type || friendlyCustomerType,
+        payment_terms: prev.payment_terms || String((selectedParty as any).payment_terms || "30 days"),
+        freight_charges: prev.freight_charges || "Included",
+        sales_person: prev.sales_person || String(salesName || ""),
+        ship_to_address: prev.ship_to_address || formatAddressOneLine(chosen || bAddr),
+      }));
+    } else {
+      setBillingAddress(emptyOrderAddress);
+      setShippingAddress(emptyOrderAddress);
+    }
+  }, [selectedParty, selectedSalesUser, user]);
+
+  useEffect(() => {
+    if (shippingAddress.address_line_1) {
+      const formatted = formatAddressOneLine(shippingAddress);
+      setPerformaValues((prev) => ({
+        ...prev,
+        ship_to_address: formatted,
+      }));
+    }
+  }, [shippingAddress]);
+
+  useEffect(() => {
+    if (expectedDate) {
+      setPerformaValues((prev) => ({
+        ...prev,
+        dispatch_date: prev.dispatch_date || expectedDate,
+      }));
+    }
+  }, [expectedDate]);
 
   const resetForm = useCallback(() => {
     setPartyId("");
@@ -1290,6 +1427,48 @@ export default function AdminCreateOrderPage({
 
         const actorId =
           user?._id || user?.id ? String(user?._id || user?.id) : undefined;
+
+        const friendlyCustomerType = (() => {
+          const pType = String((selectedParty as any)?.party_type || "").toLowerCase();
+          if (pType === "hospital") return "Hospital";
+          if (pType === "dealer") return "Dealer";
+          if (pType === "distributor") return "Distributor";
+          if (pType === "institutional") return "Institutional";
+          if (pType === "government") return "Government";
+          return "Direct Customer";
+        })();
+
+        const finalShipTo =
+          performaValues.ship_to_address.trim() ||
+          (shippingAddress.address_line_1
+            ? formatAddressOneLine(shippingAddress)
+            : billingAddress.address_line_1
+            ? formatAddressOneLine(billingAddress)
+            : selectedPartyAddress);
+
+        const salesName =
+          selectedSalesUser?.name ||
+          selectedSalesUser?.username ||
+          user?.name ||
+          user?.username ||
+          "";
+
+        const finalPerforma: PerformaFormValues = {
+          ...performaValues,
+          sales_person: performaValues.sales_person.trim() || String(salesName || ""),
+          dispatch_date: performaValues.dispatch_date || expectedDate,
+          ship_to_address: finalShipTo,
+          payment_terms: performaValues.payment_terms.trim() || String((selectedParty as any)?.payment_terms || "30 days"),
+          customer_type: performaValues.customer_type.trim() || friendlyCustomerType,
+          freight_charges: performaValues.freight_charges.trim() || "Included",
+          margin_sheet_attached: performaValues.margin_sheet_attached || (attachmentFiles.cost_sheet_file ? "Attached" : ""),
+          kyc_status: performaValues.kyc_status || (
+            attachmentFiles.aadhaar_file || attachmentFiles.pan_file || attachmentFiles.gst_file || (attachmentFiles.kyc_files && attachmentFiles.kyc_files.length > 0)
+              ? "Attached"
+              : ""
+          ),
+        };
+
         const body: Record<string, unknown> = {
           party: partyId,
           order_items: prepared,
@@ -1309,11 +1488,143 @@ export default function AdminCreateOrderPage({
           contact_number: selectedContacts,
           contact_name: selectedContactNames,
           email_options: emailOptions,
+          billing_address: billingAddress.address_line_1 ? billingAddress : undefined,
+          shipping_address: shippingAddress.address_line_1
+            ? shippingAddress
+            : billingAddress.address_line_1
+            ? billingAddress
+            : undefined,
+          save_shipping_to_party: saveShippingToParty,
+          performa: finalPerforma,
         };
 
         const data = (await createOrder(body).unwrap()) as any;
         const orderNo = String(data?.order_no ?? "");
         const orderId = String(data?._id ?? data?.id ?? "");
+
+        if (orderId) {
+          if (attachmentFiles.po_file) {
+            const fd = new FormData();
+            fd.append("file", attachmentFiles.po_file);
+            fd.append("entity_type", "order");
+            fd.append("entity_id", orderId);
+            fd.append("category", "po");
+            fd.append("remarks", "Purchase Order (PO)");
+            await createAttachment(fd).unwrap().catch((err) => {
+              console.warn("Failed to upload PO attachment:", err);
+            });
+          }
+
+          if (attachmentFiles.cost_sheet_file) {
+            const fd = new FormData();
+            fd.append("file", attachmentFiles.cost_sheet_file);
+            fd.append("entity_type", "order");
+            fd.append("entity_id", orderId);
+            fd.append("category", "cost_sheet");
+            fd.append("remarks", "Cost Sheet / Margin Sheet");
+            await createAttachment(fd).unwrap().catch((err) => {
+              console.warn("Failed to upload Cost Sheet attachment:", err);
+            });
+          }
+
+          if (attachmentFiles.aadhaar_file) {
+            const fd = new FormData();
+            fd.append("file", attachmentFiles.aadhaar_file);
+            fd.append("entity_type", "order");
+            fd.append("entity_id", orderId);
+            fd.append("category", "kyc_aadhaar");
+            fd.append("remarks", "Customer Aadhaar Card");
+            await createAttachment(fd).unwrap().catch((err) => {
+              console.warn("Failed to upload Aadhaar attachment:", err);
+            });
+
+            if (partyId) {
+              const pfd = new FormData();
+              pfd.append("file", attachmentFiles.aadhaar_file);
+              pfd.append("entity_type", "party");
+              pfd.append("entity_id", partyId);
+              pfd.append("category", "kyc_aadhaar");
+              pfd.append("remarks", "Customer Aadhaar Card from Order");
+              await createAttachment(pfd).unwrap().catch(() => {});
+            }
+          }
+
+          if (attachmentFiles.pan_file) {
+            const fd = new FormData();
+            fd.append("file", attachmentFiles.pan_file);
+            fd.append("entity_type", "order");
+            fd.append("entity_id", orderId);
+            fd.append("category", "kyc_pan");
+            fd.append("remarks", "Customer PAN Card");
+            await createAttachment(fd).unwrap().catch((err) => {
+              console.warn("Failed to upload PAN attachment:", err);
+            });
+
+            if (partyId) {
+              const pfd = new FormData();
+              pfd.append("file", attachmentFiles.pan_file);
+              pfd.append("entity_type", "party");
+              pfd.append("entity_id", partyId);
+              pfd.append("category", "kyc_pan");
+              pfd.append("remarks", "Customer PAN Card from Order");
+              await createAttachment(pfd).unwrap().catch(() => {});
+            }
+          }
+
+          if (attachmentFiles.gst_file) {
+            const fd = new FormData();
+            fd.append("file", attachmentFiles.gst_file);
+            fd.append("entity_type", "order");
+            fd.append("entity_id", orderId);
+            fd.append("category", "kyc_gst");
+            fd.append("remarks", "Customer GST Certificate");
+            await createAttachment(fd).unwrap().catch((err) => {
+              console.warn("Failed to upload GST attachment:", err);
+            });
+
+            if (partyId) {
+              const pfd = new FormData();
+              pfd.append("file", attachmentFiles.gst_file);
+              pfd.append("entity_type", "party");
+              pfd.append("entity_id", partyId);
+              pfd.append("category", "kyc_gst");
+              pfd.append("remarks", "Customer GST Certificate from Order");
+              await createAttachment(pfd).unwrap().catch(() => {});
+            }
+          }
+
+          if (attachmentFiles.kyc_files && attachmentFiles.kyc_files.length > 0) {
+            for (const file of attachmentFiles.kyc_files) {
+              const fd = new FormData();
+              fd.append("file", file);
+              fd.append("entity_type", "order");
+              fd.append("entity_id", orderId);
+              fd.append("category", "kyc");
+              fd.append("remarks", "KYC Document");
+              await createAttachment(fd).unwrap().catch((err) => {
+                console.warn("Failed to upload KYC attachment:", err);
+              });
+
+              if (partyId) {
+                const pfd = new FormData();
+                pfd.append("file", file);
+                pfd.append("entity_type", "party");
+                pfd.append("entity_id", partyId);
+                pfd.append("category", "kyc");
+                pfd.append("remarks", "KYC Document from Order");
+                await createAttachment(pfd).unwrap().catch(() => {});
+              }
+            }
+          }
+
+          // Sync performa after all attachments uploaded to ensure IDs and statuses link immediately
+          await updateOrderPerforma({
+            orderId,
+            data: finalPerforma,
+          }).unwrap().catch((err) => {
+            console.warn("Failed to sync performa after attachments upload:", err);
+          });
+        }
 
         toast.success(portalConfig.successToast(orderNo));
         onCreated?.({ orderId, orderNo });
@@ -1329,6 +1640,8 @@ export default function AdminCreateOrderPage({
     [
       partyId,
       createOrder,
+      createAttachment,
+      updateOrderPerforma,
       orderDate,
       expectedDate,
       lines,
@@ -1344,8 +1657,77 @@ export default function AdminCreateOrderPage({
       asModal,
       onClose,
       onCreated,
+      performaValues,
+      attachmentFiles,
+      billingAddress,
+      shippingAddress,
+      saveShippingToParty,
+      selectedParty,
+      selectedPartyAddress,
+      selectedSalesUser,
+      emailOptions,
     ],
   );
+
+  const handleNextToStep2 = useCallback(() => {
+    if (!partyId) {
+      toast.error("Select a party.");
+      return;
+    }
+    const prepared = lines.filter((l) => l.productId);
+    if (!prepared.length) {
+      toast.error("Add at least one line with a product.");
+      return;
+    }
+    const badQty = prepared.some(
+      (l) => !Number.isFinite(l.quantity) || l.quantity < 1,
+    );
+    if (badQty) {
+      toast.error("Each line needs quantity ≥ 1.");
+      return;
+    }
+    if (!orderDate.trim()) {
+      toast.error("Order date is required.");
+      return;
+    }
+    if (!expectedDate.trim()) {
+      toast.error("Expected delivery date is required.");
+      return;
+    }
+    const salesName =
+      selectedSalesUser?.name ||
+      selectedSalesUser?.username ||
+      user?.name ||
+      user?.username ||
+      "";
+
+    const pType = String((selectedParty as any)?.party_type || "").toLowerCase();
+    const friendlyCustomerType =
+      pType === "hospital" ? "Hospital" :
+      pType === "dealer" ? "Dealer" :
+      pType === "distributor" ? "Distributor" :
+      pType === "institutional" ? "Institutional" :
+      pType === "government" ? "Government" :
+      "Direct Customer";
+
+    const currentShipTo = shippingAddress.address_line_1
+      ? formatAddressOneLine(shippingAddress)
+      : billingAddress.address_line_1
+      ? formatAddressOneLine(billingAddress)
+      : selectedPartyAddress;
+
+    setPerformaValues((prev) => ({
+      ...prev,
+      sales_person: prev.sales_person || String(salesName || ""),
+      dispatch_date: prev.dispatch_date || expectedDate,
+      ship_to_address: prev.ship_to_address || currentShipTo,
+      payment_terms: prev.payment_terms || String((selectedParty as any)?.payment_terms || "30 days"),
+      customer_type: prev.customer_type || friendlyCustomerType,
+      freight_charges: prev.freight_charges || "Included",
+    }));
+    setStep(2);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [partyId, lines, orderDate, expectedDate, selectedSalesUser, user, selectedParty, shippingAddress, billingAddress, selectedPartyAddress]);
 
   if (asModal && !isOpen) return null;
 
@@ -1405,16 +1787,65 @@ export default function AdminCreateOrderPage({
         )}
       </div>
 
+      {/* Stepper Navigation */}
+      <div className="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/70 p-1.5 dark:border-white/10 dark:bg-slate-900/60">
+        <button
+          type="button"
+          onClick={() => setStep(1)}
+          className={`flex items-center gap-2.5 rounded-lg px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+            step === 1
+              ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/90 dark:bg-slate-800 dark:text-blue-400 dark:ring-white/10"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/50 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          <span
+            className={`flex h-5 w-5 items-center justify-center rounded-full text-2xs font-bold ${
+              step === 1
+                ? "bg-blue-600 text-white"
+                : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
+            }`}
+          >
+            1
+          </span>
+          <span>Step 1: Order Details & Items</span>
+        </button>
+
+        <span className="text-slate-300 dark:text-slate-700">/</span>
+
+        <button
+          type="button"
+          onClick={handleNextToStep2}
+          className={`flex items-center gap-2.5 rounded-lg px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+            step === 2
+              ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/90 dark:bg-slate-800 dark:text-blue-400 dark:ring-white/10"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/50 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          <span
+            className={`flex h-5 w-5 items-center justify-center rounded-full text-2xs font-bold ${
+              step === 2
+                ? "bg-blue-600 text-white"
+                : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
+            }`}
+          >
+            2
+          </span>
+          <span>Step 2: Performa Invoice</span>
+        </button>
+      </div>
+
       <form
         onSubmit={onSubmit}
         className={
           asModal
-            ? "min-h-0 flex-1 overflow-auto px-5 py-5 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_300px]"
-            : "grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_300px]"
+            ? "min-h-0 flex-1 overflow-auto px-5 py-5"
+            : "space-y-6"
         }
       >
-        {/* Left Column: Form Details & Line Items */}
-        <div className="min-w-0 space-y-6">
+        {step === 1 && (
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
+          {/* Left Column: Form Details & Line Items */}
+          <div className="min-w-0 space-y-6">
           {/* Party & Terms */}
           <section className="rounded-xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900">
             <header className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-white/5">
@@ -1490,6 +1921,19 @@ export default function AdminCreateOrderPage({
               </div>
             </div>
           </section>
+
+          {/* Invoicing & Delivery Destination Card */}
+          {selectedParty && (
+            <OrderAddressSelector
+              party={selectedParty}
+              billingAddress={billingAddress}
+              shippingAddress={shippingAddress}
+              onBillingAddressChange={setBillingAddress}
+              onShippingAddressChange={setShippingAddress}
+              saveShippingToParty={saveShippingToParty}
+              onSaveShippingToPartyChange={setSaveShippingToParty}
+            />
+          )}
 
           {/* Workflow Email Controls */}
           <section className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
@@ -1937,33 +2381,103 @@ export default function AdminCreateOrderPage({
                   </p>
                 )}
                 <Button
+                  type="button"
+                  variant="primary"
+                  onClick={handleNextToStep2}
+                  className="w-full font-semibold shadow-md shadow-primary/25 gap-2 cursor-pointer"
+                >
+                  <span>Next: Performa Invoice</span>
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+                <button
                   type="submit"
                   disabled={isLoading || !allItemsNegotiated || !assignedSales}
-                  className="w-full font-semibold shadow-md shadow-primary/25"
-                  title={
-                    !assignedSales
-                      ? "Select a sales representative before submitting"
-                      : !allItemsNegotiated
-                        ? "All items must be negotiated before submitting"
-                        : undefined
-                  }
+                  className="w-full py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition cursor-pointer"
                 >
-                  {isLoading ? (
-                    <>
-                      <svg className="h-4 w-4 animate-spin text-primary-foreground" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      Submitting order...
-                    </>
-                  ) : (
-                    "Create & Submit Order"
-                  )}
-                </Button>
+                  {isLoading ? "Submitting order..." : "Or create & submit without Performa"}
+                </button>
               </div>
             </section>
           </div>
         </div>
+      </div>
+      )}
+
+        {/* Step 2: Performa Invoice */}
+        {step === 2 && (
+          <div className="space-y-6">
+            {/* Step 2 Overview Banner */}
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-50">
+                    Step 2: Performa Invoice Details
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Commercial representations, transport carrier, payment terms, and compliance.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <div className="rounded-lg bg-slate-50 px-3 py-1.5 border border-slate-200/80 dark:bg-slate-800 dark:border-white/5">
+                  <span className="text-slate-500 dark:text-slate-400">Party: </span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{selectedPartyName || "—"}</span>
+                </div>
+                <div className="rounded-lg bg-slate-50 px-3 py-1.5 border border-slate-200/80 dark:bg-slate-800 dark:border-white/5">
+                  <span className="text-slate-500 dark:text-slate-400">Sales: </span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{String(selectedSalesUser?.name || selectedSalesUser?.username || "—")}</span>
+                </div>
+                <div className="rounded-lg bg-emerald-50 px-3 py-1.5 border border-emerald-200/80 dark:bg-emerald-950/40 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-bold">
+                  Total: ₹{formatMoney(liveSummary.total)}
+                </div>
+              </div>
+            </div>
+
+            {/* Performa Form Fields */}
+            <PerformaInvoiceFields
+              values={performaValues}
+              onChange={(f, v) => setPerformaValues((prev) => ({ ...prev, [f]: v }))}
+              billingAddress={selectedPartyAddress}
+              attachmentFiles={attachmentFiles}
+              onAttachmentFileChange={handleAttachmentFileChange}
+            />
+
+            {/* Navigation and Submit Footer */}
+            <div className="flex items-center justify-between gap-4 border-t border-slate-200/80 pt-4 dark:border-white/10">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setStep(1)}
+                className="gap-1.5 cursor-pointer"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Order Items
+              </Button>
+
+              <Button
+                type="submit"
+                disabled={isLoading || !allItemsNegotiated || !assignedSales}
+                className="font-semibold shadow-md shadow-primary/25 min-w-[180px] cursor-pointer"
+              >
+                {isLoading ? (
+                  <>
+                    <svg className="h-4 w-4 animate-spin text-primary-foreground" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Submitting order...
+                  </>
+                ) : (
+                  "Create & Submit Order"
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
       </form>
 
       <MapOrderLinePriceModal

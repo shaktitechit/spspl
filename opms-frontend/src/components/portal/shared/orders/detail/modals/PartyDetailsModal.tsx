@@ -142,12 +142,50 @@ export default function PartyDetailsModal({
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-xs font-medium text-slate-500">Shipping Address</dt>
+                      <dt className="text-xs font-medium text-slate-500">Primary Shipping Address</dt>
                       <dd className="mt-1 whitespace-pre-line rounded-lg bg-slate-50 p-2 text-xs text-slate-700 dark:bg-slate-900/40 dark:text-slate-300 font-sans">
                         {formatStructuredAddress(p.shipping_address)}
                       </dd>
                     </div>
                   </div>
+
+                  {Array.isArray(p.shipping_addresses) && p.shipping_addresses.length > 0 && (
+                    <div className="pt-2">
+                      <dt className="text-xs font-medium text-slate-500 mb-1.5">
+                        Saved Delivery Locations ({p.shipping_addresses.length})
+                      </dt>
+                      <div className="space-y-2">
+                        {p.shipping_addresses.map((loc: any, idx: number) => (
+                          <div
+                            key={loc._id || loc.id || idx}
+                            className="rounded-lg border border-slate-200/80 bg-slate-50/50 p-2.5 text-2xs dark:border-white/10 dark:bg-slate-900/50"
+                          >
+                            <div className="flex items-center justify-between font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                              <span className="flex items-center gap-1.5">
+                                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                                {loc.label || `Location #${idx + 1}`}
+                              </span>
+                              {loc.is_default && (
+                                <span className="rounded bg-blue-100 px-1.5 py-0.2 text-3xs font-bold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                                  Default
+                                </span>
+                              )}
+                            </div>
+                            {(loc.recipient_name || loc.phone || loc.gst_no) && (
+                              <div className="text-slate-500 dark:text-slate-400 mb-1 flex flex-wrap gap-x-3">
+                                {loc.recipient_name && <span>Contact: {loc.recipient_name}</span>}
+                                {loc.phone && <span>Ph: {loc.phone}</span>}
+                                {loc.gst_no && <span className="font-mono">GST: {loc.gst_no}</span>}
+                              </div>
+                            )}
+                            <div className="text-slate-600 dark:text-slate-300 whitespace-pre-line">
+                              {formatStructuredAddress(loc)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })()

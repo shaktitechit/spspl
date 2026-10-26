@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   FileText,
   FileCheck,
@@ -13,6 +13,7 @@ import {
   Files,
   RefreshCw,
 } from "lucide-react";
+import { useListUsersQuery } from "@/store/api";
 import { DocumentDropzone } from "./DocumentDropzone";
 
 export type MultiDocumentGridProps = {
@@ -27,6 +28,7 @@ export type MultiDocumentGridProps = {
   isUploading?: boolean;
   isDeleting?: boolean;
   disabled?: boolean;
+  creatorFallback?: string;
 };
 
 function formatBytes(bytes: unknown): string {
@@ -73,9 +75,34 @@ export function MultiDocumentGrid({
   isUploading = false,
   isDeleting = false,
   disabled = false,
+  creatorFallback,
 }: MultiDocumentGridProps) {
   const [remarks, setRemarks] = useState("");
   const [showUploadZone, setShowUploadZone] = useState(documents.length === 0);
+
+  const usersQ = useListUsersQuery({});
+  const usersList = useMemo(() => {
+    const raw = usersQ.data;
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === "object") {
+      const o = raw as Record<string, unknown>;
+      if (Array.isArray(o.items)) return o.items;
+      if (Array.isArray(o.data)) return o.data;
+    }
+    return [];
+  }, [usersQ.data]);
+
+  const userNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const u of usersList) {
+      if (u && typeof u === "object") {
+        const id = String((u as any)._id || (u as any).id || "");
+        const name = String((u as any).name || (u as any).username || "");
+        if (id && name) map.set(id, name);
+      }
+    }
+    return map;
+  }, [usersList]);
 
   const handleFilesSelected = async (files: File[]) => {
     if (!files || files.length === 0) return;
@@ -183,9 +210,21 @@ export function MultiDocumentGrid({
             const mime = String(doc.mime_type || "");
             const size = formatBytes(doc.size);
             const date = formatDate(doc.createdAt);
-            const uploaderObj = doc.uploaded_by as Record<string, unknown> | undefined;
-            const uploaderName = String(uploaderObj?.name || uploaderObj?.username || "Operator");
-            const uploaderDept = String(uploaderObj?.department || "");
+            const uploaderRaw = doc.uploaded_by ?? doc.created_by;
+            let uploaderName = "";
+            let uploaderDept = "";
+
+            if (uploaderRaw && typeof uploaderRaw === "object") {
+              const rec = uploaderRaw as Record<string, unknown>;
+              uploaderName = String(rec.name || rec.username || "");
+              uploaderDept = String(rec.department || "");
+            } else if (typeof uploaderRaw === "string" && uploaderRaw.trim().length > 0) {
+              uploaderName = userNameById.get(uploaderRaw) || "";
+            }
+
+            if (!uploaderName && creatorFallback) {
+              uploaderName = creatorFallback;
+            }
 
             return (
               <div
@@ -217,9 +256,11 @@ export function MultiDocumentGrid({
                       {date}
                     </span>
                     <span>•</span>
-                    <span className="flex items-center gap-1 truncate max-w-[120px]">
-                      <User className="h-3 w-3" />
-                      {uploaderName}
+                    <span className="flex items-center gap-1 truncate max-w-[150px]" title={uploaderName ? `Created by: ${uploaderName}` : "Created By"}>
+                      <User className="h-3 w-3 text-slate-400" />
+                      <span className="truncate">
+                        Created by: <span className="font-semibold text-slate-700 dark:text-slate-200">{uploaderName || "—"}</span>
+                      </span>
                     </span>
                     {uploaderDept && (
                       <span className="rounded bg-slate-100 px-1 text-2xs uppercase text-slate-500 dark:bg-white/10">

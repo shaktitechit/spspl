@@ -14,6 +14,7 @@ export type OrderDetailFlagDepartment =
 export type OrderDetailTabId =
   | "approvals"
   | "po"
+  | "performa"
   | "cost_sheet"
   | "kyc"
   | "dispatches"
@@ -69,13 +70,14 @@ export const ACCOUNT_ORDER_DETAILS_CONFIG: OrderDetailsPageConfig = {
   tabs: [
     "approvals",
     "po",
+    "performa",
     "cost_sheet",
+    "due_sheet",
     "kyc",
     "dispatches",
     "transports",
     "deliveries",
     "returns",
-    "due_sheet",
     "flags",
     "attachments",
     "reminders",
@@ -98,7 +100,9 @@ export const ADMIN_ORDER_DETAILS_CONFIG: OrderDetailsPageConfig = {
   tabs: [
     "approvals",
     "po",
+    "performa",
     "cost_sheet",
+    "due_sheet",
     "kyc",
     "dispatches",
     "transports",
@@ -107,7 +111,6 @@ export const ADMIN_ORDER_DETAILS_CONFIG: OrderDetailsPageConfig = {
     "flags",
     "attachments",
     "reminders",
-    "due_sheet",
     "communication",
   ],
   headerActions: ["hold", "resume", "reject", "cancel", "final_statement"],
@@ -128,13 +131,14 @@ export const SUPER_ADMIN_ORDER_DETAILS_CONFIG: OrderDetailsPageConfig = {
   tabs: [
     "approvals",
     "po",
+    "performa",
     "cost_sheet",
+    "due_sheet",
     "kyc",
     "dispatches",
     "transports",
     "deliveries",
     "returns",
-    "due_sheet",
     "flags",
     "attachments",
     "reminders",
@@ -154,13 +158,14 @@ export const FINANCE_ORDER_DETAILS_CONFIG: OrderDetailsPageConfig = {
   tabs: [
     "approvals",
     "po",
+    "performa",
     "cost_sheet",
+    "due_sheet",
     "kyc",
     "dispatches",
     "transports",
     "deliveries",
     "returns",
-    "due_sheet",
     "flags",
     "attachments",
     "reminders",

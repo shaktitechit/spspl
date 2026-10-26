@@ -1,10 +1,15 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, AlertTriangle, Truck, MapPin } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Truck, MapPin, RotateCw } from "lucide-react";
 
+import { useShellNav } from "@/components/shell/shell-nav-context";
+import {
+  OrderHeaderSummary,
+  renderWorkflowStatusBadge,
+} from "./components/OrderHeaderSummary";
 import { LargeModalPortal } from "@/components/portal/shared/ui/modals/LargeModalPortal";
 import { Button } from "@/components/ui/Button";
 import {
@@ -73,6 +78,7 @@ import {
   usePatchTransportMutation,
   useTransitionOrderMutation,
 } from "@/store/api";
+import { useGetOrderPerformaQuery } from "@/store/api/slices/orderPerformaApi";
 
 import { agentLabel } from "@/components/portal/shared/transportPlanner/transportPlanUtils";
 import { OrderDetailTabContent } from "./OrderDetailTabContent";
@@ -103,56 +109,6 @@ function readId(value: unknown): string {
   return String(row._id ?? row.id ?? "");
 }
 
-function renderWorkflowStatusBadge(category: FinanceOrderTabCategory | null) {
-  if (!category) return null;
-  const label = FINANCE_ORDER_TAB_LABELS[category] ?? category;
-  let bgClass =
-    "bg-slate-50 text-slate-700 ring-slate-500/10 dark:bg-white/5 dark:text-slate-400 dark:ring-white/10";
-  switch (category) {
-    case "open_dispatched":
-      bgClass =
-        "bg-teal-50 text-teal-700 ring-teal-600/10 dark:bg-teal-950/30 dark:text-teal-400 dark:ring-teal-500/25";
-      break;
-    case "transport_pending":
-      bgClass =
-        "bg-amber-50 text-amber-700 ring-amber-600/10 dark:bg-amber-950/30 dark:text-amber-400 dark:ring-amber-500/25";
-      break;
-    case "in_transit":
-      bgClass =
-        "bg-sky-50 text-sky-700 ring-sky-600/10 dark:bg-sky-950/30 dark:text-sky-400 dark:ring-sky-500/25";
-      break;
-    case "pending_finance_approval":
-      bgClass =
-        "bg-purple-50 text-purple-700 ring-purple-600/10 dark:bg-purple-950/30 dark:text-purple-400 dark:ring-purple-500/25";
-      break;
-    case "closed_delivered":
-      bgClass =
-        "bg-emerald-50 text-emerald-700 ring-emerald-600/10 dark:bg-emerald-950/30 dark:text-emerald-400 dark:ring-emerald-500/25";
-      break;
-    case "on_hold":
-      bgClass =
-        "bg-amber-50 text-amber-700 ring-amber-600/10 dark:bg-amber-950/30 dark:text-amber-400 dark:ring-amber-500/25";
-      break;
-    case "rejected":
-      bgClass =
-        "bg-red-50 text-red-700 ring-red-600/10 dark:bg-red-950/30 dark:text-red-400 dark:ring-red-500/25";
-      break;
-    case "cancelled":
-      bgClass =
-        "bg-rose-50 text-rose-700 ring-rose-600/10 dark:bg-rose-950/30 dark:text-rose-400 dark:ring-rose-500/25";
-      break;
-    default:
-      break;
-  }
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-bold uppercase tracking-wider ring-1 ring-inset ${bgClass}`}
-    >
-      {label}
-    </span>
-  );
-}
-
 export default function OrderDetailsPage({
   orderId,
   config,
@@ -161,6 +117,7 @@ export default function OrderDetailsPage({
   config: OrderDetailsPageConfig;
 }) {
   const router = useRouter();
+  const { setHeaderExtra } = useShellNav();
   const currentUser = useAppSelector((state) => state.auth.user);
   const currentUserId = useMemo(
     () => String(currentUser?._id ?? currentUser?.id ?? ""),
@@ -174,6 +131,7 @@ export default function OrderDetailsPage({
   const needsReturns = config.tabs.includes("returns");
   const needsReminders = config.tabs.includes("reminders");
   const needsDueSheets = config.tabs.includes("due_sheet");
+  const needsPerforma = config.tabs.includes("performa");
   const needsFinanceExtras = config.approvalsMode === "finance";
   const needsAdminApprovals = config.approvalsMode === "admin";
   const needsDispatchOps =
@@ -224,6 +182,9 @@ export default function OrderDetailsPage({
     entity_id: orderId,
   });
   const flagsQ = useListFlagsQuery({ order: orderId });
+  const performaQ = useGetOrderPerformaQuery(orderId, {
+    skip: !orderId || !needsPerforma,
+  });
 
   const detail =
     data && typeof data === "object"
@@ -326,13 +287,67 @@ export default function OrderDetailsPage({
     );
   }, [detail, currentUserId]);
 
-  const currentPartyId = useMemo(
-    () => (detail ? detailRefId(detail.party || detail.customer) : ""),
-    [detail],
-  );
-  const partyDetailQ = useGetPartyQuery(currentPartyId, {
-    skip: !currentPartyId,
+  const currentPartyId = useMemo(() => {
+    if (!detail) return "";
+    const p =
+      detail.party ??
+      detail.customer ??
+      detail.party_id ??
+      detail.partyId ??
+      detail.customer_id ??
+      detail.customerId;
+    return detailRefId(p);
+  }, [detail]);
+
+  const resolvedPartyRecord = useMemo(() => {
+    const list = pickList(partiesQ.data);
+    if (currentPartyId) {
+      const match = list.find((p) => String(p._id ?? p.id ?? "") === currentPartyId);
+      if (match) return match;
+    }
+    const nameToMatch = String(
+      detail?.party_name || detail?.customer_name || ""
+    ).trim().toLowerCase();
+    if (nameToMatch) {
+      const match = list.find(
+        (p) => String(p.party_name || "").trim().toLowerCase() === nameToMatch
+      );
+      if (match) return match;
+    }
+    if (detail?.party && typeof detail.party === "object" && !Array.isArray(detail.party)) {
+      return detail.party as Record<string, unknown>;
+    }
+    if (detail?.customer && typeof detail.customer === "object" && !Array.isArray(detail.customer)) {
+      return detail.customer as Record<string, unknown>;
+    }
+    return null;
+  }, [partiesQ.data, currentPartyId, detail]);
+
+  const effectivePartyId = useMemo(() => {
+    if (currentPartyId) return currentPartyId;
+    return resolvedPartyRecord ? String(resolvedPartyRecord._id ?? resolvedPartyRecord.id ?? "") : "";
+  }, [currentPartyId, resolvedPartyRecord]);
+
+  const legacyCustomerId = useMemo(() => {
+    if (!resolvedPartyRecord?.legacy_customer) return "";
+    return detailRefId(resolvedPartyRecord.legacy_customer);
+  }, [resolvedPartyRecord]);
+
+  const partyDetailQ = useGetPartyQuery(effectivePartyId, {
+    skip: !effectivePartyId,
   });
+  const partyAttachmentsQ = useListAttachmentsQuery(
+    { entity_type: "party", entity_id: effectivePartyId },
+    { skip: !effectivePartyId },
+  );
+  const customerAttachmentsQ = useListAttachmentsQuery(
+    { entity_type: "customer", entity_id: effectivePartyId },
+    { skip: !effectivePartyId },
+  );
+  const legacyCustomerAttachmentsQ = useListAttachmentsQuery(
+    { entity_type: "customer", entity_id: legacyCustomerId },
+    { skip: !legacyCustomerId },
+  );
 
   const eligibleTransportQ = useListEligibleTransportOrdersQuery(
     { limit: 200 },
@@ -538,6 +553,7 @@ export default function OrderDetailsPage({
     if (!remindersQ.isUninitialized) void remindersQ.refetch();
     if (!dueSheetsQ.isUninitialized) void dueSheetsQ.refetch();
     if (!flagsQ.isUninitialized) void flagsQ.refetch();
+    if (!performaQ.isUninitialized) void performaQ.refetch();
   }, [
     refetch,
     fulfillmentQ,
@@ -553,6 +569,7 @@ export default function OrderDetailsPage({
     remindersQ,
     dueSheetsQ,
     flagsQ,
+    performaQ,
   ]);
 
   const handleResolveOrder = useCallback(async () => {
@@ -849,6 +866,44 @@ export default function OrderDetailsPage({
 
   const busy = isSubmitting || isPatching;
 
+  const performaRecord = performaQ.data;
+  const orderPerformaField =
+    detail?.order_performa ??
+    (detail as any)?.performa ??
+    (detail as any)?.proforma_details;
+
+  const hasPerforma = useMemo(() => {
+    if (performaRecord?._id && !performaRecord.is_default) {
+      return true;
+    }
+    if (orderPerformaField) {
+      if (typeof orderPerformaField === "string" && orderPerformaField.trim().length > 0) {
+        return true;
+      }
+      if (typeof orderPerformaField === "object" && orderPerformaField !== null) {
+        const perfObj = orderPerformaField as Record<string, unknown>;
+        if (perfObj._id && !perfObj.is_default) {
+          return true;
+        }
+        if (
+          perfObj.sales_person ||
+          perfObj.dispatch_date ||
+          perfObj.transport ||
+          perfObj.po_attachment ||
+          perfObj.cost_sheet_attachment
+        ) {
+          return true;
+        }
+      }
+    }
+    if (performaRecord?._id) {
+      return true;
+    }
+    return false;
+  }, [performaRecord, orderPerformaField]);
+
+  const performaCount = hasPerforma ? 1 : 0;
+
   const tabCounts = useMemo(() => {
     const poCount = attachmentsList.filter((a) => {
       const c = String(a.category || "").toLowerCase();
@@ -864,6 +919,109 @@ export default function OrderDetailsPage({
       return c === "cost_sheet" || r.startsWith("[cost_sheet]") || n.includes("cost_sheet") || n.includes("costsheet");
     }).length;
 
+    const kycPartyDocs = [
+      ...pickList(partyAttachmentsQ.data),
+      ...pickList(customerAttachmentsQ.data),
+      ...pickList(legacyCustomerAttachmentsQ.data),
+    ];
+    const seenKycDocIds = new Set<string>();
+    const deduplicatedPartyDocs: Record<string, unknown>[] = [];
+    for (const doc of kycPartyDocs) {
+      const id = String(doc._id ?? doc.id ?? "");
+      if (id && !seenKycDocIds.has(id)) {
+        seenKycDocIds.add(id);
+        deduplicatedPartyDocs.push(doc);
+      } else if (!id) {
+        deduplicatedPartyDocs.push(doc);
+      }
+    }
+
+    const kycOrderDocs = attachmentsList.filter((a) => {
+      const c = String(a.category || "").toLowerCase();
+      const r = String(a.remarks || "").toLowerCase();
+      const n = String(a.original_name || a.file_name || "").toLowerCase();
+      return (
+        c.startsWith("kyc") ||
+        c.includes("aadhaar") ||
+        c.includes("pan") ||
+        c.includes("gst") ||
+        r.includes("kyc") ||
+        r.includes("aadhaar") ||
+        r.includes("adhaar") ||
+        r.includes("pan") ||
+        r.includes("gst") ||
+        n.includes("kyc") ||
+        n.includes("aadhaar") ||
+        n.includes("adhaar") ||
+        n.includes("pan") ||
+        n.includes("gst")
+      );
+    });
+
+    const partyObj = (
+      resolvedPartyRecord ||
+      (partyDetailQ.data && typeof partyDetailQ.data === "object" && !Array.isArray(partyDetailQ.data)
+        ? (partyDetailQ.data as Record<string, unknown>)
+        : null) ||
+      (detail?.party && typeof detail.party === "object" && !Array.isArray(detail.party)
+        ? (detail.party as Record<string, unknown>)
+        : null) ||
+      (detail?.customer && typeof detail.customer === "object" && !Array.isArray(detail.customer)
+        ? (detail.customer as Record<string, unknown>)
+        : null)
+    ) as Record<string, unknown> | undefined;
+
+    let registeredFieldCount = 0;
+    const gstVal =
+      partyObj?.gst_no ||
+      partyObj?.gstin ||
+      (detail as Record<string, unknown> | null)?.gst_no ||
+      (detail as Record<string, unknown> | null)?.gstin;
+    if (gstVal) registeredFieldCount++;
+
+    const panVal =
+      partyObj?.pan ||
+      partyObj?.pan_no ||
+      (detail as Record<string, unknown> | null)?.pan ||
+      (detail as Record<string, unknown> | null)?.pan_no;
+    if (panVal) registeredFieldCount++;
+
+    const dlVal = partyObj?.drug_license_no || partyObj?.drug_license;
+    if (dlVal) registeredFieldCount++;
+
+    const aadhVal = partyObj?.aadhaar_number || partyObj?.aadhaar_no;
+    if (aadhVal) registeredFieldCount++;
+
+    const kycStatusVal = String(
+      partyObj?.kyc_status ??
+      (detail?.proforma_details as Record<string, unknown> | undefined)?.kyc_status ??
+      ""
+    ).toLowerCase();
+
+    const isKycVerified = Boolean(
+      partyObj?.kyc_verified ||
+      partyObj?.is_kyc_verified ||
+      kycStatusVal === "verified" ||
+      (kycStatusVal && kycStatusVal !== "na" && kycStatusVal !== "rejected")
+    );
+
+    const hasPartyKycFields = Boolean(
+      registeredFieldCount > 0 ||
+      isKycVerified ||
+      (partyObj?.billing_address as Record<string, unknown> | undefined)?.gst_no ||
+      (partyObj?.shipping_address as Record<string, unknown> | undefined)?.gst_no
+    );
+
+    const totalKycDocs = deduplicatedPartyDocs.length + kycOrderDocs.length;
+    const kycCount =
+      totalKycDocs > 0
+        ? totalKycDocs
+        : registeredFieldCount > 0
+          ? registeredFieldCount
+          : hasPartyKycFields
+            ? 1
+            : 0;
+
     const map: Partial<Record<OrderDetailTabId, number>> = {
       approvals:
         config.approvalsMode === "finance"
@@ -872,15 +1030,18 @@ export default function OrderDetailsPage({
             ? pickList(adminApprovalsQ.data).length
             : accountApprovals.length,
       po: poCount > 0 ? 1 : 0,
+      performa: performaCount,
       cost_sheet: costSheetCount > 0 ? 1 : 0,
+      due_sheet: dueSheetsCount,
+      kyc: kycCount,
       dispatches: dispatches.length,
       transports: transports.length,
       deliveries: deliveries.length,
       returns: returns.length,
-      due_sheet: dueSheetsCount,
       flags: rawFlags.filter((f) => f.status === "open").length,
       attachments: attachCount,
       reminders: remindersCount,
+      communication: 0,
     };
     return map;
   }, [
@@ -897,23 +1058,34 @@ export default function OrderDetailsPage({
     rawFlags,
     attachCount,
     remindersCount,
+    resolvedPartyRecord,
+    partyDetailQ.data,
+    partyAttachmentsQ.data,
+    customerAttachmentsQ.data,
+    legacyCustomerAttachmentsQ.data,
+    detail,
+    performaCount,
   ]);
 
   const desktopTabs = useMemo(
     () =>
-      config.tabs.map((id) => ({
-        id,
-        name:
-          id === "approvals" && config.approvalsMode === "admin"
-            ? "Order Approval"
-            : TAB_LABELS[id] ?? id,
-        count: tabCounts[id],
-        dangerBadge: id === "flags",
-      })),
+      config.tabs.map((id) => {
+        const count = tabCounts[id] ?? 0;
+        return {
+          id,
+          name:
+            id === "approvals" && config.approvalsMode === "admin"
+              ? "Order Approval"
+              : TAB_LABELS[id] ?? id,
+          count,
+          hasData: count > 0,
+          dangerBadge: id === "flags",
+        };
+      }),
     [config.tabs, config.approvalsMode, tabCounts],
   );
 
-  const partyData = partyDetailQ.data as Record<string, unknown> | undefined;
+  const partyData = (partyDetailQ.data || resolvedPartyRecord) as Record<string, unknown> | undefined;
   const partyMobile = partyData ? String(partyData.mobile ?? "") : undefined;
   const partyEmail = partyData ? String(partyData.email ?? "") : undefined;
 
@@ -955,6 +1127,44 @@ export default function OrderDetailsPage({
     partyEmail,
     orderNo,
   };
+
+  useEffect(() => {
+    if (!detail) {
+      setHeaderExtra(null);
+      return;
+    }
+    setHeaderExtra(
+      <OrderHeaderSummary
+        orderNo={orderNo}
+        custLabel={custLabel}
+        orderDate={detail.order_date}
+        edd={detail.expected_delivery_date}
+        isSra={Boolean(
+          checkOrderPartySra(detail, partySraById) ||
+            (partyDetailQ.data as any)?.sra === true,
+        )}
+        priority={
+          typeof detail.priority === "string" ? detail.priority : "normal"
+        }
+        workflowCategory={workflowTabCategory}
+        showFinanceWorkflowBadge={config.showFinanceWorkflowBadge}
+        pipelineSteps={pipelineSteps}
+      />,
+    );
+    return () => {
+      setHeaderExtra(null);
+    };
+  }, [
+    detail,
+    orderNo,
+    custLabel,
+    partySraById,
+    partyDetailQ.data,
+    workflowTabCategory,
+    config.showFinanceWorkflowBadge,
+    pipelineSteps,
+    setHeaderExtra,
+  ]);
 
   if (isError || (!isLoading && !detail)) {
     return (
@@ -1099,6 +1309,7 @@ export default function OrderDetailsPage({
         createdBy={createdBy}
         resolveUser={resolveUser}
         activeTransportInfo={activeTransportInfo}
+        onEditAddress={() => setIsUpdateAddressModalOpen(true)}
       />
 
       <PartyDetailsModal
@@ -1114,15 +1325,22 @@ export default function OrderDetailsPage({
       <UpdatePartyAddressModal
         isOpen={isUpdateAddressModalOpen}
         onClose={() => setIsUpdateAddressModalOpen(false)}
-        partyId={currentPartyId}
+        partyId={effectivePartyId || currentPartyId}
+        orderId={orderId}
+        isLocked={isOrderClosed(status)}
         partyName={custLabel}
         initialBillingAddress={
+          (detail?.billing_address as Record<string, unknown>) ||
           ((partyDetailQ.data as Record<string, unknown>)?.billing_address as Record<string, unknown>) ||
           (((detail?.party || detail?.customer) as Record<string, unknown>)?.billing_address as Record<string, unknown>)
         }
         initialShippingAddress={
+          (detail?.shipping_address as Record<string, unknown>) ||
           ((partyDetailQ.data as Record<string, unknown>)?.shipping_address as Record<string, unknown>) ||
           (((detail?.party || detail?.customer) as Record<string, unknown>)?.shipping_address as Record<string, unknown>)
+        }
+        shippingAddresses={
+          ((partyDetailQ.data as any)?.shipping_addresses as any[]) || []
         }
         onSuccess={() => {
           void partyDetailQ.refetch();
@@ -1148,223 +1366,105 @@ export default function OrderDetailsPage({
       )}
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex-shrink-0 space-y-1">
-          <div className="rounded-lg border border-slate-200/80 bg-white p-2 shadow-sm dark:border-white/10 dark:bg-slate-900">
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex flex-wrap items-center gap-1.5 text-2xs text-slate-500 dark:text-slate-400">
-                  <button
-                    type="button"
-                    onClick={() => router.back()}
-                    className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 font-medium text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20 transition"
-                  >
-                    <ArrowLeft className="h-3 w-3" />
-                    <span>Back</span>
-                  </button>
-                  <span className="text-slate-300 dark:text-slate-600">|</span>
-                  <button
-                    type="button"
-                    onClick={() => router.push(config.ordersListPath)}
-                    className="font-medium text-blue-600 hover:underline dark:text-blue-400"
-                  >
-                    Orders
-                  </button>
-                  <span>/</span>
-                  <span className="font-semibold text-slate-700 dark:text-slate-200">
-                    Order Details
-                  </span>
-                  <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-2xs font-bold uppercase tracking-wider text-slate-600 dark:bg-white/10 dark:text-slate-300">
-                    {config.portalLabel}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <h1 className="truncate text-base sm:text-lg font-bold tracking-tight text-slate-950 dark:text-slate-50">
-                    {custLabel}
-                  </h1>
-                  {detail &&
-                    (checkOrderPartySra(detail, partySraById) ||
-                      (partyDetailQ.data as any)?.sra === true) && (
-                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-1.5 py-0.5 text-2xs font-bold text-emerald-700 ring-1 ring-inset ring-emerald-600/10 dark:bg-emerald-500/10 dark:text-emerald-400 shrink-0">
-                        SRA
-                      </span>
-                    )}
-                  <span className="shrink-0">
-                    {renderPriorityBadge(
-                      typeof detail.priority === "string"
-                        ? detail.priority
-                        : "normal",
-                    )}
-                  </span>
-                  {config.showFinanceWorkflowBadge
-                    ? renderWorkflowStatusBadge(workflowTabCategory)
-                    : null}
-                </div>
-                <div className="mt-0 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-lg text-slate-500 dark:text-slate-400">
-                  <span className="flex items-center gap-1">
-                    Order No:{" "}
-                    <b className="font-bold text-blue-700 dark:text-blue-400">
-                      {orderNo}
-                    </b>
-                  </span>
-                  <span>Date: {formatDateShort(detail.order_date)}</span>
-                  <span>
-                    EDD: {formatDateShort(detail.expected_delivery_date)}
-                  </span>
-                </div>
+        <div className="flex-shrink-0 mb-1.5">
+          <div className="rounded-lg border border-slate-200/80 bg-white p-2 shadow-xs dark:border-white/10 dark:bg-slate-900">
+            <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2">
+              {/* Back button & Breadcrumbs */}
+              <div className="flex items-center gap-1.5 text-2xs text-slate-500 dark:text-slate-400 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => router.back()}
+                  className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-1 font-medium text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20 transition cursor-pointer"
+                >
+                  <ArrowLeft className="h-3 w-3" />
+                  <span>Back</span>
+                </button>
+                <span className="text-slate-300 dark:text-slate-600">|</span>
+                <button
+                  type="button"
+                  onClick={() => router.push(config.ordersListPath)}
+                  className="font-medium text-blue-650 hover:underline dark:text-blue-400"
+                >
+                  Orders
+                </button>
+                <span>/</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200">
+                  Details
+                </span>
+                <span className="ml-0.5 rounded bg-slate-100 px-1.5 py-0.5 text-2xs font-bold uppercase tracking-wider text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                  {config.portalLabel}
+                </span>
               </div>
 
-              <div className="flex min-w-0 items-center gap-1.5 lg:shrink-0">
-                <div className="min-w-0 flex-1 overflow-x-auto lg:flex-none lg:min-w-[420px]">
-                  <OrderFulfillmentPipelineStrip
-                    steps={pipelineSteps}
-                    size="sm"
-                  />
-                </div>
+              {/* Unified Top Action Panel */}
+              <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 font-sans font-medium text-2xs">
+                {/* Order Info */}
+                <button
+                  type="button"
+                  onClick={() => setIsOrderDetailsModalOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 hover:bg-white px-2 py-1 text-2xs font-semibold text-slate-700 shadow-xs transition dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-white/5 cursor-pointer active:scale-[0.97]"
+                >
+                  <span>Order Info</span>
+                </button>
+
+                {/* Party Info */}
+                <button
+                  type="button"
+                  onClick={() => setIsPartyDetailsModalOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 hover:bg-white px-2 py-1 text-2xs font-semibold text-slate-700 shadow-xs transition dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-white/5 cursor-pointer active:scale-[0.97]"
+                >
+                  <span>Party Info</span>
+                </button>
+
+                {/* Address (renamed from "Update Billing & Shipping Address") */}
+                <button
+                  type="button"
+                  disabled={!effectivePartyId && !currentPartyId && !orderId}
+                  onClick={() => setIsUpdateAddressModalOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50/80 hover:bg-blue-100/90 px-2 py-1 text-2xs font-semibold text-blue-800 shadow-xs transition dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300 dark:hover:bg-blue-950/50 cursor-pointer active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={effectivePartyId || currentPartyId || orderId ? "Update billing & shipping addresses" : "No party or order linked"}
+                >
+                  <MapPin className="h-3 w-3 shrink-0" />
+                  <span>Address</span>
+                </button>
+
+                {/* Details (Fulfillment Details) */}
                 <button
                   type="button"
                   onClick={() => setIsFulfillmentModalOpen(true)}
-                  className="shrink-0 rounded-md border border-amber-200/80 bg-white px-1.5 py-0.5 text-2xs font-bold text-amber-600 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950 dark:text-amber-400 dark:hover:bg-white/5"
+                  className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 hover:bg-amber-100/80 px-2 py-1 text-2xs font-semibold text-amber-800 shadow-xs transition dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-950/50 cursor-pointer active:scale-[0.97]"
                   title="Fulfillment details"
                 >
-                  Details
+                  <span>Details</span>
                 </button>
+
+                {/* Refresh */}
                 <button
                   type="button"
                   onClick={handleRefetch}
-                  className="shrink-0 rounded-md border border-slate-200/95 p-1 text-slate-500 transition hover:bg-slate-50 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/5"
-                  title="Refresh"
+                  className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-slate-50 hover:bg-white p-1 text-slate-600 shadow-xs transition dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-white/5 cursor-pointer active:scale-[0.97]"
+                  title="Refresh order"
                 >
-                  <svg
-                    className="h-3 w-3"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+                  <RotateCw className="h-3 w-3" />
+                </button>
+
+                {/* Transport Plan (if unassigned) */}
+                {!(activeTransportInfo?.agentName || activeTransportInfo?.scheduledDate) && (
+                  <button
+                    type="button"
+                    onClick={() => setIsTransportPlanModalOpen(true)}
+                    className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 hover:bg-amber-100/80 px-2 py-1 text-2xs font-semibold text-amber-800 shadow-xs transition dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-950/50 cursor-pointer active:scale-[0.98]"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
-                  </svg>
-                </button>
-              </div>
-            </div>
+                    <Truck className="h-3 w-3" />
+                    <span>Transport Plan</span>
+                  </button>
+                )}
 
-            <div className="mt-1 grid grid-cols-2 gap-1 sm:flex sm:flex-wrap sm:gap-1.5 font-sans font-medium">
-              <button
-                type="button"
-                onClick={() => setIsOrderDetailsModalOpen(true)}
-                className="inline-flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-1 rounded-md border border-slate-200 bg-slate-50 hover:bg-white px-2 py-1 sm:px-2 sm:py-1 text-2xs font-semibold text-slate-700 shadow-sm transition dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-white/5 cursor-pointer active:scale-[0.97]"
-              >
-                <span>Order Info</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsPartyDetailsModalOpen(true)}
-                className="inline-flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-1 rounded-md border border-slate-200 bg-slate-50 hover:bg-white px-2 py-1 sm:px-2 sm:py-1 text-2xs font-semibold text-slate-700 shadow-sm transition dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-white/5 cursor-pointer active:scale-[0.97]"
-              >
-                <span>Party Info</span>
-              </button>
-              <button
-                type="button"
-                disabled={!currentPartyId}
-                onClick={() => setIsUpdateAddressModalOpen(true)}
-                className="inline-flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-1.5 rounded-md border border-blue-200 bg-blue-50/80 hover:bg-blue-100/90 px-2.5 py-1 sm:px-2.5 sm:py-1 text-2xs font-semibold text-blue-800 shadow-sm transition dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300 dark:hover:bg-blue-950/50 cursor-pointer active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
-                title={currentPartyId ? "Update billing and shipping addresses for this party" : "No party linked to this order"}
-              >
-                <MapPin className="h-3 w-3 shrink-0" />
-                <span>Update Billing & Shipping Address</span>
-              </button>
-              {hasHeaderAction(config, "final_statement") &&
-                canShowFinalStatement && (
-                <button
-                  type="button"
-                  onClick={() => setIsFinalStatementOpen(true)}
-                  className="inline-flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-1 rounded-md border border-emerald-200 bg-emerald-50 hover:bg-emerald-100/80 px-2 py-1 sm:px-2 sm:py-1 text-2xs font-semibold text-emerald-800 shadow-sm transition dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/50 cursor-pointer active:scale-[0.97]"
-                >
-                  <span>Final Order Statement</span>
-                </button>
-              )}
-            </div>
-
-            <div className="mt-2 border-t border-slate-100 pt-2 dark:border-white/10">
-              <div className="flex flex-wrap items-center justify-between gap-1 sm:gap-1.5 font-sans font-medium">
-                <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
-                  {!(activeTransportInfo?.agentName || activeTransportInfo?.scheduledDate) && (
-                    <button
-                      type="button"
-                      onClick={() => setIsTransportPlanModalOpen(true)}
-                      className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 hover:bg-blue-100/80 px-2 py-0.5 text-xs font-semibold text-blue-800 shadow-sm transition dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300 dark:hover:bg-blue-950/50 cursor-pointer active:scale-[0.98]"
-                    >
-                      <Truck className="h-3 w-3" />
-                      <span>Transport Plan</span>
-                    </button>
-                  )}
-                  {hasHeaderAction(config, "resolve_order") &&
-                    totalApproved > 0 &&
-                    hasRemainingQty && (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => setConfirmResolveOpen(true)}
-                        className="rounded-md bg-indigo-600 px-2 sm:px-2 py-0.5 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98]"
-                      >
-                        Resolve Order
-                      </button>
-                    )}
-                  {hasHeaderAction(config, "hold") && (
-                    <button
-                      type="button"
-                      disabled={!canHold || busy}
-                      title={lockReason}
-                      onClick={() => setTransitioningTo("on_hold")}
-                      className="rounded-md bg-amber-600 px-2 sm:px-2 py-0.5 text-xs font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98]"
-                    >
-                      Hold
-                    </button>
-                  )}
-                  {hasHeaderAction(config, "resume") &&
-                    config.resumeTargetStatus && (
-                      <button
-                        type="button"
-                        disabled={!canResume || busy}
-                        onClick={() =>
-                          setTransitioningTo(config.resumeTargetStatus!)
-                        }
-                        className="rounded-md bg-blue-600 px-2 sm:px-2 py-0.5 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98]"
-                      >
-                        {resumeLabel}
-                      </button>
-                    )}
-                  {hasHeaderAction(config, "reject") && (
-                    <button
-                      type="button"
-                      disabled={!canReject || busy}
-                      title={lockReason}
-                      onClick={() => setTransitioningTo("finance_rejected")}
-                      className="rounded-md bg-rose-600 px-2 sm:px-2 py-0.5 text-xs font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98]"
-                    >
-                      Reject
-                    </button>
-                  )}
-                  {hasHeaderAction(config, "cancel") && (
-                    <button
-                      type="button"
-                      disabled={!canCancel || busy}
-                      title={lockReason}
-                      onClick={() => setTransitioningTo("cancelled")}
-                      className="rounded-md bg-rose-600 px-2 sm:px-2 py-0.5 text-xs font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98]"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-
-                {activeTransportInfo?.agentName || activeTransportInfo?.scheduledDate ? (
-                  <div className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 ring-1 ring-inset ring-amber-600/25 shadow-xs">
-                    <Truck className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span className="flex flex-wrap items-center gap-1">
+                {/* Active Transport Info Chip (if assigned) */}
+                {(activeTransportInfo?.agentName || activeTransportInfo?.scheduledDate) && (
+                  <div className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-2xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 ring-1 ring-inset ring-amber-600/25 shadow-xs">
+                    <Truck className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>
                       {activeTransportInfo.agentName ? (
                         <span>Agent: <b>{activeTransportInfo.agentName}</b></span>
                       ) : null}
@@ -1375,7 +1475,87 @@ export default function OrderDetailsPage({
                       ) : null}
                     </span>
                   </div>
-                ) : null}
+                )}
+
+                {/* Resolve Order */}
+                {hasHeaderAction(config, "resolve_order") &&
+                  totalApproved > 0 &&
+                  hasRemainingQty && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setConfirmResolveOpen(true)}
+                      className="rounded-md bg-indigo-600 px-2 py-1 text-2xs font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98] cursor-pointer"
+                    >
+                      Resolve Order
+                    </button>
+                  )}
+
+                {/* Hold */}
+                {hasHeaderAction(config, "hold") && (
+                  <button
+                    type="button"
+                    disabled={!canHold || busy}
+                    title={lockReason}
+                    onClick={() => setTransitioningTo("on_hold")}
+                    className="rounded-md bg-amber-600 px-2 py-1 text-2xs font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98] cursor-pointer"
+                  >
+                    Hold
+                  </button>
+                )}
+
+                {/* Resume */}
+                {hasHeaderAction(config, "resume") &&
+                  config.resumeTargetStatus && (
+                    <button
+                      type="button"
+                      disabled={!canResume || busy}
+                      onClick={() =>
+                        setTransitioningTo(config.resumeTargetStatus!)
+                      }
+                      className="rounded-md bg-blue-600 px-2 py-1 text-2xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98] cursor-pointer"
+                    >
+                      {resumeLabel}
+                    </button>
+                  )}
+
+                {/* Reject */}
+                {hasHeaderAction(config, "reject") && (
+                  <button
+                    type="button"
+                    disabled={!canReject || busy}
+                    title={lockReason}
+                    onClick={() => setTransitioningTo("finance_rejected")}
+                    className="rounded-md bg-rose-600 px-2 py-1 text-2xs font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98] cursor-pointer"
+                  >
+                    Reject
+                  </button>
+                )}
+
+                {/* Cancel */}
+                {hasHeaderAction(config, "cancel") && (
+                  <button
+                    type="button"
+                    disabled={!canCancel || busy}
+                    title={lockReason}
+                    onClick={() => setTransitioningTo("cancelled")}
+                    className="rounded-md bg-rose-600 px-2 py-1 text-2xs font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98] cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                )}
+
+                {/* Final Order Statement */}
+                {hasHeaderAction(config, "final_statement") &&
+                  canShowFinalStatement && (
+                    <button
+                      type="button"
+                      onClick={() => setIsFinalStatementOpen(true)}
+                      className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 hover:bg-emerald-100/80 px-2 py-1 text-2xs font-semibold text-emerald-800 shadow-xs transition dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/50 cursor-pointer active:scale-[0.97]"
+                    >
+                      <span>Final Order Statement</span>
+                    </button>
+                  )}
               </div>
             </div>
           </div>
@@ -1385,12 +1565,13 @@ export default function OrderDetailsPage({
           <OrderDetailTabContent {...tabContentProps} />
         </div>
 
-        <div className="hidden md:block mb-0 flex-shrink-0 border-t border-slate-100 dark:border-white/5 bg-slate-50/95 dark:bg-slate-955/90 backdrop-blur-md px-2 pt-1.5 pb-0 [&_nav]:pb-0">
+        <div className="hidden md:block mb-0 flex-shrink-0 border-t border-slate-800 bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md px-2 py-1 [&_nav]:pb-0 shadow-lg">
           <OrderDetailTabsNav
             className="!mb-0 !rounded-none !border-0 !bg-transparent !p-0"
             tabs={desktopTabs}
             activeId={activeTab}
             onChange={(id) => setActiveTab(id as OrderDetailTabId)}
+            variant="dark"
           />
         </div>
 
@@ -1428,11 +1609,12 @@ export default function OrderDetailsPage({
         )}
 
         {!isFetching && !isError && detail && (
-          <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 dark:border-white/10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md px-2 pb-safe">
+          <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-slate-800 bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md px-2 pb-safe">
             <nav className="flex items-stretch justify-around overflow-x-auto">
               {config.tabs.map((tabId) => {
                 const isActive = activeTab === tabId && mobileTabOpen;
-                const count = tabCounts[tabId];
+                const count = tabCounts[tabId] ?? 0;
+                const hasData = count > 0;
                 const dangerBadge = tabId === "flags";
                 return (
                   <button
@@ -1446,37 +1628,43 @@ export default function OrderDetailsPage({
                         setMobileTabOpen(true);
                       }
                     }}
-                    className={`relative flex flex-col items-center justify-center gap-0.5 py-2.5 px-2 flex-1 min-w-0 transition-colors ${
+                    className={`relative flex flex-col items-center justify-center gap-0.5 py-2 px-2 flex-1 min-w-0 transition-colors ${
                       isActive
-                        ? "text-primary dark:text-primary"
-                        : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                        ? "text-white"
+                        : hasData
+                          ? "text-slate-300 hover:text-white"
+                          : "text-slate-500 hover:text-slate-400"
                     }`}
                   >
                     <span
                       className={`relative transition-transform ${isActive ? "scale-110" : ""}`}
                     >
                       {mobileTabIcon(tabId)}
-                      {count !== undefined && count > 0 && (
-                        <span
-                          className={`absolute -top-1.5 -right-1.5 min-w-[1rem] h-4 flex items-center justify-center rounded-full px-1 text-2xs font-bold ${
-                            dangerBadge
+                      <span
+                        className={`absolute -top-1.5 -right-2 min-w-[1rem] h-3.5 flex items-center justify-center rounded-full px-1 text-3xs font-bold ring-1 ring-slate-900 ${
+                          hasData
+                            ? dangerBadge
                               ? "bg-rose-500 text-white"
-                              : "bg-slate-600 text-white dark:bg-slate-300 dark:text-slate-900"
-                          }`}
-                        >
-                          {count}
-                        </span>
-                      )}
+                              : "bg-emerald-500 text-slate-950 font-extrabold"
+                            : "bg-slate-800 text-slate-500 ring-slate-700/60"
+                        }`}
+                      >
+                        {count}
+                      </span>
                     </span>
                     <span
                       className={`text-2xs font-semibold leading-none truncate max-w-full ${
-                        isActive ? "text-primary dark:text-primary" : ""
+                        isActive
+                          ? "text-white font-bold"
+                          : hasData
+                            ? "text-slate-300"
+                            : "text-slate-500"
                       }`}
                     >
                       {MOBILE_TAB_SHORT_LABELS[tabId] ?? tabId}
                     </span>
                     {isActive && (
-                      <span className="absolute top-0 left-2 right-2 h-0.5 rounded-full bg-primary" />
+                      <span className="absolute top-0 left-2 right-2 h-0.5 rounded-full bg-emerald-400" />
                     )}
                   </button>
                 );

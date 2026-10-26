@@ -59,6 +59,34 @@ function toDateInputValue(v: unknown): string {
   return d.toISOString().slice(0, 10);
 }
 
+function formatMoney(v: unknown): string {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(2) : "0.00";
+}
+
+function lineGross(row: { quantity: number; unit_price?: number }): number {
+  return Number(row.quantity || 0) * Number(row.unit_price || 0);
+}
+
+function lineDiscount(row: { quantity: number; unit_price?: number; discount_percent?: number; discount_amount?: number }): number {
+  const gross = lineGross(row);
+  const percent = Number(row.discount_percent || 0);
+  if (percent > 0) return (gross * percent) / 100;
+  return Number(row.discount_amount || 0);
+}
+
+function lineTaxable(row: { quantity: number; unit_price?: number; discount_percent?: number; discount_amount?: number }): number {
+  return Math.max(0, lineGross(row) - lineDiscount(row));
+}
+
+function lineGst(row: { quantity: number; unit_price?: number; discount_percent?: number; discount_amount?: number; gst_percent?: number }): number {
+  return (lineTaxable(row) * Number(row.gst_percent ?? 18)) / 100;
+}
+
+function lineTotal(row: { quantity: number; unit_price?: number; discount_percent?: number; discount_amount?: number; gst_percent?: number }): number {
+  return lineTaxable(row) + lineGst(row);
+}
+
 function newLine(): LineRow {
   return {
     key:
@@ -75,6 +103,7 @@ function newLine(): LineRow {
     unit: "",
     quantity: 1,
     unit_price: 0,
+    discount_percent: 0,
     discount_amount: 0,
     gst_percent: 18,
     applied_rate_type: "SR",
@@ -101,6 +130,7 @@ type LineRow = {
   unit: string;
   quantity: number;
   unit_price: number;
+  discount_percent: number;
   discount_amount: number;
   gst_percent: number;
   applied_rate_type: string;
@@ -134,6 +164,9 @@ type ReadOnlyLine = {
   product: string;
   kit_parent_product: string;
   unit_price?: number;
+  discount_percent?: number;
+  discount_amount?: number;
+  gst_percent?: number;
   approved_quantity?: number;
 };
 
@@ -165,6 +198,7 @@ function linesFromDetail(raw: unknown): LineRow[] {
       unit: String(l.unit ?? ""),
       quantity: Number(l.ordered_quantity ?? l.quantity ?? 1),
       unit_price: Number(l.unit_price ?? 0),
+      discount_percent: Number(l.discount_percent ?? 0),
       discount_amount: Number(l.discount_amount ?? 0),
       gst_percent: Number(l.gst_percent ?? 18),
       applied_rate_type: !l.applied_rate_type || l.applied_rate_type === "MANUAL" ? "SR" : String(l.applied_rate_type),
@@ -196,7 +230,8 @@ function buildPatchItems(lines: LineRow[]): Record<string, unknown>[] {
         quantity: Number(l.quantity),
         ordered_quantity: Number(l.quantity),
         unit_price: Number(l.unit_price),
-        discount_amount: 0,
+        discount_percent: Number(l.discount_percent || 0),
+        discount_amount: Number(l.discount_amount || 0),
         gst_percent: Number(l.gst_percent ?? 18),
         applied_rate_type: l.applied_rate_type,
       };
@@ -299,6 +334,9 @@ export function OrderDetailModal({
         approved_quantity: Number(item.approved_quantity ?? 0),
         applied_rate_type: String(item.applied_rate_type ?? "SR"),
         unit_price: Number(item.unit_price ?? 0),
+        discount_percent: Number(item.discount_percent ?? 0),
+        discount_amount: Number(item.discount_amount ?? 0),
+        gst_percent: Number(item.gst_percent ?? 18),
         _id: item._id,
         product: idFromRef(item.product),
         kit_parent_product: idFromRef(item.kit_parent_product),
@@ -337,6 +375,31 @@ export function OrderDetailModal({
     }
     return out;
   }, [kitBucketsByParent, parentProductIds]);
+
+  const readOnlyTotals = useMemo(() => {
+    let subtotal = 0;
+    let discount = 0;
+    let taxable = 0;
+    let gst = 0;
+    let total = 0;
+
+    for (const line of parentReadOnlyItems) {
+      subtotal += lineGross(line);
+      discount += lineDiscount(line);
+      taxable += lineTaxable(line);
+      gst += lineGst(line);
+      total += lineTotal(line);
+    }
+
+    const headerDisc = Number(detail?.discount_amount ?? 0);
+    const grandTotal = Number(
+      detail?.grand_total ??
+      detail?.total ??
+      Math.max(0, total - headerDisc)
+    );
+
+    return { subtotal, discount, taxable, gst, grandTotal };
+  }, [parentReadOnlyItems, detail]);
 
   useEffect(() => {
     setEditing(false);
@@ -585,7 +648,7 @@ export function OrderDetailModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="order-detail-title"
-        className="flex max-h-[min(90dvh,720px)] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-xl dark:border-white/10 dark:bg-slate-900"
+        className="flex max-h-[min(90dvh,720px)] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-xl dark:border-white/10 dark:bg-slate-900"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200/90 px-5 py-4 dark:border-white/10">
@@ -734,12 +797,16 @@ export function OrderDetailModal({
                   <p className="text-slate-500 dark:text-slate-400">No lines.</p>
                 ) : (
                   <div className="overflow-x-auto rounded-md ring-1 ring-slate-200/90 dark:ring-white/10">
-                    <table className="w-full text-left text-xs">
+                    <table className="w-full text-left text-xs min-w-[650px]">
                       <thead className="bg-slate-50 dark:bg-slate-950">
                         <tr>
-                          <th className="px-2 py-1.5 font-medium">Product</th>
-                          <th className="px-2 py-1.5 font-medium">Qty</th>
-                          <th className="px-2 py-1.5 font-medium text-right">Rate Type</th>
+                          <th className="px-2.5 py-2 font-medium">Product</th>
+                          <th className="px-2.5 py-2 font-medium text-right">Qty</th>
+                          <th className="px-2.5 py-2 font-medium text-right">Rate Type</th>
+                          <th className="px-2.5 py-2 font-medium text-right">Unit Price</th>
+                          <th className="px-2.5 py-2 font-medium text-right">Discount</th>
+                          <th className="px-2.5 py-2 font-medium text-right">GST</th>
+                          <th className="px-2.5 py-2 font-medium text-right">Line Total</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200/80 dark:divide-white/10">
@@ -760,7 +827,7 @@ export function OrderDetailModal({
                           return (
                             <Fragment key={key}>
                               <tr className="bg-white dark:bg-slate-900">
-                                <td className="max-w-[200px] px-2 py-1.5">
+                                <td className="max-w-[200px] px-2.5 py-2">
                                   <span className="line-clamp-2 font-medium text-slate-900 dark:text-slate-100">
                                     {name}
                                   </span>
@@ -775,9 +842,23 @@ export function OrderDetailModal({
                                     </span>
                                   ) : null}
                                 </td>
-                                <td className="px-2 py-1.5 tabular-nums">{String(qty ?? "—")}</td>
-                                <td className="px-2 py-1.5 text-right">
-                                  {rateType}
+                                <td className="px-2.5 py-2 text-right tabular-nums">{String(qty ?? "—")}</td>
+                                <td className="px-2.5 py-2 text-right">{rateType}</td>
+                                <td className="px-2.5 py-2 text-right tabular-nums">
+                                  ₹{formatMoney(line.unit_price ?? 0)}
+                                </td>
+                                <td className="px-2.5 py-2 text-right tabular-nums">
+                                  {Number(line.discount_percent ?? 0) > 0
+                                    ? `${line.discount_percent}%`
+                                    : Number(line.discount_amount ?? 0) > 0
+                                      ? `₹${formatMoney(line.discount_amount)}`
+                                      : "—"}
+                                </td>
+                                <td className="px-2.5 py-2 text-right tabular-nums">
+                                  {Number(line.gst_percent ?? 0)}%
+                                </td>
+                                <td className="px-2.5 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                                  ₹{formatMoney(lineTotal(line))}
                                 </td>
                               </tr>
                               {buckets.map((bucket, bIdx) => {
@@ -790,7 +871,7 @@ export function OrderDetailModal({
                                     key={bKey}
                                     className="bg-slate-50/80 dark:bg-slate-950/60"
                                   >
-                                    <td className="max-w-[200px] px-2 py-1.5">
+                                    <td className="max-w-[200px] px-2.5 py-2">
                                       <div className="ml-3 border-l-2 border-violet-300 pl-2 dark:border-violet-700">
                                         <span className="line-clamp-2 text-slate-800 dark:text-slate-200">
                                           {bucket.product_name}
@@ -805,12 +886,14 @@ export function OrderDetailModal({
                                         ) : null}
                                       </div>
                                     </td>
-                                    <td className="px-2 py-1.5 tabular-nums text-slate-700 dark:text-slate-300">
+                                    <td className="px-2.5 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">
                                       {String(bucket.quantity ?? "—")}
                                     </td>
-                                    <td className="px-2 py-1.5 text-right text-2xs text-slate-500">
-                                      —
-                                    </td>
+                                    <td className="px-2.5 py-2 text-right text-2xs text-slate-500">—</td>
+                                    <td className="px-2.5 py-2 text-right text-2xs text-slate-500">—</td>
+                                    <td className="px-2.5 py-2 text-right text-2xs text-slate-500">—</td>
+                                    <td className="px-2.5 py-2 text-right text-2xs text-slate-500">—</td>
+                                    <td className="px-2.5 py-2 text-right text-2xs text-slate-500">—</td>
                                   </tr>
                                 );
                               })}
@@ -827,7 +910,7 @@ export function OrderDetailModal({
                               key={bKey}
                               className="bg-slate-50/80 dark:bg-slate-950/60"
                             >
-                              <td className="max-w-[200px] px-2 py-1.5">
+                              <td className="max-w-[200px] px-2.5 py-2">
                                 <div className="ml-3 border-l-2 border-violet-300 pl-2 dark:border-violet-700">
                                   <span className="line-clamp-2 text-slate-800 dark:text-slate-200">
                                     {bucket.product_name}
@@ -842,12 +925,14 @@ export function OrderDetailModal({
                                   ) : null}
                                 </div>
                               </td>
-                              <td className="px-2 py-1.5 tabular-nums">
+                              <td className="px-2.5 py-2 text-right tabular-nums">
                                 {String(bucket.quantity ?? "—")}
                               </td>
-                              <td className="px-2 py-1.5 text-right text-2xs text-slate-500">
-                                —
-                              </td>
+                              <td className="px-2.5 py-2 text-right text-2xs text-slate-500">—</td>
+                              <td className="px-2.5 py-2 text-right text-2xs text-slate-500">—</td>
+                              <td className="px-2.5 py-2 text-right text-2xs text-slate-500">—</td>
+                              <td className="px-2.5 py-2 text-right text-2xs text-slate-500">—</td>
+                              <td className="px-2.5 py-2 text-right text-2xs text-slate-500">—</td>
                             </tr>
                           );
                         })}
@@ -855,6 +940,41 @@ export function OrderDetailModal({
                     </table>
                   </div>
                 )}
+
+                {/* Read-only financial breakdown */}
+                <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/20 p-4 dark:border-blue-900/30 dark:bg-blue-950/10">
+                  <h4 className="mb-2 text-2xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Financial Summary
+                  </h4>
+                  <div className="grid gap-3 sm:grid-cols-4 font-sans text-xs">
+                    <div>
+                      <span className="text-slate-500 dark:text-slate-400 block">Gross Subtotal</span>
+                      <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-200">
+                        ₹{formatMoney(readOnlyTotals.subtotal)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 dark:text-slate-400 block">Total Discount</span>
+                      <span className="text-sm font-semibold tabular-nums text-rose-600 dark:text-rose-400">
+                        -₹{formatMoney(readOnlyTotals.discount)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 dark:text-slate-400 block">Estimated GST</span>
+                      <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-200">
+                        ₹{formatMoney(readOnlyTotals.gst)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 dark:text-slate-400 block font-semibold text-emerald-600 dark:text-emerald-400">
+                        Grand Total
+                      </span>
+                      <span className="text-base font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                        ₹{formatMoney(readOnlyTotals.grandTotal)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -955,12 +1075,12 @@ export function OrderDetailModal({
                   </p>
                 )}
                 <div className="space-y-4">
-                  {lines.map((row, idx) => (
+                  {lines.map((row) => (
                     <div
                       key={row.key}
                       className="grid gap-3 rounded-lg border border-slate-200/90 p-3 dark:border-white/10 sm:grid-cols-12 sm:items-end"
                     >
-                      <div className="space-y-1.5 sm:col-span-5">
+                      <div className="space-y-1.5 sm:col-span-3">
                         <span className={labelClass}>Product</span>
                         <select
                           value={row.productId}
@@ -973,8 +1093,8 @@ export function OrderDetailModal({
                           {products.map((p) => {
                             const id = String(
                               (p as { _id?: unknown })._id ??
-                              (p as { id?: unknown }).id ??
-                              "",
+                                (p as { id?: unknown }).id ??
+                                "",
                             );
                             const plab = `${(p as { product_name?: string }).product_name ?? id}${(p as { sku?: string }).sku ? ` · ${(p as { sku: string }).sku}` : ""}`;
                             return (
@@ -985,7 +1105,7 @@ export function OrderDetailModal({
                           })}
                         </select>
                       </div>
-                      <div className="space-y-1.5 sm:col-span-2">
+                      <div className="space-y-1.5 sm:col-span-1">
                         <span className={labelClass}>Qty</span>
                         <input
                           type="number"
@@ -1007,7 +1127,7 @@ export function OrderDetailModal({
                           className={inputClass}
                         />
                       </div>
-                      <div className="space-y-1.5 sm:col-span-3">
+                      <div className="space-y-1.5 sm:col-span-1">
                         <span className={labelClass}>Rate Type</span>
                         <select
                           value={row.applied_rate_type}
@@ -1021,10 +1141,83 @@ export function OrderDetailModal({
                           <option value="CR">CR</option>
                         </select>
                       </div>
-                      <div className="flex gap-1 sm:col-span-2 sm:justify-end">
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <span className={labelClass}>Price (₹)</span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="any"
+                          value={row.unit_price}
+                          onChange={(e) =>
+                            setLines((prev) =>
+                              prev.map((l) =>
+                                l.key === row.key
+                                  ? {
+                                    ...l,
+                                    unit_price: Number(e.target.value) || 0,
+                                  }
+                                  : l,
+                              ),
+                            )
+                          }
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-1">
+                        <span className={labelClass}>Disc %</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="any"
+                          value={row.discount_percent}
+                          onChange={(e) =>
+                            setLines((prev) =>
+                              prev.map((l) =>
+                                l.key === row.key
+                                  ? {
+                                    ...l,
+                                    discount_percent: Number(e.target.value) || 0,
+                                  }
+                                  : l,
+                              ),
+                            )
+                          }
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <span className={labelClass}>GST %</span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="any"
+                          value={row.gst_percent}
+                          onChange={(e) =>
+                            setLines((prev) =>
+                              prev.map((l) =>
+                                l.key === row.key
+                                  ? {
+                                    ...l,
+                                    gst_percent: Number(e.target.value) || 0,
+                                  }
+                                  : l,
+                              ),
+                            )
+                          }
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-1">
+                        <span className={labelClass}>Total</span>
+                        <div className="flex h-[38px] items-center rounded-lg border border-slate-200/80 bg-slate-50 px-1.5 text-2xs font-semibold tabular-nums text-slate-900 dark:border-white/10 dark:bg-slate-950 dark:text-slate-50">
+                          ₹{formatMoney(lineTotal(row))}
+                        </div>
+                      </div>
+                      <div className="flex gap-1 sm:col-span-1 sm:justify-end">
                         <button
                           type="button"
-                          className={`${btnSecondaryClass} text-rose-700 dark:text-rose-400`}
+                          className={`${btnSecondaryClass} text-rose-700 dark:text-rose-400 py-1 px-2 text-xs`}
                           disabled={lines.length <= 1}
                           onClick={() =>
                             setLines((prev) => prev.filter((l) => l.key !== row.key))
@@ -1032,18 +1225,19 @@ export function OrderDetailModal({
                         >
                           Remove
                         </button>
-                        {idx === lines.length - 1 ? (
-                          <button
-                            type="button"
-                            className={btnSecondaryClass}
-                            onClick={() => setLines((prev) => [...prev, newLine()])}
-                          >
-                            Add line
-                          </button>
-                        ) : null}
                       </div>
                     </div>
                   ))}
+                </div>
+
+                <div className="mt-3 flex justify-between items-center">
+                  <button
+                    type="button"
+                    className={btnSecondaryClass}
+                    onClick={() => setLines((prev) => [...prev, newLine()])}
+                  >
+                    + Add line
+                  </button>
                 </div>
               </div>
             </form>

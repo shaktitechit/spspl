@@ -11,6 +11,7 @@ import CommunicationTab from "./tabs/CommunicationTab";
 import AttachmentsTab from "./tabs/AttachmentsTab";
 import { DeliveriesTab } from "./tabs/DeliveriesTab";
 import PoTab from "./tabs/PoTab";
+import PerformaTab from "./tabs/PerformaTab";
 import CostSheetTab from "./tabs/CostSheetTab";
 import KycTab from "./tabs/KycTab";
 import type { OrderDetailTabId, OrderDetailsPageConfig } from "./orderDetailsPageConfig";
@@ -120,6 +121,15 @@ export function OrderDetailTabContent(props: OrderDetailTabContentProps) {
         />
       );
 
+    case "performa":
+      return (
+        <PerformaTab
+          orderId={orderId}
+          detail={detail}
+          refetchOrder={refetchOrder}
+        />
+      );
+
     case "cost_sheet":
       if (!["/admin", "/super_admin", "/finance", "/account"].includes(config.portalHome)) {
         return null;
@@ -137,7 +147,14 @@ export function OrderDetailTabContent(props: OrderDetailTabContentProps) {
       if (!["/admin", "/super_admin", "/finance", "/account"].includes(config.portalHome)) {
         return null;
       }
-      const partyId = detailRefId(detail.party || detail.customer);
+      const partyId = detailRefId(
+        detail.party ||
+        detail.customer ||
+        (detail as Record<string, unknown>).party_id ||
+        (detail as Record<string, unknown>).partyId ||
+        (detail as Record<string, unknown>).customer_id ||
+        (detail as Record<string, unknown>).customerId
+      );
       return (
         <KycTab
           orderId={orderId}

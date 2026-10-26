@@ -15,10 +15,12 @@ import {
   sanitizePartyContacts,
   type PartyContact,
 } from "@/lib/partyContacts";
+import { Plus, Trash2, MapPin, Building, Star, Check } from "lucide-react";
 import {
   useCreatePartyMutation,
   useGetPartyQuery,
   usePatchPartyMutation,
+  type PartyShippingAddress,
 } from "@/store/api";
 import { PartyGeoFields } from "@/components/portal/shared/parties/components/PartyGeoFields";
 import { PartyZoneField } from "@/components/portal/shared/parties/components/PartyZoneField";
@@ -64,6 +66,30 @@ function valsEqual(a: unknown, b: unknown): boolean {
   return false;
 }
 
+function shippingAddressesEqual(a: PartyShippingAddress[], b: PartyShippingAddress[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.label !== y.label ||
+      x.recipient_name !== y.recipient_name ||
+      x.phone !== y.phone ||
+      x.gst_no !== y.gst_no ||
+      x.address_line_1 !== y.address_line_1 ||
+      x.address_line_2 !== y.address_line_2 ||
+      x.city !== y.city ||
+      x.state !== y.state ||
+      x.pincode !== y.pincode ||
+      x.country !== y.country ||
+      Boolean(x.is_default) !== Boolean(y.is_default)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 type PartyState = {
   party_name: string;
   party_type: (typeof PARTY_TYPE_OPTIONS)[number];
@@ -98,6 +124,7 @@ type PartyState = {
     pincode: string;
     country: string;
   };
+  shipping_addresses: PartyShippingAddress[];
 };
 
 const defaultPartyState = (): PartyState => ({
@@ -134,6 +161,7 @@ const defaultPartyState = (): PartyState => ({
     pincode: "",
     country: "India",
   },
+  shipping_addresses: [],
 });
 
 function toDateString(v: unknown): string {
@@ -190,6 +218,23 @@ function partyToFormState(p: Record<string, unknown>, opts?: { asCopy?: boolean 
       pincode: stringField(sAddr.pincode),
       country: stringField(sAddr.country) || "India",
     },
+    shipping_addresses: Array.isArray(p.shipping_addresses)
+      ? (p.shipping_addresses as PartyShippingAddress[]).map((a) => ({
+          _id: a._id ? String(a._id) : undefined,
+          id: a.id ? String(a.id) : undefined,
+          label: stringField(a.label),
+          recipient_name: stringField(a.recipient_name),
+          phone: stringField(a.phone),
+          gst_no: stringField(a.gst_no),
+          address_line_1: stringField(a.address_line_1),
+          address_line_2: stringField(a.address_line_2),
+          city: stringField(a.city),
+          state: stringField(a.state),
+          pincode: stringField(a.pincode),
+          country: stringField(a.country) || "India",
+          is_default: a.is_default === true,
+        }))
+      : [],
   };
 }
 
@@ -300,6 +345,7 @@ export function PartyDetailModal({
       zone_id: form.zone_id || null,
       sra_from_date: form.sra ? (form.sra_from_date || null) : null,
       sra_to_date: form.sra ? (form.sra_to_date || null) : null,
+      shipping_addresses: form.shipping_addresses,
     };
 
     try {
@@ -366,6 +412,15 @@ export function PartyDetailModal({
         }
         if (Object.keys(shippingDiff).length > 0) {
           patch.shipping_address = { ...sAddr, ...shippingDiff };
+        }
+
+        if (
+          !shippingAddressesEqual(
+            form.shipping_addresses,
+            Array.isArray(pObj.shipping_addresses) ? pObj.shipping_addresses : [],
+          )
+        ) {
+          patch.shipping_addresses = form.shipping_addresses;
         }
 
         if (Object.keys(patch).length === 0) {
@@ -893,6 +948,311 @@ export function PartyDetailModal({
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Multiple Delivery Locations / Warehouses */}
+              <div className="space-y-4 rounded-xl border border-slate-200/90 p-4 dark:border-white/10 dark:bg-slate-950/20">
+                <div className="flex items-center justify-between border-b border-slate-200/80 pb-2 dark:border-white/10">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <MapPin className="h-4 w-4 text-blue-500" />
+                      Additional Delivery Locations / Warehouses ({form.shipping_addresses.length})
+                    </h3>
+                    <p className="text-2xs text-slate-500 dark:text-slate-400">
+                      Save branch clinics, warehouses, and drop points to select quickly on orders.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm((f) => ({
+                        ...f,
+                        shipping_addresses: [
+                          ...f.shipping_addresses,
+                          {
+                            label: `Location #${f.shipping_addresses.length + 1}`,
+                            recipient_name: "",
+                            phone: "",
+                            gst_no: "",
+                            address_line_1: "",
+                            address_line_2: "",
+                            city: "",
+                            state: "",
+                            pincode: "",
+                            country: "India",
+                            is_default: f.shipping_addresses.length === 0,
+                          },
+                        ],
+                      }));
+                    }}
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 transition cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Add Delivery Location</span>
+                  </button>
+                </div>
+
+                {form.shipping_addresses.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">
+                    No additional delivery locations configured yet. Click above to add warehouses, branch offices, or clinics.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {form.shipping_addresses.map((loc, idx) => (
+                      <div
+                        key={idx}
+                        className="rounded-xl border border-slate-200/80 bg-white p-4 dark:border-white/10 dark:bg-slate-900/50 space-y-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5 dark:border-white/5">
+                          <div className="flex items-center gap-2 flex-1 max-w-sm">
+                            <input
+                              type="text"
+                              placeholder="Location Label (e.g. South Delhi Clinic)"
+                              className={`${inputClass} font-semibold text-xs`}
+                              value={loc.label || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setForm((f) => {
+                                  const updated = [...f.shipping_addresses];
+                                  updated[idx] = { ...updated[idx], label: val };
+                                  return { ...f, shipping_addresses: updated };
+                                });
+                              }}
+                              disabled={isSaving}
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setForm((f) => {
+                                  const updated = f.shipping_addresses.map((item, i) => ({
+                                    ...item,
+                                    is_default: i === idx,
+                                  }));
+                                  return {
+                                    ...f,
+                                    shipping_addresses: updated,
+                                    shipping_address: {
+                                      address_line_1: loc.address_line_1 || "",
+                                      address_line_2: loc.address_line_2 || "",
+                                      city: loc.city || "",
+                                      state: loc.state || "",
+                                      pincode: loc.pincode || "",
+                                      country: loc.country || "India",
+                                    },
+                                  };
+                                });
+                                toast.success(`Set "${loc.label || `Location #${idx + 1}`}" as primary shipping address`);
+                              }}
+                              className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-2xs font-semibold transition cursor-pointer ${
+                                loc.is_default
+                                  ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                                  : "border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"
+                              }`}
+                            >
+                              <Star className={`h-3 w-3 ${loc.is_default ? "fill-amber-500 text-amber-500" : ""}`} />
+                              <span>{loc.is_default ? "Default Location" : "Set as Default"}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setForm((f) => ({
+                                  ...f,
+                                  shipping_addresses: f.shipping_addresses.filter((_, i) => i !== idx),
+                                }));
+                              }}
+                              disabled={isSaving}
+                              className="rounded-md p-1 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer"
+                              title="Delete location"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="space-y-1">
+                            <label className={labelClass}>Contact Person</label>
+                            <input
+                              type="text"
+                              placeholder="Name"
+                              className={inputClass}
+                              value={loc.recipient_name || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setForm((f) => {
+                                  const updated = [...f.shipping_addresses];
+                                  updated[idx] = { ...updated[idx], recipient_name: val };
+                                  return { ...f, shipping_addresses: updated };
+                                });
+                              }}
+                              disabled={isSaving}
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className={labelClass}>Contact Phone</label>
+                            <input
+                              type="text"
+                              placeholder="Mobile"
+                              className={inputClass}
+                              value={loc.phone || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setForm((f) => {
+                                  const updated = [...f.shipping_addresses];
+                                  updated[idx] = { ...updated[idx], phone: val };
+                                  return { ...f, shipping_addresses: updated };
+                                });
+                              }}
+                              disabled={isSaving}
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className={labelClass}>State-Specific GSTIN</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. 27ABCDE1234F1Z5"
+                              className={`${inputClass} font-mono uppercase`}
+                              value={loc.gst_no || ""}
+                              onChange={(e) => {
+                                const val = e.target.value.toUpperCase();
+                                setForm((f) => {
+                                  const updated = [...f.shipping_addresses];
+                                  updated[idx] = { ...updated[idx], gst_no: val };
+                                  return { ...f, shipping_addresses: updated };
+                                });
+                              }}
+                              disabled={isSaving}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="space-y-1 md:col-span-2">
+                            <label className={labelClass}>Address Line 1</label>
+                            <input
+                              type="text"
+                              placeholder="Street / Building / Plot"
+                              className={inputClass}
+                              value={loc.address_line_1 || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setForm((f) => {
+                                  const updated = [...f.shipping_addresses];
+                                  updated[idx] = { ...updated[idx], address_line_1: val };
+                                  return { ...f, shipping_addresses: updated };
+                                });
+                              }}
+                              disabled={isSaving}
+                            />
+                          </div>
+
+                          <div className="space-y-1 md:col-span-2">
+                            <label className={labelClass}>Address Line 2</label>
+                            <input
+                              type="text"
+                              placeholder="Area / Landmark"
+                              className={inputClass}
+                              value={loc.address_line_2 || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setForm((f) => {
+                                  const updated = [...f.shipping_addresses];
+                                  updated[idx] = { ...updated[idx], address_line_2: val };
+                                  return { ...f, shipping_addresses: updated };
+                                });
+                              }}
+                              disabled={isSaving}
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className={labelClass}>City</label>
+                            <input
+                              type="text"
+                              placeholder="City"
+                              className={inputClass}
+                              value={loc.city || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setForm((f) => {
+                                  const updated = [...f.shipping_addresses];
+                                  updated[idx] = { ...updated[idx], city: val };
+                                  return { ...f, shipping_addresses: updated };
+                                });
+                              }}
+                              disabled={isSaving}
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className={labelClass}>State</label>
+                            <input
+                              type="text"
+                              placeholder="State"
+                              className={inputClass}
+                              value={loc.state || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setForm((f) => {
+                                  const updated = [...f.shipping_addresses];
+                                  updated[idx] = { ...updated[idx], state: val };
+                                  return { ...f, shipping_addresses: updated };
+                                });
+                              }}
+                              disabled={isSaving}
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className={labelClass}>Pincode</label>
+                            <input
+                              type="text"
+                              placeholder="Pincode"
+                              className={inputClass}
+                              value={loc.pincode || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setForm((f) => {
+                                  const updated = [...f.shipping_addresses];
+                                  updated[idx] = { ...updated[idx], pincode: val };
+                                  return { ...f, shipping_addresses: updated };
+                                });
+                              }}
+                              disabled={isSaving}
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className={labelClass}>Country</label>
+                            <input
+                              type="text"
+                              placeholder="Country"
+                              className={inputClass}
+                              value={loc.country || "India"}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setForm((f) => {
+                                  const updated = [...f.shipping_addresses];
+                                  updated[idx] = { ...updated[idx], country: val };
+                                  return { ...f, shipping_addresses: updated };
+                                });
+                              }}
+                              disabled={isSaving}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

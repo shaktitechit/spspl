@@ -151,3 +151,16 @@ exports.superSheetUpdate = asyncHandler(async (req, res) => {
   const data = await service.superSheetUpdate(req.params.id, req.body || {}, req.user);
   res.json({ success: true, data });
 });
+
+exports.getPerforma = asyncHandler(async (req, res) => {
+  const orderPerformaService = require('./orderPerforma.service');
+  const data = await orderPerformaService.getOrderPerforma(req.params.id, req.user);
+  res.json({ success: true, data });
+});
+
+exports.updatePerforma = asyncHandler(async (req, res) => {
+  const orderPerformaService = require('./orderPerforma.service');
+  const data = await orderPerformaService.saveOrderPerforma(req.params.id, req.body || {}, req.user);
+  res.json({ success: true, data });
+});
+

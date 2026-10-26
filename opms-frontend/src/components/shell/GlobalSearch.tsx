@@ -34,6 +34,7 @@ import {
 
 type GlobalSearchProps = {
   portal: string;
+  reduced?: boolean;
 };
 
 function toHits(raw: unknown): OrderListRow[] {
@@ -45,7 +46,7 @@ function toHits(raw: unknown): OrderListRow[] {
     .slice(0, 15);
 }
 
-export function GlobalSearch({ portal }: GlobalSearchProps) {
+export function GlobalSearch({ portal, reduced = false }: GlobalSearchProps) {
   const id = useId();
   const router = useRouter();
   const rootRef = useRef<HTMLFormElement | null>(null);
@@ -168,9 +169,11 @@ export function GlobalSearch({ portal }: GlobalSearchProps) {
   return (
     <form
       ref={rootRef}
-      className={`relative min-h-10 min-w-0 flex-1 lg:max-w-2xl ${
-        open && q.trim().length >= 2 ? "z-[60]" : ""
-      }`}
+      className={`relative min-h-9 sm:min-h-10 min-w-0 transition-all duration-200 ${
+        reduced
+          ? "w-36 sm:w-44 lg:w-52 shrink-0 focus-within:w-52 sm:focus-within:w-64 lg:focus-within:w-72"
+          : "flex-1 lg:max-w-2xl"
+      } ${open && q.trim().length >= 2 ? "z-[60]" : ""}`}
       role="search"
       onSubmit={(e) => {
         e.preventDefault();
@@ -183,9 +186,9 @@ export function GlobalSearch({ portal }: GlobalSearchProps) {
         </label>
         <span className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center pl-2.5 text-muted">
           {isSearching ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" aria-hidden />
           ) : (
-            <Search className="h-4 w-4" aria-hidden />
+            <Search className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
           )}
         </span>
         <input
@@ -199,9 +202,9 @@ export function GlobalSearch({ portal }: GlobalSearchProps) {
           onFocus={() => {
             if (hits.length > 0) setOpen(true);
           }}
-          placeholder="Search order # or party…"
+          placeholder={reduced ? "Search order/party…" : "Search order # or party…"}
           autoComplete="off"
-          className={`h-10 w-full min-w-0 rounded-lg border bg-surface-muted py-2 pl-9 pr-8 text-sm text-foreground outline-none transition placeholder:text-muted focus:border-primary focus:bg-card focus:ring-2 focus:ring-primary/25 ${
+          className={`h-9 sm:h-10 w-full min-w-0 rounded-lg border bg-surface-muted py-1.5 sm:py-2 pl-8 sm:pl-9 pr-7 sm:pr-8 text-xs sm:text-sm text-foreground outline-none transition placeholder:text-muted focus:border-primary focus:bg-card focus:ring-2 focus:ring-primary/25 ${
             open && q.trim().length >= 2
               ? "border-primary bg-card ring-2 ring-primary/20 shadow-md"
               : "border-border"

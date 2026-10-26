@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   FileText,
   FileSpreadsheet,
@@ -13,6 +13,7 @@ import {
   User,
   CheckCircle2,
 } from "lucide-react";
+import { useListUsersQuery } from "@/store/api";
 import { DocumentDropzone } from "./DocumentDropzone";
 
 export type SingleDocumentCardProps = {
@@ -28,6 +29,7 @@ export type SingleDocumentCardProps = {
   isUploading?: boolean;
   isDeleting?: boolean;
   disabled?: boolean;
+  creatorFallback?: string;
 };
 
 function formatBytes(bytes: unknown): string {
@@ -80,9 +82,34 @@ export function SingleDocumentCard({
   isUploading = false,
   isDeleting = false,
   disabled = false,
+  creatorFallback,
 }: SingleDocumentCardProps) {
   const [remarks, setRemarks] = useState("");
   const [isReplacing, setIsReplacing] = useState(false);
+
+  const usersQ = useListUsersQuery({});
+  const usersList = useMemo(() => {
+    const raw = usersQ.data;
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === "object") {
+      const o = raw as Record<string, unknown>;
+      if (Array.isArray(o.items)) return o.items;
+      if (Array.isArray(o.data)) return o.data;
+    }
+    return [];
+  }, [usersQ.data]);
+
+  const userNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const u of usersList) {
+      if (u && typeof u === "object") {
+        const id = String((u as any)._id || (u as any).id || "");
+        const name = String((u as any).name || (u as any).username || "");
+        if (id && name) map.set(id, name);
+      }
+    }
+    return map;
+  }, [usersList]);
 
   const handleFilesSelected = async (files: File[]) => {
     if (!files || files.length === 0) return;
@@ -102,9 +129,22 @@ export function SingleDocumentCard({
   const mimeType = String(attachment?.mime_type || "");
   const fileSize = formatBytes(attachment?.size);
   const uploadedAt = formatDate(attachment?.createdAt);
-  const uploaderObj = attachment?.uploaded_by as Record<string, unknown> | undefined;
-  const uploaderName = String(uploaderObj?.name || uploaderObj?.username || "Operator");
-  const uploaderDept = String(uploaderObj?.department || "");
+
+  const uploaderRaw = attachment?.uploaded_by ?? attachment?.created_by;
+  let uploaderName = "";
+  let uploaderDept = "";
+
+  if (uploaderRaw && typeof uploaderRaw === "object") {
+    const rec = uploaderRaw as Record<string, unknown>;
+    uploaderName = String(rec.name || rec.username || "");
+    uploaderDept = String(rec.department || "");
+  } else if (typeof uploaderRaw === "string" && uploaderRaw.trim().length > 0) {
+    uploaderName = userNameById.get(uploaderRaw) || "";
+  }
+
+  if (!uploaderName && creatorFallback) {
+    uploaderName = creatorFallback;
+  }
 
   return (
     <div className="space-y-4">
@@ -156,9 +196,9 @@ export function SingleDocumentCard({
                     {uploadedAt}
                   </span>
                   <span>•</span>
-                  <span className="flex items-center gap-1">
-                    <User className="h-3.5 w-3.5" />
-                    {uploaderName}
+                  <span className="flex items-center gap-1" title={uploaderName ? `Created by: ${uploaderName}` : "Created By"}>
+                    <User className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+                    <span>Created by: <span className="font-semibold text-slate-800 dark:text-slate-200">{uploaderName || "—"}</span></span>
                     {uploaderDept && (
                       <span className="ml-1 rounded bg-slate-100 px-1 py-0.2 text-2xs uppercase text-slate-600 dark:bg-white/10 dark:text-slate-300">
                         {uploaderDept}

@@ -191,7 +191,7 @@ export const SALES_LIST_ORDERS_CONFIG: ListOrdersPageConfig = {
   flagDepartment: "sales",
   showDueSheetBadge: false,
   showFlagBadge: false,
-  showPricing: false,
+  showPricing: true,
   scopeToSalesUser: true,
   includeDraftTab: true,
   headerActions: ["refresh", "dashboard", "createDraft"],

@@ -1102,6 +1102,22 @@ function registerModels() {
     { _id: true, timestamps: true }
   );
 
+  const orderAddressSchema = new mongoose.Schema(
+    {
+      label: { type: String, trim: true, default: "" },
+      recipient_name: { type: String, trim: true, default: "" },
+      phone: { type: String, trim: true, default: "" },
+      gst_no: { type: String, uppercase: true, trim: true, default: "" },
+      address_line_1: { type: String, trim: true, default: "" },
+      address_line_2: { type: String, trim: true, default: "" },
+      city: { type: String, trim: true, default: "" },
+      state: { type: String, trim: true, default: "" },
+      pincode: { type: String, trim: true, default: "" },
+      country: { type: String, trim: true, default: "India" },
+    },
+    { _id: false }
+  );
+
   const orderSchema = new mongoose.Schema(
     {
       company_id: { type: mongoose.Schema.Types.ObjectId, ref: "CompanyInfo", index: true },
@@ -1118,6 +1134,8 @@ function registerModels() {
       customer: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", index: true },
       party: { type: mongoose.Schema.Types.ObjectId, ref: "Party", index: true },
       lead: { type: mongoose.Schema.Types.ObjectId, ref: "Lead", index: true },
+      billing_address: orderAddressSchema,
+      shipping_address: orderAddressSchema,
       status: {
         type: String,
         enum: [
@@ -1294,6 +1312,7 @@ function registerModels() {
       },
       remarks: String,
       internal_notes: String,
+      order_performa: { type: mongoose.Schema.Types.ObjectId, ref: "OrderPerforma" },
       created_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
       updated_by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       deletedAt: { type: Date, default: null, index: true },
@@ -1901,6 +1920,41 @@ function registerModels() {
   orderDueSheetSchema.plugin(softDeletePlugin);
   mongoose.model("OrderDueSheet", orderDueSheetSchema);
 
+  // --- Schemas for OrderPerforma ---
+  const orderPerformaSchema = new mongoose.Schema(
+    {
+      order: { type: mongoose.Schema.Types.ObjectId, ref: "Order", required: true, unique: true, index: true },
+      order_no: { type: String, required: true, index: true },
+      company_id: { type: mongoose.Schema.Types.ObjectId, ref: "CompanyInfo", index: true },
+      sales_person: { type: String, default: "", trim: true },
+      freight_charges: { type: String, default: "", trim: true },
+      orc: { type: String, default: "", trim: true },
+      transport: { type: String, default: "", trim: true },
+      dispatch_date: { type: Date, default: null },
+      ship_to_address: { type: String, default: "", trim: true },
+      payment_terms: { type: String, default: "", trim: true },
+      customer_type: { type: String, default: "", trim: true },
+      installation_required: { type: String, default: "", trim: true },
+      gst_concession: { type: String, default: "", trim: true },
+      margin_sheet_attached: { type: String, default: "", trim: true },
+      kyc_status: { type: String, default: "", trim: true },
+      remarks: { type: String, default: "", trim: true },
+      po_attachment: { type: mongoose.Schema.Types.ObjectId, ref: "Attachment" },
+      cost_sheet_attachment: { type: mongoose.Schema.Types.ObjectId, ref: "Attachment" },
+      aadhaar_attachment: { type: mongoose.Schema.Types.ObjectId, ref: "Attachment" },
+      pan_attachment: { type: mongoose.Schema.Types.ObjectId, ref: "Attachment" },
+      gst_attachment: { type: mongoose.Schema.Types.ObjectId, ref: "Attachment" },
+      created_by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      updated_by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      deletedAt: { type: Date, default: null, index: true },
+    },
+    { timestamps: true }
+  );
+
+  orderPerformaSchema.index({ order: 1, deletedAt: 1 });
+  orderPerformaSchema.plugin(softDeletePlugin);
+  mongoose.model("OrderPerforma", orderPerformaSchema);
+
   // --- Schemas from UnbilledOrder.js ---
   /**
    * Tracks orders with approved qty not yet covered by billed+submitted dispatch.
@@ -2324,6 +2378,7 @@ function registerModels() {
     OrderDelivery: mongoose.models.OrderDelivery || mongoose.model('OrderDelivery', orderDeliverySchema),
     OrderReturn: mongoose.models.OrderReturn || mongoose.model('OrderReturn', orderReturnSchema),
     OrderDueSheet: mongoose.models.OrderDueSheet || mongoose.model('OrderDueSheet', orderDueSheetSchema),
+    OrderPerforma: mongoose.models.OrderPerforma || mongoose.model('OrderPerforma', orderPerformaSchema),
     UnbilledOrder: mongoose.models.UnbilledOrder || mongoose.model('UnbilledOrder', unbilledOrderSchema),
     ActivityLog: mongoose.models.ActivityLog || mongoose.model('ActivityLog', activityLogSchema),
     Notification: mongoose.models.Notification || mongoose.model('Notification', notificationSchema),

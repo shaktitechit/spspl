@@ -17,6 +17,7 @@ import { useAppSelector } from "@/store";
 import {
   useCreateAttachmentMutation,
   useDeleteAttachmentMutation,
+  useGetPartyQuery,
   useListAttachmentsQuery,
 } from "@/store/api";
 import { toast } from "@/lib/toast";
@@ -40,6 +41,8 @@ function pickList(raw: unknown): Record<string, unknown>[] {
     if (Array.isArray(o.data)) return o.data as Record<string, unknown>[];
     if (Array.isArray(o.items)) return o.items as Record<string, unknown>[];
     if (Array.isArray(o.attachments)) return o.attachments as Record<string, unknown>[];
+    if (Array.isArray(o.rows)) return o.rows as Record<string, unknown>[];
+    if (Array.isArray(o.records)) return o.records as Record<string, unknown>[];
   }
   return [];
 }
@@ -65,6 +68,16 @@ export default function KycTab({
     { skip: !partyId }
   );
 
+  // Also query attachments stored under the Order entity
+  const orderAttachmentsQ = useListAttachmentsQuery(
+    { entity_type: "order", entity_id: orderId },
+    { skip: !orderId }
+  );
+
+  // Query party details for verified GSTIN / PAN / registration credentials
+  const partyDetailQ = useGetPartyQuery(partyId, { skip: !partyId });
+  const partyRecord = partyDetailQ.data as Record<string, unknown> | undefined;
+
   const [createAttachment, { isLoading: isUploading }] = useCreateAttachmentMutation();
   const [deleteAttachment, { isLoading: isDeleting }] = useDeleteAttachmentMutation();
 
@@ -76,24 +89,47 @@ export default function KycTab({
     closePreview,
   } = useFilePreview(token);
 
-  // Combine party + legacy customer KYC attachments without duplicates (strictly party-scoped)
+  // Combine party + legacy customer + order-level KYC attachments without duplicates
   const allKycAttachments = useMemo(() => {
     const list1 = pickList(partyAttachmentsQ.data);
     const list2 = pickList(customerAttachmentsQ.data);
+    const list3 = pickList(orderAttachmentsQ.data).filter((att) => {
+      const cat = String(att.category || "").toLowerCase();
+      const rem = String(att.remarks || "").toLowerCase();
+      const fn = String(att.original_name || att.file_name || "").toLowerCase();
+      return (
+        cat.startsWith("kyc") ||
+        cat.includes("aadhaar") ||
+        cat.includes("pan") ||
+        cat.includes("gst") ||
+        rem.includes("kyc") ||
+        rem.includes("aadhaar") ||
+        rem.includes("adhaar") ||
+        rem.includes("pan") ||
+        rem.includes("gst") ||
+        fn.includes("kyc") ||
+        fn.includes("aadhaar") ||
+        fn.includes("adhaar") ||
+        fn.includes("pan") ||
+        fn.includes("gst")
+      );
+    });
 
     const seen = new Set<string>();
     const merged: Record<string, unknown>[] = [];
 
-    for (const item of [...list1, ...list2]) {
+    for (const item of [...list1, ...list2, ...list3]) {
       const id = String(item._id || item.id || "");
       if (id && !seen.has(id)) {
         seen.add(id);
+        merged.push(item);
+      } else if (!id) {
         merged.push(item);
       }
     }
 
     return merged;
-  }, [partyAttachmentsQ.data, customerAttachmentsQ.data]);
+  }, [partyAttachmentsQ.data, customerAttachmentsQ.data, orderAttachmentsQ.data]);
 
   // Sub-categorize attachments
   const aadhaarDocs = useMemo(() => {
@@ -239,6 +275,25 @@ export default function KycTab({
             <p className="text-xs text-slate-600 dark:text-slate-300">
               Verified documents for <span className="font-semibold text-blue-700 dark:text-blue-300">{partyName}</span>. Documents are saved to the party record and shared across all orders.
             </p>
+            {Boolean(partyRecord && (partyRecord.gst_no || partyRecord.pan || partyRecord.pan_no || partyRecord.drug_license_no)) && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-2xs">
+                {Boolean(partyRecord?.gst_no) && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white/80 dark:bg-slate-900/80 px-2 py-0.5 font-mono text-slate-700 dark:text-slate-300 ring-1 ring-slate-200 dark:ring-white/10">
+                    <span className="font-semibold text-slate-500 dark:text-slate-400">GSTIN:</span> {String(partyRecord?.gst_no ?? "")}
+                  </span>
+                )}
+                {Boolean(partyRecord?.pan_no || partyRecord?.pan) && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white/80 dark:bg-slate-900/80 px-2 py-0.5 font-mono text-slate-700 dark:text-slate-300 ring-1 ring-slate-200 dark:ring-white/10">
+                    <span className="font-semibold text-slate-500 dark:text-slate-400">PAN:</span> {String(partyRecord?.pan_no ?? partyRecord?.pan ?? "")}
+                  </span>
+                )}
+                {Boolean(partyRecord?.drug_license_no) && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white/80 dark:bg-slate-900/80 px-2 py-0.5 font-mono text-slate-700 dark:text-slate-300 ring-1 ring-slate-200 dark:ring-white/10">
+                    <span className="font-semibold text-slate-500 dark:text-slate-400">DL:</span> {String(partyRecord?.drug_license_no ?? "")}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

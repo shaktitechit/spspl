@@ -30,7 +30,10 @@ import { Edit,
   RefreshCw,
   UserCheck,
   Truck,
-  Users, Wallet } from "lucide-react";
+  Users, Wallet,
+  ArrowRight,
+  Star,
+  Copy } from "lucide-react";
 
 import { pickList } from "@/components/portal/sales/partyDisplay";
 import { ConfirmDeleteDraftModal } from "@/components/portal/sales/components/modals/ConfirmDeleteDraftModal";
@@ -62,6 +65,7 @@ import {
   useListOrdersQuery,
   useDeleteOrderMutation,
   useListUsersQuery,
+  usePatchPartyMutation,
 } from "@/store/api";
 import {
   formatDateTime,
@@ -247,7 +251,7 @@ export default function PartyDetailPage({ id, portalHome }: PartyDetailPageProps
     [salesUsersQ.data],
   );
 
-  // Modal & Tab states
+  const [patchParty, { isLoading: isPatchingParty }] = usePatchPartyMutation();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editModalTab, setEditModalTab] = useState<"details" | "contacts" | "address">("details");
   const [activeTab, setActiveTab] = useState<"profile" | "contacts" | "addresses" | "products" | "orders">("profile");
@@ -322,6 +326,82 @@ export default function PartyDetailPage({ id, portalHome }: PartyDetailPageProps
       return typeof m.product === "object" ? m.product?._id || m.product?.id : m.product;
     });
   }, [partyMappings]);
+
+  const partyObj = rawParty as any;
+
+  const totalAddressCount = useMemo(() => {
+    if (!partyObj) return 0;
+    const b = partyObj.billing_address || {};
+    const s = partyObj.shipping_address || {};
+    let count = 0;
+    if (b && (b.address_line_1 || b.city || b.state)) count++;
+    if (s && (s.address_line_1 || s.city || s.state)) count++;
+    const additional = Array.isArray(partyObj.shipping_addresses) ? partyObj.shipping_addresses.length : 0;
+    return count + additional;
+  }, [partyObj]);
+
+  const handleSetDefaultLocation = useCallback(
+    async (locationIndex: number) => {
+      if (!partyObj || (!partyObj._id && !partyObj.id && !id)) return;
+      const partyId = String(partyObj._id || partyObj.id || id);
+      const list = Array.isArray(partyObj.shipping_addresses) ? [...partyObj.shipping_addresses] : [];
+      if (!list[locationIndex]) return;
+
+      const targetLoc = list[locationIndex];
+      const updated = list.map((loc: any, idx: number) => ({
+        ...loc,
+        is_default: idx === locationIndex,
+      }));
+
+      try {
+        await patchParty({
+          id: partyId,
+          patch: {
+            shipping_addresses: updated,
+            shipping_address: {
+              address_line_1: targetLoc.address_line_1 || "",
+              address_line_2: targetLoc.address_line_2 || "",
+              city: targetLoc.city || "",
+              state: targetLoc.state || "",
+              pincode: targetLoc.pincode || "",
+              country: targetLoc.country || "India",
+            },
+          },
+        }).unwrap();
+        toast.success(
+          `Set "${targetLoc.label || `Location #${locationIndex + 1}`}" as primary default shipping address`,
+        );
+        refetch();
+      } catch (err) {
+        toast.error(mutationRejectedMessage(err));
+      }
+    },
+    [partyObj, id, patchParty, refetch],
+  );
+
+  const handleDeleteLocation = useCallback(
+    async (locationIndex: number) => {
+      if (!partyObj || (!partyObj._id && !partyObj.id && !id)) return;
+      const partyId = String(partyObj._id || partyObj.id || id);
+      const list = Array.isArray(partyObj.shipping_addresses) ? [...partyObj.shipping_addresses] : [];
+      const targetLoc = list[locationIndex];
+      const updated = list.filter((_, idx: number) => idx !== locationIndex);
+
+      try {
+        await patchParty({
+          id: partyId,
+          patch: {
+            shipping_addresses: updated,
+          },
+        }).unwrap();
+        toast.success(`Removed "${targetLoc?.label || `Location #${locationIndex + 1}`}"`);
+        refetch();
+      } catch (err) {
+        toast.error(mutationRejectedMessage(err));
+      }
+    },
+    [partyObj, id, patchParty, refetch],
+  );
 
   if (isError || (!isLoading && !rawParty)) {
     return (
@@ -457,7 +537,7 @@ export default function PartyDetailPage({ id, portalHome }: PartyDetailPageProps
               : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
           }`}
         >
-          <MapPin className="h-4 w-4" /> Address details
+          <MapPin className="h-4 w-4" /> Addresses ({totalAddressCount})
         </button>
         <button
           type="button"
@@ -586,6 +666,102 @@ export default function PartyDetailPage({ id, portalHome }: PartyDetailPageProps
                 </div>
               </div>
             </div>
+
+            {/* Addresses & Delivery Locations Section in Profile */}
+            <div className="border-t border-slate-100 dark:border-white/5 pt-4 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-md font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-blue-500" />
+                  Addresses & Delivery Locations
+                  {totalAddressCount > 0 && (
+                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                      {totalAddressCount} {totalAddressCount === 1 ? "Address" : "Addresses"}
+                    </span>
+                  )}
+                </h3>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("addresses")}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-white/5 transition cursor-pointer"
+                >
+                  <span>View All Details</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Billing Address Card */}
+                <div className="rounded-xl border border-slate-200/90 bg-slate-50/40 p-4 space-y-2 text-xs dark:border-white/10 dark:bg-slate-950/30">
+                  <div className="flex items-center justify-between border-b border-slate-200/60 pb-2 dark:border-white/10">
+                    <span className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                      <Building className="h-4 w-4 text-blue-500" />
+                      Billing Address
+                    </span>
+                    <span className="rounded bg-slate-200/70 px-1.5 py-0.2 text-3xs font-semibold text-slate-700 dark:bg-white/10 dark:text-slate-300">
+                      Master
+                    </span>
+                  </div>
+                  <div className="space-y-0.5 text-slate-700 dark:text-slate-350">
+                    <p className="font-semibold">{bAddr.address_line_1 || "—"}</p>
+                    {bAddr.address_line_2 && <p>{bAddr.address_line_2}</p>}
+                    <p>{[bAddr.city, bAddr.state, bAddr.pincode].filter(Boolean).join(", ") || "—"}</p>
+                    {bAddr.country && <p className="text-3xs uppercase text-slate-400 font-bold">{bAddr.country}</p>}
+                  </div>
+                </div>
+
+                {/* Primary Shipping Address Card */}
+                <div className="rounded-xl border border-slate-200/90 bg-slate-50/40 p-4 space-y-2 text-xs dark:border-white/10 dark:bg-slate-950/30">
+                  <div className="flex items-center justify-between border-b border-slate-200/60 pb-2 dark:border-white/10">
+                    <span className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                      <Truck className="h-4 w-4 text-emerald-500" />
+                      Shipping Address
+                    </span>
+                    <span className="rounded bg-emerald-100 px-1.5 py-0.2 text-3xs font-bold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                      Default
+                    </span>
+                  </div>
+                  <div className="space-y-0.5 text-slate-700 dark:text-slate-350">
+                    <p className="font-semibold">{sAddr.address_line_1 || "—"}</p>
+                    {sAddr.address_line_2 && <p>{sAddr.address_line_2}</p>}
+                    <p>{[sAddr.city, sAddr.state, sAddr.pincode].filter(Boolean).join(", ") || "—"}</p>
+                    {sAddr.country && <p className="text-3xs uppercase text-slate-400 font-bold">{sAddr.country}</p>}
+                  </div>
+                </div>
+
+                {/* Additional Delivery Locations */}
+                {Array.isArray(p.shipping_addresses) && p.shipping_addresses.map((loc: any, idx: number) => (
+                  <div
+                    key={loc._id || loc.id || idx}
+                    className="rounded-xl border border-slate-200/90 bg-slate-50/40 p-4 space-y-2 text-xs dark:border-white/10 dark:bg-slate-950/30"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-200/60 pb-2 dark:border-white/10">
+                      <span className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 truncate">
+                        <MapPin className="h-4 w-4 text-blue-500 shrink-0" />
+                        {loc.label || `Location #${idx + 1}`}
+                      </span>
+                      {loc.is_default && (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.2 text-3xs font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 shrink-0">
+                          Default
+                        </span>
+                      )}
+                    </div>
+                    {(loc.recipient_name || loc.phone || loc.gst_no) && (
+                      <div className="text-2xs text-slate-500 dark:text-slate-400 space-y-0.5">
+                        {loc.recipient_name && <div>Contact: <span className="font-medium text-slate-700 dark:text-slate-300">{loc.recipient_name}</span></div>}
+                        {loc.phone && <div>Ph: <span className="font-medium text-slate-700 dark:text-slate-300">{loc.phone}</span></div>}
+                        {loc.gst_no && <div>GSTIN: <span className="font-mono font-medium text-slate-700 dark:text-slate-300">{loc.gst_no}</span></div>}
+                      </div>
+                    )}
+                    <div className="space-y-0.5 text-slate-700 dark:text-slate-350">
+                      <p className="font-medium">{loc.address_line_1 || "—"}</p>
+                      {loc.address_line_2 && <p>{loc.address_line_2}</p>}
+                      <p>{[loc.city, loc.state, loc.pincode].filter(Boolean).join(", ") || "—"}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
@@ -613,63 +789,191 @@ export default function PartyDetailPage({ id, portalHome }: PartyDetailPageProps
         )}
 
         {activeTab === "addresses" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Billing Address Card */}
-            <div className="rounded-xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900 space-y-4">
-              <h3 className="text-md font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2 border-b border-slate-100 dark:border-white/5 pb-2">
-                <Building className="h-4.5 w-4.5 text-blue-500" /> Billing Address
-              </h3>
-              <div className="space-y-3.5 text-sm text-slate-700 dark:text-slate-350">
-                <p className="font-semibold text-slate-900 dark:text-slate-50">
-                  {bAddr.address_line_1 || "—"}
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-white/5 pb-3">
+              <div>
+                <h3 className="text-md font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-blue-500" />
+                  Addresses & Delivery Locations
+                  {Array.isArray(p.shipping_addresses) && p.shipping_addresses.length > 0 && (
+                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                      {p.shipping_addresses.length} Delivery Location{p.shipping_addresses.length > 1 ? "s" : ""}
+                    </span>
+                  )}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Manage master billing and multiple delivery branch addresses for order dispatches.
                 </p>
-                {bAddr.address_line_2 && (
-                  <p>{bAddr.address_line_2}</p>
-                )}
-                <p>
-                  {[
-                    bAddr.city,
-                    bAddr.state,
-                    bAddr.pincode,
-                  ]
-                    .filter(Boolean)
-                    .join(", ") || "—"}
-                </p>
-                {bAddr.country && (
-                  <p className="text-xs uppercase tracking-wider font-bold text-slate-400">
-                    {bAddr.country}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => openEditModal("address")}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-600 transition hover:bg-blue-50 dark:border-blue-500/30 dark:bg-slate-900 dark:text-blue-400 dark:hover:bg-blue-500/10 cursor-pointer"
+              >
+                <Edit className="h-3.5 w-3.5" />
+                Edit / Manage Addresses
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Billing Address Card */}
+              <div className="rounded-xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/5 pb-2">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
+                    <Building className="h-4.5 w-4.5 text-blue-500" /> Billing Address
+                  </h4>
+                  <span className="rounded bg-slate-100 px-2 py-0.5 text-2xs font-semibold text-slate-600 dark:bg-white/5 dark:text-slate-400">
+                    Master
+                  </span>
+                </div>
+                <div className="space-y-2 text-sm text-slate-700 dark:text-slate-350">
+                  <p className="font-semibold text-slate-900 dark:text-slate-50">
+                    {bAddr.address_line_1 || "—"}
                   </p>
-                )}
+                  {bAddr.address_line_2 && <p>{bAddr.address_line_2}</p>}
+                  <p>
+                    {[bAddr.city, bAddr.state, bAddr.pincode]
+                      .filter(Boolean)
+                      .join(", ") || "—"}
+                  </p>
+                  {bAddr.country && (
+                    <p className="text-xs uppercase tracking-wider font-bold text-slate-400">
+                      {bAddr.country}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Primary Shipping Address Card */}
+              <div className="rounded-xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/5 pb-2">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
+                    <Truck className="h-4.5 w-4.5 text-emerald-500" /> Primary Shipping Address
+                  </h4>
+                  <span className="rounded bg-emerald-50 px-2 py-0.5 text-2xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                    Primary Default
+                  </span>
+                </div>
+                <div className="space-y-2 text-sm text-slate-700 dark:text-slate-350">
+                  <p className="font-semibold text-slate-900 dark:text-slate-50">
+                    {sAddr.address_line_1 || "—"}
+                  </p>
+                  {sAddr.address_line_2 && <p>{sAddr.address_line_2}</p>}
+                  <p>
+                    {[sAddr.city, sAddr.state, sAddr.pincode]
+                      .filter(Boolean)
+                      .join(", ") || "—"}
+                  </p>
+                  {sAddr.country && (
+                    <p className="text-xs uppercase tracking-wider font-bold text-slate-400">
+                      {sAddr.country}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Shipping Address Card */}
+            {/* Saved Delivery Locations List */}
             <div className="rounded-xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900 space-y-4">
-              <h3 className="text-md font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2 border-b border-slate-100 dark:border-white/5 pb-2">
-                <MapPin className="h-4.5 w-4.5 text-blue-500" /> Shipping Address
-              </h3>
-              <div className="space-y-3.5 text-sm text-slate-700 dark:text-slate-350">
-                <p className="font-semibold text-slate-900 dark:text-slate-50">
-                  {sAddr.address_line_1 || "—"}
-                </p>
-                {sAddr.address_line_2 && (
-                  <p>{sAddr.address_line_2}</p>
-                )}
-                <p>
-                  {[
-                    sAddr.city,
-                    sAddr.state,
-                    sAddr.pincode,
-                  ]
-                    .filter(Boolean)
-                    .join(", ") || "—"}
-                </p>
-                {sAddr.country && (
-                  <p className="text-xs uppercase tracking-wider font-bold text-slate-400">
-                    {sAddr.country}
-                  </p>
-                )}
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/5 pb-2">
+                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
+                  <MapPin className="h-4.5 w-4.5 text-blue-500" /> Saved Delivery Locations / Branches
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => openEditModal("address")}
+                  className="inline-flex items-center gap-1 rounded bg-blue-50 px-2.5 py-1 text-2xs font-semibold text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 transition cursor-pointer"
+                >
+                  <Plus className="h-3 w-3" />
+                  <span>Add Location</span>
+                </button>
               </div>
+
+              {Array.isArray(p.shipping_addresses) && p.shipping_addresses.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {p.shipping_addresses.map((loc: any, idx: number) => (
+                    <div
+                      key={loc._id || loc.id || idx}
+                      className="rounded-lg border border-slate-200/80 bg-slate-50/40 p-4 space-y-2.5 text-xs dark:border-white/10 dark:bg-slate-950/30"
+                    >
+                      <div className="flex items-center justify-between gap-2 border-b border-slate-200/60 pb-2 dark:border-white/10">
+                        <span className="font-bold text-slate-900 dark:text-slate-100 truncate">
+                          {loc.label || `Location #${idx + 1}`}
+                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {loc.is_default ? (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-3xs font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                              ★ Default
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleSetDefaultLocation(idx)}
+                              disabled={isPatchingParty}
+                              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-3xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5 transition cursor-pointer"
+                              title="Set as default delivery location"
+                            >
+                              <Star className="h-3 w-3" />
+                              <span>Set Default</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteLocation(idx)}
+                            disabled={isPatchingParty}
+                            className="rounded p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer"
+                            title="Delete this delivery location"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {(loc.recipient_name || loc.phone || loc.gst_no) && (
+                        <div className="space-y-0.5 text-2xs text-slate-500 dark:text-slate-400">
+                          {loc.recipient_name && (
+                            <div>Contact: <span className="font-medium text-slate-700 dark:text-slate-300">{loc.recipient_name}</span></div>
+                          )}
+                          {loc.phone && (
+                            <div>Ph: <span className="font-medium text-slate-700 dark:text-slate-300">{loc.phone}</span></div>
+                          )}
+                          {loc.gst_no && (
+                            <div>GSTIN: <span className="font-mono uppercase font-semibold text-slate-700 dark:text-slate-300">{loc.gst_no}</span></div>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="space-y-0.5 text-slate-700 dark:text-slate-350">
+                        <p className="font-medium">{loc.address_line_1 || "—"}</p>
+                        {loc.address_line_2 && <p>{loc.address_line_2}</p>}
+                        <p>
+                          {[loc.city, loc.state, loc.pincode].filter(Boolean).join(", ") || "—"}
+                        </p>
+                        {loc.country && loc.country !== "India" && (
+                          <p className="text-3xs uppercase font-bold text-slate-400">{loc.country}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-slate-200 p-8 text-center text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">
+                  <MapPin className="h-6 w-6 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                  <p className="font-medium text-slate-700 dark:text-slate-300">No additional delivery locations configured yet</p>
+                  <p className="mt-1 text-slate-500">
+                    Add branch clinics, godowns, or client warehouses to quickly select them when booking or dispatching orders.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => openEditModal("address")}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-blue-700 transition cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Add Delivery Location</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

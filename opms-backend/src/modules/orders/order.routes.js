@@ -38,6 +38,9 @@ router.patch(
 
 router.patch('/:id', controller.update);
 
+router.get('/:id/performa', controller.getPerforma);
+router.put('/:id/performa', controller.updatePerforma);
+
 router.post('/:id/close-after-full-delivery', controller.closeAfterFullDelivery);
 
 router.post('/:id/submit', controller.submit);

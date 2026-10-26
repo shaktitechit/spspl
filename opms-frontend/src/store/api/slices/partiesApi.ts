@@ -1,6 +1,22 @@
 import { medicaApi } from "../baseApi";
 import { unwrapEnvelope, type ApiEnvelope } from "../unwrap";
 
+export type PartyShippingAddress = {
+  _id?: string;
+  id?: string;
+  label?: string;
+  recipient_name?: string;
+  phone?: string;
+  gst_no?: string;
+  address_line_1?: string;
+  address_line_2?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  country?: string;
+  is_default?: boolean;
+};
+
 /** Common write fields for create/patch/bulk party payloads. */
 export type PartyWriteBody = {
   party_type?: string;
@@ -13,6 +29,7 @@ export type PartyWriteBody = {
   drug_license_no?: string;
   billing_address?: Record<string, unknown>;
   shipping_address?: Record<string, unknown>;
+  shipping_addresses?: PartyShippingAddress[];
   district?: string;
   state?: string;
   payment_terms?: string;
