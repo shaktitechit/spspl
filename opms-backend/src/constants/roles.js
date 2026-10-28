@@ -8,6 +8,7 @@ const SALES = 'sales';
 const FINANCE = 'finance';
 const DISPATCH = 'dispatch';
 const ACCOUNT = 'account';
+const COORDINATOR = 'coordinator';
 
 module.exports = {
   SUPER_ADMIN,
@@ -16,6 +17,7 @@ module.exports = {
   FINANCE,
   DISPATCH,
   ACCOUNT,
+  COORDINATOR,
   /** Catalog of valid OPMS portal access_roles. */
   OPMS_ACCESS_ROLES: Object.freeze([
     SUPER_ADMIN,
@@ -24,5 +26,6 @@ module.exports = {
     FINANCE,
     ACCOUNT,
     DISPATCH,
+    COORDINATOR,
   ]),
 };

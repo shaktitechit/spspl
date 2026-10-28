@@ -8,6 +8,7 @@ import {
   FINANCE_LIST_ORDERS_CONFIG,
   SALES_LIST_ORDERS_CONFIG,
   SUPER_ADMIN_LIST_ORDERS_CONFIG,
+  COORDINATOR_LIST_ORDERS_CONFIG,
 } from "./listOrdersPageConfig";
 import {
   isOrderWorkflowTabCategory,
@@ -39,7 +40,8 @@ export type OrderMasterPortalKey =
   | "finance"
   | "dispatch"
   | "super_admin"
-  | "account";
+  | "account"
+  | "coordinator";
 
 const PORTAL_HOME: Record<OrderMasterPortalKey, ListOrdersPortalHome> = {
   admin: "/admin",
@@ -48,6 +50,7 @@ const PORTAL_HOME: Record<OrderMasterPortalKey, ListOrdersPortalHome> = {
   finance: "/finance",
   dispatch: "/dispatch",
   sales: "/sales",
+  coordinator: "/coordinator",
 };
 
 const CONFIG_BY_PORTAL: Record<
@@ -76,6 +79,10 @@ const CONFIG_BY_PORTAL: Record<
   },
   sales: {
     defaultTab: SALES_LIST_ORDERS_CONFIG.defaultTab,
+    includeDraftTab: true,
+  },
+  coordinator: {
+    defaultTab: COORDINATOR_LIST_ORDERS_CONFIG.defaultTab,
     includeDraftTab: true,
   },
 };
@@ -160,6 +167,7 @@ export const ORDER_MASTER_NAV_CHILDREN_BY_PORTAL: Record<
   finance: buildOrderMasterNavChildren("finance"),
   dispatch: buildOrderMasterNavChildren("dispatch"),
   sales: buildOrderMasterNavChildren("sales"),
+  coordinator: buildOrderMasterNavChildren("coordinator"),
 };
 
 export type PortalNavChildLink = {

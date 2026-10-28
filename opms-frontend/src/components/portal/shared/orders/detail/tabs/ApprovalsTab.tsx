@@ -25,6 +25,7 @@ import {
 } from "@/components/portal/shared/orders/lib/orderLineRateDisplay";
 import type { CheckOrderRatesItem } from "@/store/api/slices/partyOrderProductsRateApi";
 import { pickList } from "../orderDetailUtils";
+import { buildUserRoleById } from "@/components/portal/shared/lib/userDisplay";
 import { toast } from "@/lib/toast";
 import { mutationRejectedMessage } from "@/lib/mutationMessages";
 
@@ -127,7 +128,14 @@ export function ApprovalsTab({
   }, [approvalsQ.data]);
 
   const isCreatedBySales = useMemo(
-    () => approvals.some((app) => app.is_sales_submited === true),
+    () =>
+      approvals.some(
+        (app) =>
+          app.is_sales_submited === true ||
+          app.is_coordinator_submitted === true ||
+          app.submitted_by_role === "coordinator" ||
+          app.submitted_by_role === "sales",
+      ),
     [approvals],
   );
 
@@ -199,6 +207,11 @@ export function ApprovalsTab({
     }
     return map;
   }, [usersQ.data]);
+
+  const userRoleById = useMemo(
+    () => buildUserRoleById(usersQ.data),
+    [usersQ.data],
+  );
 
   const rateItemByLine = useMemo(() => {
     const map = new Map<string, CheckOrderRatesItem>();
@@ -354,6 +367,7 @@ export function ApprovalsTab({
                 orderDate={detail?.order_date}
                 expectedDeliveryDate={detail?.expected_delivery_date}
                 userNameById={userNameById}
+                userRoleById={userRoleById}
                 onAmend={openAmendModal}
                 amendingApprovalId={amendApprovalId}
                 isAmendBlocked={hasActiveDispatch && !isSuperAdmin}

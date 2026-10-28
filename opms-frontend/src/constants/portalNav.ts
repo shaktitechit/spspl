@@ -15,6 +15,7 @@ export const PORTALS = [
   "dispatch",
   "super_admin",
   "account",
+  "coordinator",
 ] as const;
 
 export type PortalKey = (typeof PORTALS)[number];
@@ -189,6 +190,43 @@ export const PORTAL_NAV: Record<PortalKey, readonly PortalNavLeaf[]> = {
       segments: ["parties"],
       label: "Party Master",
       icon: "Building2",
+      children: [
+        { label: "Master Party List", query: "view=parties", icon: "Users" },
+        { label: "Zone Management List", query: "view=zones", icon: "Map" },
+        { label: "Country List", query: "view=countries", icon: "Landmark" },
+        { label: "State List", query: "view=states", icon: "MapPin" },
+        { label: "City List", query: "view=cities", icon: "Building2" },
+      ],
+    },
+    {
+      segments: ["products"],
+      label: "Product Master",
+      icon: "Package",
+      children: [
+        { label: "Master Product List", query: "view=products", icon: "Package" },
+        { label: "Product Group List", query: "view=groups", icon: "Boxes" },
+        { label: "Product Subgroup List", query: "view=subgroups", icon: "FolderOpen" },
+        { label: "Product Brand List", query: "view=brands", icon: "Building2" },
+        { label: "Product Manufacturer List", query: "view=manufacturers", icon: "Landmark" },
+        { label: "Product Unit List", query: "view=units", icon: "Ruler" },
+      ],
+    },
+    { segments: ["transport-agents"], label: "Transport Agent Master", icon: "Building2" },
+    { segments: ["transport-planner"], label: "Transport Planner", icon: "Truck" },
+  ],
+  coordinator: [
+    { segments: [], label: "Overview", icon: "LayoutDashboard" },
+    {
+      segments: ["orders"],
+      label: "Order Master",
+      icon: "ClipboardList",
+      children: ORDER_MASTER_NAV_CHILDREN_BY_PORTAL.coordinator,
+    },
+    { segments: ["create-order"], label: "Create Order", icon: "FilePlus" },
+    {
+      segments: ["parties"],
+      label: "Party Master",
+      icon: "Users",
       children: [
         { label: "Master Party List", query: "view=parties", icon: "Users" },
         { label: "Zone Management List", query: "view=zones", icon: "Map" },

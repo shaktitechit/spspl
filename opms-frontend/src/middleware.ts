@@ -228,5 +228,7 @@ export const config = {
     "/dispatch/:path*",
     "/super_admin",
     "/super_admin/:path*",
+    "/coordinator",
+    "/coordinator/:path*",
   ],
 };

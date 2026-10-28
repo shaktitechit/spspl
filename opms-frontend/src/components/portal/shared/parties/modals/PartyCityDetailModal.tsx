@@ -18,7 +18,7 @@ export type PartyCityDetailModalProps = {
   defaultStateId?: string;
   defaultCountryId?: string;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (city?: any) => void;
 };
 
 const inputClass =
@@ -110,14 +110,15 @@ export default function PartyCityDetailModal({
         description: description.trim(),
         is_active: isActive,
       };
+      let savedCity;
       if (isEdit && cityId) {
-        await patchCity({ id: cityId, patch: body }).unwrap();
+        savedCity = await patchCity({ id: cityId, patch: body }).unwrap();
         toast.success("City updated");
       } else {
-        await createCity(body).unwrap();
+        savedCity = await createCity(body).unwrap();
         toast.success("City created");
       }
-      onSuccess?.();
+      onSuccess?.(savedCity);
       onClose();
     } catch (err: any) {
       toast.error(err?.data?.message || "Failed to save city");
@@ -128,7 +129,7 @@ export default function PartyCityDetailModal({
 
   return (
     <LargeModalPortal>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+      <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
         <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-white/5">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">

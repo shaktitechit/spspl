@@ -61,6 +61,12 @@ export const PORTAL_ROUTES = [
     roles: ["super_admin"],
     icon: "Shield",
   },
+  {
+    path: "/coordinator",
+    label: "Coordinator",
+    roles: ["coordinator"],
+    icon: "Users",
+  },
 ] as const satisfies readonly PortalRouteMeta[];
 
 /** @deprecated Prefer {@link PORTAL_ROUTES}; kept for gradual migration. */
@@ -104,6 +110,7 @@ const HOME_LOOKUP: Record<string, string> = {
   superadmin: "/super_admin",
   account: "/account",
   accounts: "/account",
+  coordinator: "/coordinator",
 };
 
 /** Base path prefixes an access_role may navigate. */

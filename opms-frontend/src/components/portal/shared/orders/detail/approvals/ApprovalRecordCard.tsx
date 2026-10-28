@@ -26,7 +26,8 @@ type ApprovalRecordCardProps = {
   orderDate?: unknown;
   expectedDeliveryDate?: unknown;
   userNameById: Record<string, string>;
-  portal?: "admin" | "finance" | "account";
+  userRoleById?: Record<string, string>;
+  portal?: "admin" | "finance" | "account" | "coordinator" | "sales";
   onSendToFinance?: (approvalId: string) => void;
   onSendToAccount?: (approvalId: string) => void;
   onAmend?: (approvalId: string, mode: "admin" | "finance" | "account") => void;
@@ -132,6 +133,7 @@ export function ApprovalRecordCard({
   orderDate,
   expectedDeliveryDate,
   userNameById,
+  userRoleById,
   portal = "admin",
   onSendToFinance,
   onSendToAccount,
@@ -259,6 +261,32 @@ export function ApprovalRecordCard({
     userNameById,
   );
   const salesSubmittedAtLabel = formatDate(approval.sales_submitted_at);
+
+  const coordinatorSubmittedByLabel = resolveUserDisplay(
+    approval.coordinator_submitted_by,
+    userNameById,
+  );
+  const coordinatorSubmittedAtLabel = formatDate(approval.coordinator_submitted_at);
+
+  const submittingSalesUserId = idFromRef(approval.sales_submitted_by);
+  const isCoordinatorSubmitter = Boolean(
+    approval.is_coordinator_submitted ||
+    approval.coordinator_submitted_by ||
+    approval.submitted_by_role === "coordinator" ||
+    (submittingSalesUserId && userRoleById?.[submittingSalesUserId] === "coordinator") ||
+    (typeof approval.sales_submitted_by === "object" &&
+      approval.sales_submitted_by !== null &&
+      String(
+        (approval.sales_submitted_by as Record<string, unknown>)?.department != null &&
+          typeof (approval.sales_submitted_by as Record<string, unknown>).department === "object"
+          ? ((approval.sales_submitted_by as Record<string, unknown>).department as Record<string, unknown>).name ||
+              ((approval.sales_submitted_by as Record<string, unknown>).department as Record<string, unknown>).code ||
+              ""
+          : (approval.sales_submitted_by as Record<string, unknown>)?.department || "",
+      )
+        .toLowerCase()
+        .includes("coordinator")),
+  );
 
   const isFinancePortal = portal === "finance";
   const isAccountPortal = portal === "account";
@@ -485,7 +513,10 @@ export function ApprovalRecordCard({
         approvalStatus === "pending_review" ||
         Boolean(approval.is_admin_approved) ||
         Boolean(approval.is_finance_approved) ||
-        Boolean(approval.is_sales_submited)) && (
+        Boolean(approval.is_sales_submited) ||
+        Boolean(approval.is_coordinator_submitted) ||
+        Boolean(approval.coordinator_submitted_by) ||
+        isCoordinatorSubmitter) && (
         <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -541,12 +572,33 @@ export function ApprovalRecordCard({
               )}
             </div>
             <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-slate-400">
-              {(Boolean(approval.is_sales_submited) || Boolean(approval.sales_submitted_by)) && (
+              {Boolean(approval.is_coordinator_submitted || approval.coordinator_submitted_by) ? (
+                <p>
+                  <b>Coordinator:</b> Submitted by{" "}
+                  <span className="font-medium text-slate-700 dark:text-slate-200">{coordinatorSubmittedByLabel}</span>
+                  {coordinatorSubmittedAtLabel && coordinatorSubmittedAtLabel !== "—" ? (
+                    <span className="tabular-nums"> at {coordinatorSubmittedAtLabel}</span>
+                  ) : null}
+                </p>
+              ) : isCoordinatorSubmitter ? (
+                <p>
+                  <b>Coordinator:</b> Submitted by{" "}
+                  <span className="font-medium text-slate-700 dark:text-slate-200">
+                    {coordinatorSubmittedByLabel !== "—" ? coordinatorSubmittedByLabel : salesSubmittedByLabel}
+                  </span>
+                  {(coordinatorSubmittedAtLabel !== "—" ? coordinatorSubmittedAtLabel : salesSubmittedAtLabel) &&
+                  (coordinatorSubmittedAtLabel !== "—" ? coordinatorSubmittedAtLabel : salesSubmittedAtLabel) !== "—" ? (
+                    <span className="tabular-nums">
+                      {" "}at {coordinatorSubmittedAtLabel !== "—" ? coordinatorSubmittedAtLabel : salesSubmittedAtLabel}
+                    </span>
+                  ) : null}
+                </p>
+              ) : (Boolean(approval.is_sales_submited) || Boolean(approval.sales_submitted_by)) ? (
                 <p>
                   <b>Sales:</b> Submitted by <span className="font-medium text-slate-700 dark:text-slate-200">{salesSubmittedByLabel}</span>
                   {salesSubmittedAtLabel && salesSubmittedAtLabel !== "—" ? <span className="tabular-nums"> at {salesSubmittedAtLabel}</span> : null}
                 </p>
-              )}
+              ) : null}
               <p>
                 <b>Admin:</b>{" "}
                 {approval.is_admin_approved ? (

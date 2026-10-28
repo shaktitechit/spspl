@@ -7,7 +7,7 @@ const DEFAULT_PORTALS = [
     name: 'OPMS Portal',
     code: 'opms',
     description: 'Order / production management system',
-    access_roles: ['super_admin', 'admin', 'sales', 'finance', 'account', 'dispatch'],
+    access_roles: ['super_admin', 'admin', 'sales', 'finance', 'account', 'dispatch', 'coordinator'],
   },
   {
     name: 'Work Planner Portal',

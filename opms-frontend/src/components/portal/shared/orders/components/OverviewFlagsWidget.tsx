@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Flag, ExternalLink, X } from "lucide-react";
+import { Flag, ExternalLink, X, User } from "lucide-react";
 import { useListFlagsQuery } from "@/store/api";
+import { useAppSelector } from "@/store";
 import { LargeModalBackdrop } from "@/components/portal/shared/ui/modals/LargeModalBackdrop";
 import { largeModalPanelClass } from "@/components/portal/shared/ui/modals/modalLayout";
 
 export interface OverviewFlagsWidgetProps {
-  currentDepartment: "sales" | "finance" | "account" | "dispatch" | "admin";
+  currentDepartment: "sales" | "finance" | "account" | "dispatch" | "admin" | "coordinator";
   /** `panel` = full-width card (default). `headerButton` = compact trigger that opens flags in a modal. */
   variant?: "panel" | "headerButton";
 }
@@ -19,6 +20,7 @@ const departmentTitles: Record<string, string> = {
   dispatch: "Active Dispatch Alerts",
   account: "Active Account Alerts",
   admin: "System Alerts & Flags",
+  coordinator: "Active Coordinator Alerts",
 };
 
 const departmentButtonColors: Record<string, string> = {
@@ -27,6 +29,7 @@ const departmentButtonColors: Record<string, string> = {
   dispatch: "bg-amber-50 text-amber-705 border-amber-200 hover:bg-amber-100 dark:bg-amber-955/40 dark:text-amber-455 dark:border-amber-900/50 dark:hover:bg-amber-900/40",
   account: "bg-blue-50 text-blue-755 border-blue-200 hover:bg-blue-100 dark:bg-blue-955/40 dark:text-blue-455 dark:border-blue-900/50 dark:hover:bg-blue-900/40",
   admin: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-955/40 dark:text-blue-455 dark:border-blue-900/50 dark:hover:bg-blue-900/40",
+  coordinator: "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-900/50 dark:hover:bg-indigo-900/40",
 };
 
 function getSeverityBadgeClass(severity?: string): string {
@@ -93,7 +96,7 @@ function FlagsList({
     return (
       <div className="flex flex-col items-center justify-center py-6 text-center">
         <p className="text-xs text-slate-550 dark:text-slate-400">
-          No active blockages reported in your queue.
+          No active blockages reported in this queue.
         </p>
       </div>
     );
@@ -114,6 +117,14 @@ function FlagsList({
             (orderId ? `#${orderId.slice(-6)}` : "—"),
         );
         const urlPath = `/${currentDepartment}/order/${orderId}`;
+
+        const assignedToObj =
+          typeof flag.assigned_to === "object" && flag.assigned_to !== null
+            ? (flag.assigned_to as Record<string, unknown>)
+            : null;
+        const assignedName = assignedToObj
+          ? String(assignedToObj.name || assignedToObj.username || "")
+          : null;
 
         return (
           <li
@@ -138,10 +149,17 @@ function FlagsList({
             </h4>
 
             {flag.description ? (
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-sans">
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-sans line-clamp-2">
                 {String(flag.description)}
               </p>
             ) : null}
+
+            {assignedName && (
+              <div className="mt-2 flex items-center gap-1 text-2xs text-blue-600 dark:text-blue-400 font-medium">
+                <User className="h-3 w-3" />
+                <span>Assigned to: {assignedName}</span>
+              </div>
+            )}
 
             <div className="mt-3 flex flex-col gap-1.5 border-t border-slate-150/60 pt-2.5 text-2xs dark:border-white/5 font-sans">
               <div className="flex items-center justify-between">
@@ -157,7 +175,7 @@ function FlagsList({
                   href={urlPath}
                   className={`group inline-flex items-center gap-1 rounded border px-2 py-0.5 text-2xs font-bold tracking-wide uppercase transition ${departmentButtonColors[currentDepartment] || "bg-slate-100 text-slate-800 hover:bg-slate-150"}`}
                 >
-                  <span>View</span>
+                  <span>View Details</span>
                   <ExternalLink className="h-2.5 w-2.5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                 </Link>
               </div>
@@ -174,6 +192,10 @@ export function OverviewFlagsWidget({
   variant = "panel",
 }: OverviewFlagsWidgetProps) {
   const [showModal, setShowModal] = useState(false);
+  const [filterMode, setFilterMode] = useState<"assigned_to_me" | "department">("assigned_to_me");
+
+  const currentUser = useAppSelector((s) => s.auth.user);
+  const currentUserId = String(currentUser?._id ?? currentUser?.id ?? "");
 
   const {
     data: flagsData,
@@ -181,14 +203,40 @@ export function OverviewFlagsWidget({
     isError: isFlagsError,
   } = useListFlagsQuery({});
 
-  const relevantFlags = useMemo(() => {
+  const allActiveFlags = useMemo(() => {
     const allFlags = extractFlags(flagsData);
     return allFlags.filter((f) => {
       if (!f || typeof f !== "object") return false;
-      if (f.status !== "open" && f.status !== "in_progress") return false;
+      return f.status === "open" || f.status === "in_progress";
+    });
+  }, [flagsData]);
+
+  const assignedToMeFlags = useMemo(() => {
+    if (!currentUserId) return [];
+    return allActiveFlags.filter((f) => {
+      const assignedId =
+        typeof f.assigned_to === "object" && f.assigned_to !== null
+          ? String((f.assigned_to as any)._id || (f.assigned_to as any).id)
+          : String(f.assigned_to || "");
+      const isTagged = Array.isArray(f.tagged_members) && f.tagged_members.some((tm: any) =>
+        String(typeof tm === "object" && tm !== null ? tm._id || tm.id : tm) === currentUserId
+      );
+      return assignedId === currentUserId || isTagged;
+    });
+  }, [allActiveFlags, currentUserId]);
+
+  const departmentFlags = useMemo(() => {
+    return allActiveFlags.filter((f) => {
+      if (currentDepartment === "coordinator") {
+        return f.department === "coordinator" || f.department === "sales";
+      }
       return f.department === currentDepartment;
     });
-  }, [flagsData, currentDepartment]);
+  }, [allActiveFlags, currentDepartment]);
+
+  const relevantFlags = filterMode === "assigned_to_me" && assignedToMeFlags.length > 0
+    ? assignedToMeFlags
+    : departmentFlags;
 
   const title = departmentTitles[currentDepartment] || "Active Alerts & Flags";
   const flagCount = relevantFlags.length;
@@ -238,6 +286,32 @@ export function OverviewFlagsWidget({
                 </button>
               </div>
 
+              {/* Scope toggle */}
+              <div className="flex gap-2 px-5 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setFilterMode("assigned_to_me")}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                    filterMode === "assigned_to_me"
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                  }`}
+                >
+                  Assigned to Me ({assignedToMeFlags.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterMode("department")}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                    filterMode === "department"
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                  }`}
+                >
+                  Department Queue ({departmentFlags.length})
+                </button>
+              </div>
+
               <div className="flex-1 min-h-0 overflow-y-auto p-5">
                 <FlagsList {...listProps} />
               </div>
@@ -271,6 +345,33 @@ export function OverviewFlagsWidget({
           {flagCount}
         </span>
       </div>
+
+      {assignedToMeFlags.length > 0 && (
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setFilterMode("assigned_to_me")}
+            className={`rounded-lg px-2.5 py-1 text-2xs font-semibold transition cursor-pointer ${
+              filterMode === "assigned_to_me"
+                ? "bg-blue-600 text-white"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+            }`}
+          >
+            Assigned to Me ({assignedToMeFlags.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterMode("department")}
+            className={`rounded-lg px-2.5 py-1 text-2xs font-semibold transition cursor-pointer ${
+              filterMode === "department"
+                ? "bg-blue-600 text-white"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+            }`}
+          >
+            Department Queue ({departmentFlags.length})
+          </button>
+        </div>
+      )}
 
       <div className="mt-4 max-h-[min(380px,50vh)] overflow-auto">
         <FlagsList {...listProps} />

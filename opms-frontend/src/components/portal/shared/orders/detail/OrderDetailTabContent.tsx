@@ -248,6 +248,13 @@ export function OrderDetailTabContent(props: OrderDetailTabContentProps) {
       return (
         <OrderDepartmentFlagsTab
           orderId={orderId}
+          orderNo={
+            typeof detail?.order_no === "string"
+              ? detail.order_no
+              : typeof detail?.order_number === "string"
+                ? detail.order_number
+                : undefined
+          }
           flagsQ={flagsQ}
           rawFlags={rawFlags}
           formatDate={formatDate}

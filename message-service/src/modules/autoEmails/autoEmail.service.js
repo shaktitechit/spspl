@@ -13,7 +13,7 @@ const { ApiError } = require('../../utils/ApiError');
  * @param {string} params.templateName
  * @param {object} [params.templateParams]
  */
-async function shootAutoEmail({ recipient, templateName, templateParams = {} }) {
+async function shootAutoEmail({ recipient, templateName, templateParams = {}, cc = [], attachments = [] }) {
   if (!recipient) {
     throw new ApiError(400, 'Recipient email is required.');
   }
@@ -30,6 +30,8 @@ async function shootAutoEmail({ recipient, templateName, templateParams = {} }) 
     recipient,
     templateName,
     templateParams,
+    cc: cc || templateParams.cc || [],
+    attachments: attachments || templateParams.attachments || [],
   });
 
   return { success: true, message: 'Auto-email enqueued successfully.' };

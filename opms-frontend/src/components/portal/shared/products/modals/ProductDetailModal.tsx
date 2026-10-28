@@ -15,12 +15,21 @@ import {
 } from "@/store/api";
 import { productRefLabel } from "@/components/portal/shared/lib/productRefLabel";
 import { LargeModalPortal } from "@/components/portal/shared/ui/modals/LargeModalPortal";
+import { Plus } from "lucide-react";
+import ProductGroupDetailModal from "./ProductGroupDetailModal";
+import ProductSubgroupDetailModal from "./ProductSubgroupDetailModal";
+import ProductBrandDetailModal from "./ProductBrandDetailModal";
+import ProductManufacturerDetailModal from "./ProductManufacturerDetailModal";
+import ProductUnitDetailModal from "./ProductUnitDetailModal";
 
 export type ProductDetailModalProps = {
   productId: string | null;
   create?: boolean;
+  open?: boolean;
+  initialName?: string;
   /** When creating, load this product's fields into the form (new record on save). */
   duplicateFromId?: string | null;
+  onSuccess?: (product: Record<string, unknown>) => void;
   onClose: () => void;
 };
 
@@ -139,12 +148,15 @@ function productToFormState(
 export function ProductDetailModal({
   productId,
   create = false,
+  open,
+  initialName,
   duplicateFromId = null,
+  onSuccess,
   onClose,
 }: ProductDetailModalProps) {
   const isEditing = !create && productId != null && productId !== "";
   const isDuplicating = create && !!duplicateFromId;
-  const show = create || isEditing;
+  const show = (open ?? true) && (create || isEditing);
   const sourceProductId = isEditing
     ? (productId ?? "")
     : isDuplicating
@@ -164,6 +176,11 @@ export function ProductDetailModal({
   // Local Form state
   const [form, setForm] = useState<ProductState>(defaultProductState());
   const [activeTab, setActiveTab] = useState<"basic" | "commercial">("basic");
+  const [quickGroupOpen, setQuickGroupOpen] = useState(false);
+  const [quickSubgroupOpen, setQuickSubgroupOpen] = useState(false);
+  const [quickBrandOpen, setQuickBrandOpen] = useState(false);
+  const [quickManufacturerOpen, setQuickManufacturerOpen] = useState(false);
+  const [quickUnitOpen, setQuickUnitOpen] = useState(false);
 
   const selectedGroupId = useMemo(() => {
     const name = form.product_group.trim().toLowerCase();
@@ -198,17 +215,27 @@ export function ProductDetailModal({
         }),
       );
     } else if (create && !isDuplicating) {
-      setForm(defaultProductState());
+      setForm({
+        ...defaultProductState(),
+        ...(initialName ? { product_name: initialName } : {}),
+      });
     }
-  }, [rawProduct, create, isDuplicating, sourceProductId]);
+  }, [rawProduct, create, isDuplicating, sourceProductId, initialName]);
 
-  // Clean form when modal closes
+  // Clean form when modal closes or prefill initialName on open
   useEffect(() => {
     if (!show) {
       setForm(defaultProductState());
       setActiveTab("basic");
+    } else {
+      if (create && !isDuplicating && initialName) {
+        setForm((prev) => ({
+          ...prev,
+          product_name: prev.product_name || initialName,
+        }));
+      }
     }
-  }, [show]);
+  }, [show, create, isDuplicating, initialName]);
 
   // Keyboard shortcut escape
   useEffect(() => {
@@ -300,8 +327,9 @@ export function ProductDetailModal({
 
     try {
       if (create) {
-        await createProduct(payload).unwrap();
+        const createdRes = (await createProduct(payload).unwrap()) as Record<string, unknown>;
         toast.success(mutationSuccessCopy("createProduct"));
+        onSuccess?.(createdRes);
         onClose();
       } else if (productId) {
         // Minimal Diff payload calculation
@@ -530,7 +558,20 @@ export function ProductDetailModal({
               </div>
 
               <div className="space-y-1">
-                <label className={labelClass}>Commercial Group</label>
+                <div className="flex items-center justify-between">
+                  <label className={labelClass}>Commercial Group</label>
+                  {!isSaving && (
+                    <button
+                      type="button"
+                      onClick={() => setQuickGroupOpen(true)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                      title="Quick add a new commercial group"
+                    >
+                      <Plus className="size-3" />
+                      <span>Add Group</span>
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   list="group-options"
@@ -549,14 +590,30 @@ export function ProductDetailModal({
                   {metaOptions?.groups?.map((g, i) => (
                     <option key={`group:${String(g._id ?? g.name)}:${i}`} value={g.name} />
                   ))}
+                  {form.product_group && !metaOptions?.groups?.some((g) => g.name === form.product_group) && (
+                    <option value={form.product_group} />
+                  )}
                 </datalist>
                 <p className="text-2xs text-slate-500 dark:text-slate-400">
-                  Pick an existing group or type a new name to create it on save.
+                  Pick an existing group, click &ldquo;Add Group&rdquo;, or type a new name to create it on save.
                 </p>
               </div>
 
               <div className="space-y-1">
-                <label className={labelClass}>Subgroup</label>
+                <div className="flex items-center justify-between">
+                  <label className={labelClass}>Subgroup</label>
+                  {!isSaving && (
+                    <button
+                      type="button"
+                      onClick={() => setQuickSubgroupOpen(true)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                      title="Quick add a new subgroup"
+                    >
+                      <Plus className="size-3" />
+                      <span>Add Subgroup</span>
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   list="subgroup-options"
@@ -564,22 +621,36 @@ export function ProductDetailModal({
                   placeholder="e.g. Analgesics"
                   value={form.product_subgroup}
                   onChange={(e) => setForm((f) => ({ ...f, product_subgroup: e.target.value }))}
-                  disabled={isSaving || !form.product_group.trim()}
+                  disabled={isSaving}
                 />
                 <datalist id="subgroup-options">
                   {subgroupOptions.map((sg, i) => (
                     <option key={`subgroup:${String(sg._id ?? sg.name)}:${i}`} value={sg.name} />
                   ))}
+                  {form.product_subgroup && !subgroupOptions.some((sg) => sg.name === form.product_subgroup) && (
+                    <option value={form.product_subgroup} />
+                  )}
                 </datalist>
                 <p className="text-2xs text-slate-500 dark:text-slate-400">
-                  {form.product_group.trim()
-                    ? "Pick an existing subgroup or type a new name to create it under this group."
-                    : "Enter a commercial group first to set or create a subgroup."}
+                  Pick an existing subgroup, click &ldquo;Add Subgroup&rdquo;, or type a new name to create it under this group.
                 </p>
               </div>
 
               <div className="space-y-1">
-                <label className={labelClass}>Brand</label>
+                <div className="flex items-center justify-between">
+                  <label className={labelClass}>Brand</label>
+                  {!isSaving && (
+                    <button
+                      type="button"
+                      onClick={() => setQuickBrandOpen(true)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                      title="Quick add a new brand"
+                    >
+                      <Plus className="size-3" />
+                      <span>Add Brand</span>
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   list="brand-options"
@@ -593,14 +664,30 @@ export function ProductDetailModal({
                   {metaOptions?.brands?.map((b, i) => (
                     <option key={`brand:${String(b._id ?? b.name)}:${i}`} value={b.name} />
                   ))}
+                  {form.brand && !metaOptions?.brands?.some((b) => b.name === form.brand) && (
+                    <option value={form.brand} />
+                  )}
                 </datalist>
                 <p className="text-2xs text-slate-500 dark:text-slate-400">
-                  Pick an existing brand or type a new name to create it on save.
+                  Pick an existing brand, click &ldquo;Add Brand&rdquo;, or type a new name to create it on save.
                 </p>
               </div>
 
               <div className="space-y-1">
-                <label className={labelClass}>Manufacturer</label>
+                <div className="flex items-center justify-between">
+                  <label className={labelClass}>Manufacturer</label>
+                  {!isSaving && (
+                    <button
+                      type="button"
+                      onClick={() => setQuickManufacturerOpen(true)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                      title="Quick add a new manufacturer"
+                    >
+                      <Plus className="size-3" />
+                      <span>Add Manufacturer</span>
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   list="manufacturer-options"
@@ -614,14 +701,30 @@ export function ProductDetailModal({
                   {metaOptions?.manufacturers?.map((m, i) => (
                     <option key={`mfr:${String(m._id ?? m.name)}:${i}`} value={m.name} />
                   ))}
+                  {form.manufacturer && !metaOptions?.manufacturers?.some((m) => m.name === form.manufacturer) && (
+                    <option value={form.manufacturer} />
+                  )}
                 </datalist>
                 <p className="text-2xs text-slate-500 dark:text-slate-400">
-                  Pick an existing manufacturer or type a new name to create it on save.
+                  Pick an existing manufacturer, click &ldquo;Add Manufacturer&rdquo;, or type a new name to create it on save.
                 </p>
               </div>
 
               <div className="space-y-1">
-                <label className={labelClass}>Unit of Measurement</label>
+                <div className="flex items-center justify-between">
+                  <label className={labelClass}>Unit of Measurement</label>
+                  {!isSaving && (
+                    <button
+                      type="button"
+                      onClick={() => setQuickUnitOpen(true)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                      title="Quick add a new unit of measurement"
+                    >
+                      <Plus className="size-3" />
+                      <span>Add Unit</span>
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   list="unit-options"
@@ -635,9 +738,12 @@ export function ProductDetailModal({
                   {metaOptions?.units?.map((u, i) => (
                     <option key={`unit:${String(u._id ?? u.name)}:${i}`} value={u.name} />
                   ))}
+                  {form.unit && !metaOptions?.units?.some((u) => u.name === form.unit) && (
+                    <option value={form.unit} />
+                  )}
                 </datalist>
                 <p className="text-2xs text-slate-500 dark:text-slate-400">
-                  Pick a catalog unit or type a new name to create it on save.
+                  Pick a catalog unit, click &ldquo;Add Unit&rdquo;, or type a new name to create it on save.
                 </p>
               </div>
 
@@ -834,6 +940,81 @@ export function ProductDetailModal({
         </div>
       </div>
     </div>
+
+    {quickGroupOpen && (
+      <ProductGroupDetailModal
+        create={true}
+        initialName=""
+        onClose={() => setQuickGroupOpen(false)}
+        onSuccess={(createdGroup) => {
+          if (createdGroup?.name) {
+            setForm((f) => ({ ...f, product_group: createdGroup.name }));
+          }
+        }}
+      />
+    )}
+
+    {quickSubgroupOpen && (
+      <ProductSubgroupDetailModal
+        create={true}
+        initialName=""
+        defaultGroupId={selectedGroupId || undefined}
+        defaultGroupName={form.product_group || undefined}
+        onClose={() => setQuickSubgroupOpen(false)}
+        onSuccess={(createdSubgroup) => {
+          if (createdSubgroup?.name) {
+            const grp =
+              createdSubgroup.group && typeof createdSubgroup.group === "object"
+                ? createdSubgroup.group.name
+                : form.product_group;
+            setForm((f) => ({
+              ...f,
+              product_subgroup: createdSubgroup.name,
+              ...(grp && !f.product_group ? { product_group: grp } : {}),
+            }));
+          }
+        }}
+      />
+    )}
+
+    {quickBrandOpen && (
+      <ProductBrandDetailModal
+        create={true}
+        initialName=""
+        onClose={() => setQuickBrandOpen(false)}
+        onSuccess={(createdBrand) => {
+          if (createdBrand?.name) {
+            setForm((f) => ({ ...f, brand: createdBrand.name }));
+          }
+        }}
+      />
+    )}
+
+    {quickManufacturerOpen && (
+      <ProductManufacturerDetailModal
+        create={true}
+        initialName=""
+        onClose={() => setQuickManufacturerOpen(false)}
+        onSuccess={(createdManufacturer) => {
+          if (createdManufacturer?.name) {
+            setForm((f) => ({ ...f, manufacturer: createdManufacturer.name }));
+          }
+        }}
+      />
+    )}
+
+    {quickUnitOpen && (
+      <ProductUnitDetailModal
+        create={true}
+        initialName=""
+        onClose={() => setQuickUnitOpen(false)}
+        onSuccess={(createdUnit) => {
+          if (createdUnit?.name) {
+            setForm((f) => ({ ...f, unit: createdUnit.name }));
+          }
+        }}
+      />
+    )}
     </LargeModalPortal>
   );
 }

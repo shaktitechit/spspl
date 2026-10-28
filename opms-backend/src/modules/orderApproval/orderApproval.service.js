@@ -656,6 +656,7 @@ async function list(query = {}) {
     .populate('account_approved_by', 'name username email')
     .populate('assigned_account_user', 'name username email')
     .populate('sales_submitted_by', 'name username email')
+    .populate('coordinator_submitted_by', 'name username email')
     .sort({ createdAt: -1 })
     .lean();
   const enriched = await enrichAccountAmendmentMeta(rows.map((row) => toPlain(row)));
@@ -677,6 +678,7 @@ async function get(id) {
     .populate('account_approved_by', 'name username email')
     .populate('assigned_account_user', 'name username email')
     .populate('sales_submitted_by', 'name username email')
+    .populate('coordinator_submitted_by', 'name username email')
     .lean();
   if (!row) throw new ApiError(404, APPROVAL_NF);
   const [enriched] = await enrichAccountAmendmentMeta([toPlain(row)]);
@@ -780,7 +782,8 @@ async function createAdminApproval(body, user) {
   );
   const rateSummary = summarizeRateChecks(approvalItems);
 
-  const isSales = user && hasOpmsRole(user, ROLES.SALES) && !isOpmsAdmin(user);
+  const isCoordinator = user && hasAnyOpmsRole(user, [ROLES.COORDINATOR]) && !isOpmsAdmin(user);
+  const isSales = user && hasAnyOpmsRole(user, [ROLES.SALES]) && !isOpmsAdmin(user) && !isCoordinator;
 
   let doc = await OrderApproval.findOne({ order: body.order, deletedAt: null });
   if (doc) {
@@ -795,13 +798,19 @@ async function createAdminApproval(body, user) {
     doc.hold_reason = body.hold_reason || '';
     doc.reviewed_by = user._id;
     doc.reviewed_at = new Date();
-    if (!isSales) {
+    if (!isSales && !isCoordinator) {
       doc.is_admin_approved = false;
     }
-    if (isSales) {
+    if (isCoordinator || body.is_coordinator_submitted) {
+      doc.is_coordinator_submitted = true;
+      doc.coordinator_submitted_by = body.coordinator_submitted_by || user._id;
+      doc.coordinator_submitted_at = body.coordinator_submitted_at || new Date();
+      doc.submitted_by_role = 'coordinator';
+    } else if (isSales || body.is_sales_submited) {
       doc.is_sales_submited = true;
-      doc.sales_submitted_by = user._id;
-      doc.sales_submitted_at = new Date();
+      doc.sales_submitted_by = body.sales_submitted_by || user._id;
+      doc.sales_submitted_at = body.sales_submitted_at || new Date();
+      doc.submitted_by_role = 'sales';
     }
     await doc.save();
   } else {
@@ -821,10 +830,16 @@ async function createAdminApproval(body, user) {
       reviewed_by: user._id,
       reviewed_at: new Date(),
       created_by: user._id,
-      ...(isSales ? {
+      ...(isCoordinator || body.is_coordinator_submitted ? {
+        is_coordinator_submitted: true,
+        coordinator_submitted_by: body.coordinator_submitted_by || user._id,
+        coordinator_submitted_at: body.coordinator_submitted_at || new Date(),
+        submitted_by_role: 'coordinator',
+      } : isSales || body.is_sales_submited ? {
         is_sales_submited: true,
-        sales_submitted_by: user._id,
-        sales_submitted_at: new Date(),
+        sales_submitted_by: body.sales_submitted_by || user._id,
+        sales_submitted_at: body.sales_submitted_at || new Date(),
+        submitted_by_role: 'sales',
       } : {}),
     });
   }
@@ -999,6 +1014,10 @@ async function patch(id, patchBody, user) {
     'is_sales_submited',
     'sales_submitted_by',
     'sales_submitted_at',
+    'is_coordinator_submitted',
+    'coordinator_submitted_by',
+    'coordinator_submitted_at',
+    'submitted_by_role',
     'is_admin_approved',
     'admin_approved_by',
     'admin_approved_at',
@@ -3769,11 +3788,14 @@ async function superSheetUpdate(id, body, user) {
     'finance_amended_at',
     'account_amended_at',
     'admin_amended_at',
+    'sales_submitted_at',
+    'coordinator_submitted_at',
     'approved_at',
     'rejected_at',
   ]);
   const BOOL_KEYS = new Set([
     'is_sales_submited',
+    'is_coordinator_submitted',
     'is_admin_approved',
     'is_finance_approved',
     'is_account_approved',
@@ -3794,6 +3816,7 @@ async function superSheetUpdate(id, body, user) {
   ]);
   const OBJECT_ID_KEYS = new Set([
     'sales_submitted_by',
+    'coordinator_submitted_by',
     'admin_approved_by',
     'finance_approved_by',
     'account_approved_by',

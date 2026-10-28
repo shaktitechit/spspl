@@ -130,6 +130,7 @@ export const medicaApi = createApi({
     "FinanceQueue",
     "FinanceSummary",
     "Flags",
+    "FlagMessages",
     "Invoices",
     "Notifications",
     "Messages",

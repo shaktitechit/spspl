@@ -70,6 +70,7 @@ export const productUnitsApi = medicaApi.injectEndpoints({
 
 export const {
   useListProductUnitsQuery,
+  useGetProductUnitQuery,
   useCreateProductUnitMutation,
   usePatchProductUnitMutation,
   useDeleteProductUnitMutation,

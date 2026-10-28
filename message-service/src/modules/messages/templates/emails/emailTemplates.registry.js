@@ -30,6 +30,7 @@ const EMAIL_TEMPLATES = {
   PORTAL_ASSIGNED: 'portal_assigned',
   WORK_PLAN_COMPLETED: 'work_plan_completed',
   WORK_PLAN_CREATED: 'work_plan_created',
+  FLAG_ALERT: 'flag_alert',
 };
 
 function isValidTemplate(templateName) {

@@ -35,6 +35,10 @@ export { default as ProductDetailPage } from "./shared/products/pages/ProductDet
 export { default as SalesOverview } from "./sales/SalesOverview";
 export { default as SalesCreateOrderPage } from "./sales/CreateOrderPage";
 export { default as ListMyOrdersPage } from "./sales/ListMyOrdersPage";
+export { default as CoordinatorOverview } from "./coordinator/CoordinatorOverview";
+export { default as CoordinatorCreateOrderPage } from "./coordinator/CreateOrderPage";
+export { default as ListCoordinatorOrdersPage } from "./coordinator/ListMyOrdersPage";
+export { default as CoordinatorOrderDetails, default as CoordinatorOrderDetail } from "./coordinator/order/CoordinatorOrderDetails";
 export { default as ListTransportPlansPage } from "./shared/transportPlanner/ListTransportPlansPage";
 
 

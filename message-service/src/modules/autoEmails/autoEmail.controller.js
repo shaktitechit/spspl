@@ -10,12 +10,14 @@ const service = require('./autoEmail.service');
  * POST /api/auto-emails/trigger
  */
 exports.triggerAutoEmail = asyncHandler(async (req, res) => {
-  const { recipient, templateName, templateParams } = req.body;
+  const { recipient, templateName, templateParams, cc, attachments } = req.body;
 
   const result = await service.shootAutoEmail({
     recipient,
     templateName,
     templateParams,
+    cc,
+    attachments,
   });
 
   res.status(202).json(result);

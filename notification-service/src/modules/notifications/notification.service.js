@@ -18,6 +18,8 @@ async function createForUser(userId, payload) {
     module: payload.module || 'system',
     entity_type: payload.entity_type,
     entity_id: payload.entity_id || undefined,
+    link: payload.link || undefined,
+    metadata: payload.metadata || undefined,
     is_read: false,
   });
   const plain = toPlain(row.toObject());

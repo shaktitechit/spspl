@@ -28,14 +28,19 @@ function isSalesUser(user) {
   return hasOpmsRole(user, ROLES.SALES) && !isOpmsAdmin(user);
 }
 
+function isCoordinatorUser(user) {
+  return hasOpmsRole(user, ROLES.COORDINATOR) && !isOpmsAdmin(user);
+}
+
 function isSuperAdminUser(user) {
   return hasOpmsRole(user, ROLES.SUPER_ADMIN);
 }
 
-/** Non-sales/admin/finance/account (except super_admin) only see orders that have left draft / been submitted. */
+/** Non-sales/admin/finance/account/coordinator (except super_admin) only see orders that have left draft / been submitted. */
 function shouldExcludeDraftOrders(user) {
   return !hasAnyOpmsRole(user, [
     ROLES.SALES,
+    ROLES.COORDINATOR,
     ROLES.ADMIN,
     ROLES.SUPER_ADMIN,
     ROLES.FINANCE,
@@ -131,6 +136,7 @@ module.exports = {
   ASSIGNED_USER_ORDER_FIELDS,
   normalizeUserId,
   isSalesUser,
+  isCoordinatorUser,
   isSuperAdminUser,
   shouldExcludeDraftOrders,
   shouldFilterOrdersBySalesAssignee,

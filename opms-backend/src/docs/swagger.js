@@ -46,7 +46,7 @@ const spec = {
       'Domain data is persisted in **MongoDB** via Mongoose models in `src/data/mongoRegistry.js`; set `MONGO_URI` / `MONGODB_URI` before starting the server.',
       '',
       '**Auth:** `POST /api/auth/login` returns a JWT. Send `Authorization: Bearer <token>` on protected routes.',
-      '**Portal access:** Domain routes require `portals[]` entry with `portal_code: opms` and at least one `access_roles` value: `super_admin`, `admin`, `sales`, `finance`, `account`, `dispatch`.',
+      '**Portal access:** Domain routes require `portals[]` entry with `portal_code: opms` and at least one `access_roles` value: `super_admin`, `admin`, `sales`, `finance`, `account`, `dispatch`, `coordinator`.',
       '**Ops:** Seed via `POST /api/portals/seed` (auth-service / OPMS gateway). In User Manager, assign each OPMS user the `opms` portal with the correct access_roles (mirror former department). Users without opms portal access receive 403 even if `department` is set.',
       '**RBAC:** Soft-delete and restore endpoints require authentication (and opms portal access).',
       '**Files:** Uploads use file management (MinIO). View/download via `/api/files/{fileId}/view|download`.',

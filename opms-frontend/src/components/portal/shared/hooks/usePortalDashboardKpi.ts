@@ -4,6 +4,7 @@ import type { PortalKey } from "@/constants/portalNav";
 import { useSkipDashboardKpi } from "@/lib/useSkipDashboardKpi";
 import {
   useGetDashboardAdminQuery,
+  useGetDashboardCoordinatorQuery,
   useGetDashboardDispatchQuery,
   useGetDashboardFinanceQuery,
   useGetDashboardSalesQuery,
@@ -25,6 +26,9 @@ export function usePortalDashboardKpi(portal: PortalKey): {
   const sales = useGetDashboardSalesQuery(undefined, {
     skip: skipKpi || portal !== "sales",
   });
+  const coordinatorDash = useGetDashboardCoordinatorQuery(undefined, {
+    skip: skipKpi || portal !== "coordinator",
+  });
   const finance = useGetDashboardFinanceQuery(undefined, {
     skip: skipKpi || portal !== "finance",
   });
@@ -43,6 +47,12 @@ export function usePortalDashboardKpi(portal: PortalKey): {
           endpoint: "GET /api/dashboard/admin",
           toneClass: "text-emerald-100",
         }
+      : portal === "coordinator"
+        ? {
+            snapshot: coordinatorDash,
+            endpoint: "GET /api/dashboard/coordinator",
+            toneClass: "text-indigo-100",
+          }
       : portal === "sales"
         ? {
             snapshot: sales,

@@ -7,6 +7,7 @@ import {
   FINANCE_LIST_ORDERS_CONFIG,
   SALES_LIST_ORDERS_CONFIG,
   SUPER_ADMIN_LIST_ORDERS_CONFIG,
+  COORDINATOR_LIST_ORDERS_CONFIG,
 } from "./listOrdersPageConfig";
 import {
   computeOrderWorkflowTabStats,
@@ -20,7 +21,8 @@ export type OrderQuickAccessRole =
   | "super_admin"
   | "finance"
   | "dispatch"
-  | "account";
+  | "account"
+  | "coordinator";
 
 export type OrderQuickAccessRoleConfig = {
   tabs: ReadonlyArray<{ id: string; label: string }>;
@@ -44,6 +46,11 @@ export const ORDER_QUICK_ACCESS_ROLE_CONFIG: Record<
     tabs: SALES_ORDER_TABS,
     compute: computeSalesOrderStats,
     path: SALES_LIST_ORDERS_CONFIG.portalHome,
+  },
+  coordinator: {
+    tabs: SALES_ORDER_TABS,
+    compute: computeSalesOrderStats,
+    path: COORDINATOR_LIST_ORDERS_CONFIG.portalHome,
   },
   admin: {
     tabs: ORDER_WORKFLOW_TABS,

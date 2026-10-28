@@ -30,10 +30,13 @@ import { LargeModalPortal } from "@/components/portal/shared/ui/modals/LargeModa
 export type PartyDetailModalProps = {
   partyId: string | null;
   create?: boolean;
+  open?: boolean;
+  initialName?: string;
   /** When creating, load this party's fields into the form (new record on save). */
   duplicateFromId?: string | null;
   portalHome?: string;
   initialTab?: "details" | "contacts" | "address";
+  onSuccess?: (party: Record<string, unknown>) => void;
   onClose: () => void;
 };
 
@@ -241,14 +244,17 @@ function partyToFormState(p: Record<string, unknown>, opts?: { asCopy?: boolean 
 export function PartyDetailModal({
   partyId,
   create = false,
+  open,
+  initialName,
   duplicateFromId = null,
   portalHome,
   initialTab = "details",
+  onSuccess,
   onClose,
 }: PartyDetailModalProps) {
   const isEditing = !create && partyId != null && partyId !== "";
   const isDuplicating = create && !!duplicateFromId;
-  const show = create || isEditing;
+  const show = (open ?? true) && (create || isEditing);
   const sourcePartyId = isEditing ? (partyId ?? "") : isDuplicating ? (duplicateFromId ?? "") : "";
   const portal = portalHome?.replace("/", "") ?? "";
   const { portalName } = resolvePortalPresentation(portal || "admin");
@@ -291,19 +297,28 @@ export function PartyDetailModal({
         }),
       );
     } else if (create && !isDuplicating) {
-      setForm(defaultPartyState());
+      setForm({
+        ...defaultPartyState(),
+        ...(initialName ? { party_name: initialName } : {}),
+      });
     }
-  }, [rawParty, create, isDuplicating, sourcePartyId]);
+  }, [rawParty, create, isDuplicating, sourcePartyId, initialName]);
 
-  // Clean form when modal closes
+  // Clean form when modal closes or prefill initialName on open
   useEffect(() => {
     if (!show) {
       setForm(defaultPartyState());
       setActiveTab("details");
     } else {
       setActiveTab(initialTab);
+      if (create && !isDuplicating && initialName) {
+        setForm((prev) => ({
+          ...prev,
+          party_name: prev.party_name || initialName,
+        }));
+      }
     }
-  }, [show, initialTab]);
+  }, [show, initialTab, create, isDuplicating, initialName]);
 
   // Keyboard shortcut (Escape to close)
   useEffect(() => {
@@ -350,8 +365,9 @@ export function PartyDetailModal({
 
     try {
       if (create) {
-        await createParty(payload as any).unwrap();
+        const createdRes = (await createParty(payload as any).unwrap()) as Record<string, unknown>;
         toast.success(mutationSuccessCopy("createParty"));
+        onSuccess?.(createdRes);
         onClose();
       } else if (partyId) {
         // Calculate minimal diff payload

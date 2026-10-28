@@ -8,7 +8,6 @@ import {
   ShoppingCart,
   Search,
   User,
-  Tag,
   Trash2,
   Plus,
   ArrowLeft,
@@ -18,9 +17,7 @@ import {
   History,
 } from "lucide-react";
 
-import {
-  mutationRejectedMessage,
-} from "@/lib/mutationMessages";
+import { mutationRejectedMessage } from "@/lib/mutationMessages";
 import { toast } from "@/lib/toast";
 import {
   useCreateOrderMutation,
@@ -203,7 +200,7 @@ function PartyAutocomplete({
   }, [selectedParty]);
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div ref={containerRef} className={`relative w-full ${isOpen ? "z-[100]" : "z-10"}`}>
       <div className="relative">
         <input
           type="text"
@@ -227,9 +224,9 @@ function PartyAutocomplete({
       </div>
 
       {isOpen && (
-        <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-slate-900">
+        <div className="absolute z-[9999] mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-2xl dark:border-white/10 dark:bg-slate-900 ring-1 ring-black/5">
           {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
+            <div className="p-3 text-xs text-slate-500 dark:text-slate-400">
               No parties found
             </div>
           ) : (
@@ -247,17 +244,23 @@ function PartyAutocomplete({
                     onChange(id);
                     setIsOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition hover:bg-slate-50 dark:hover:bg-white/5 ${isSelected
-                    ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400 font-medium"
-                    : "text-slate-800 dark:text-slate-200"
-                    }`}
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer ${
+                    isSelected
+                      ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400 font-medium"
+                      : "text-slate-800 dark:text-slate-200"
+                  }`}
                 >
                   <span className="truncate">
                     {name}
                     {code && <span className="text-2xs text-slate-500 dark:text-slate-400 ml-1">{code}</span>}
-                    {type && <span className="text-2xs text-slate-400 ml-1">{type}</span>}
+                    {type && <span className="text-xs text-slate-400 ml-1">{type}</span>}
+                    {p.sra === true && (
+                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-1.5 py-0.5 text-2xs font-bold text-emerald-700 ring-1 ring-inset ring-emerald-600/10 dark:bg-emerald-500/10 dark:text-emerald-400 ml-1.5">
+                        SRA
+                      </span>
+                    )}
                   </span>
-                  {isSelected && <Check className="h-3.5 w-3.5 flex-shrink-0 text-blue-600 dark:text-blue-400" />}
+                  {isSelected && <Check className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
                 </button>
               );
             })
@@ -291,7 +294,9 @@ function ProductAutocomplete({
 
   useEffect(() => {
     if (selectedProduct) {
-      setSearch(String(selectedProduct.product_name || ""));
+      const name = String(selectedProduct.product_name || "");
+      const sku = selectedProduct.sku ? ` (${selectedProduct.sku})` : "";
+      setSearch(`${name}${sku}`);
     } else {
       setSearch("");
     }
@@ -313,7 +318,9 @@ function ProductAutocomplete({
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
         if (selectedProduct) {
-          setSearch(String(selectedProduct.product_name || ""));
+          const name = String(selectedProduct.product_name || "");
+          const sku = selectedProduct.sku ? ` (${selectedProduct.sku})` : "";
+          setSearch(`${name}${sku}`);
         } else {
           setSearch("");
         }
@@ -324,7 +331,7 @@ function ProductAutocomplete({
   }, [selectedProduct]);
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div ref={containerRef} className={`relative w-full ${isOpen ? "z-[100]" : "z-10"}`}>
       <div className="relative">
         <input
           type="text"
@@ -348,9 +355,9 @@ function ProductAutocomplete({
       </div>
 
       {isOpen && (
-        <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-slate-900">
+        <div className="absolute left-0 right-0 z-[9999] mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-2xl dark:border-white/10 dark:bg-slate-900 ring-1 ring-black/5 min-w-[280px]">
           {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
+            <div className="p-3 text-xs text-slate-500 dark:text-slate-400">
               No products found
             </div>
           ) : (
@@ -368,10 +375,11 @@ function ProductAutocomplete({
                     onChange(id);
                     setIsOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition hover:bg-slate-50 dark:hover:bg-white/5 ${isSelected
-                    ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400 font-medium"
-                    : "text-slate-800 dark:text-slate-200"
-                    }`}
+                  className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer ${
+                    isSelected
+                      ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400 font-medium"
+                      : "text-slate-800 dark:text-slate-200"
+                  }`}
                 >
                   <span className="truncate">
                     {name}
@@ -402,8 +410,8 @@ export default function CreateOrderPage() {
   const [orderDate, setOrderDate] = useState(() => {
     const d = new Date();
     const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   });
   const [expectedDate, setExpectedDate] = useState("");
@@ -550,6 +558,23 @@ export default function CreateOrderPage() {
     }
   }, []);
 
+  const updateLine = useCallback((key: string, patch: Partial<LineRow>) => {
+    setLines((prev) =>
+      prev.map((r) => (r.key === key ? { ...r, ...patch } : r)),
+    );
+  }, []);
+
+  const removeLine = useCallback((key: string) => {
+    setLines((prev) => {
+      const next = prev.filter((r) => r.key !== key);
+      return next.length ? next : [newLine()];
+    });
+  }, []);
+
+  const addLine = useCallback(() => {
+    setLines((prev) => [...prev, newLine()]);
+  }, []);
+
   const onProductRowChange = useCallback(
     (key: string, productId: string) => {
       const p = products.find(
@@ -616,20 +641,20 @@ export default function CreateOrderPage() {
               : `line-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           productId: item.productId,
           product_name: item.product_name,
-          sku: item.sku,
-          brand: item.brand,
-          manufacturer: item.manufacturer,
-          product_group: item.product_group,
-          product_subgroup: item.product_subgroup,
-          unit: item.unit,
-          quantity: item.quantity,
-          free_qty: item.free_qty,
+          sku: item.sku || (p ? String(p.sku || "") : ""),
+          brand: item.brand || (p ? String(p.brand || "") : ""),
+          manufacturer: item.manufacturer || (p ? String(p.manufacturer || "") : ""),
+          product_group: item.product_group || (p ? String(p.product_group || "") : ""),
+          product_subgroup: item.product_subgroup || (p ? String(p.product_subgroup || "") : ""),
+          unit: item.unit || (p ? String(p.unit || "") : ""),
+          quantity: item.quantity > 0 ? item.quantity : 1,
+          free_qty: item.free_qty || 0,
           unit_price: price,
           discount_percent: Number(item.discount_percent ?? 0),
           discount_amount: Number(item.discount_amount ?? 0),
           gst_percent: gst,
           applied_rate_type: "MANUAL",
-          remarks: item.remarks,
+          remarks: item.remarks || "",
         };
       });
 
@@ -660,7 +685,14 @@ export default function CreateOrderPage() {
     }
 
     const finalTotal = Math.max(0, total - Number(headerDiscount || 0));
-    return { subtotal, discount, taxable, gst, total: finalTotal };
+    return {
+      subtotal,
+      discount,
+      taxable,
+      gst,
+      total: finalTotal,
+      itemCount: lines.filter((l) => l.productId).length,
+    };
   }, [lines, headerDiscount]);
 
   const onSubmit = useCallback(
@@ -899,7 +931,7 @@ export default function CreateOrderPage() {
         toast.success(
           data?.order_no
             ? `Draft order ${data.order_no} created successfully`
-            : "Draft order created successfully"
+            : "Draft order created successfully",
         );
         router.push("/sales/orders");
       } catch (rejected) {
@@ -988,52 +1020,55 @@ export default function CreateOrderPage() {
   }, [validateStep1, user, expectedDate, selectedParty, shippingAddress, billingAddress, selectedPartyAddress]);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/60 pb-4 dark:border-white/10">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
-            <ShoppingCart className="h-5 w-5" />
+    <div className="mx-auto w-full max-w-[min(100rem,calc(100vw-2rem))] space-y-6 font-sans">
+      {/* Page Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <Link
+              href="/sales/orders"
+              className="hover:text-slate-700 dark:hover:text-slate-200 transition"
+            >
+              Orders
+            </Link>
+            <span>/</span>
+            <span className="font-semibold text-slate-700 dark:text-slate-200">
+              Create Order
+            </span>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-              Create New Order
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Create and save a new purchase or sales draft order with negotiated pricing.
-            </p>
-          </div>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+            Create Order
+          </h1>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Create and save a new purchase or sales draft order with negotiated pricing.
+          </p>
         </div>
-        <Link
-          href="/sales"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-slate-50"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to overview
-        </Link>
+
+        <div className="flex items-center gap-2">
+          <Link
+            href="/sales/orders"
+            className="rounded-lg border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-white/5 transition"
+          >
+            Back to Orders
+          </Link>
+        </div>
       </div>
 
-      {/* Stepper Navigation */}
-      <div className="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/70 p-1.5 dark:border-white/10 dark:bg-slate-900/60">
+      {/* Step Tabs Header */}
+      <div className="flex items-center gap-3 border-b border-slate-200 pb-3 dark:border-white/10">
         <button
           type="button"
           onClick={() => setStep(1)}
-          className={`flex items-center gap-2.5 rounded-lg px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+          className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
             step === 1
-              ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/90 dark:bg-slate-800 dark:text-blue-400 dark:ring-white/10"
-              : "text-slate-600 hover:text-slate-900 hover:bg-white/50 dark:text-slate-400 dark:hover:text-slate-200"
+              ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+              : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
           }`}
         >
-          <span
-            className={`flex h-5 w-5 items-center justify-center rounded-full text-2xs font-bold ${
-              step === 1
-                ? "bg-blue-600 text-white"
-                : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
-            }`}
-          >
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-2xs font-bold text-white">
             1
           </span>
-          <span>Step 1: Order Details & Items</span>
+          <span>Order Details & Items</span>
         </button>
 
         <span className="text-slate-300 dark:text-slate-700">/</span>
@@ -1041,473 +1076,399 @@ export default function CreateOrderPage() {
         <button
           type="button"
           onClick={handleNextToStep2}
-          className={`flex items-center gap-2.5 rounded-lg px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+          className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
             step === 2
-              ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/90 dark:bg-slate-800 dark:text-blue-400 dark:ring-white/10"
-              : "text-slate-600 hover:text-slate-900 hover:bg-white/50 dark:text-slate-400 dark:hover:text-slate-200"
+              ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+              : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
           }`}
         >
-          <span
-            className={`flex h-5 w-5 items-center justify-center rounded-full text-2xs font-bold ${
-              step === 2
-                ? "bg-blue-600 text-white"
-                : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
-            }`}
-          >
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-2xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
             2
           </span>
-          <span>Step 2: Performa Invoice</span>
+          <span>Performa Invoice</span>
         </button>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-6">
+        {/* Step 1: Order Details & Line Items */}
         {step === 1 && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column: Party selection and Lines */}
-          <div className="lg:col-span-2 space-y-6">
-          {/* Party Selection Card */}
-          <section className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
-            <header className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-white/5">
-              <User className="h-4 w-4 text-blue-500" />
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                  Party Selection
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Required customer or vendor information.
-                </p>
-              </div>
-            </header>
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+            {/* Left Column */}
+            <div className="min-w-0 space-y-6">
+              {/* Party & Dates Section */}
+              <section className="rounded-xl border border-slate-200/90 bg-white p-6 shadow-xs dark:border-white/10 dark:bg-slate-900">
+                <header className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3 dark:border-white/5">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-blue-500" />
+                    <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                      Party & Dates
+                    </h2>
+                  </div>
+                  {partyId && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviousItemsModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-white/5 cursor-pointer"
+                    >
+                      <History className="h-3.5 w-3.5 text-slate-400" />
+                      <span>Past Party Orders</span>
+                    </button>
+                  )}
+                </header>
 
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                Party <span className="text-rose-500">*</span>
-              </label>
-              <PartyAutocomplete
-                parties={parties}
-                selectedId={partyId}
-                onChange={onPartyChange}
-                className={inputClass}
-              />
-              {partiesQ.isError && (
-                <p className="text-xs text-rose-600 dark:text-rose-400 mt-1">
-                  Could not load parties.
-                </p>
-              )}
-            </div>
-          </section>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="sm:col-span-2 space-y-1 relative z-30">
+                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                      Select Party <span className="text-rose-500">*</span>
+                    </label>
+                    <PartyAutocomplete
+                      parties={parties}
+                      selectedId={partyId}
+                      onChange={onPartyChange}
+                      className={inputClass}
+                    />
+                  </div>
 
-          {/* Invoicing & Delivery Destination Card */}
-          {selectedParty && (
-            <OrderAddressSelector
-              party={selectedParty}
-              billingAddress={billingAddress}
-              shippingAddress={shippingAddress}
-              onBillingAddressChange={setBillingAddress}
-              onShippingAddressChange={setShippingAddress}
-              saveShippingToParty={saveShippingToParty}
-              onSaveShippingToPartyChange={setSaveShippingToParty}
-            />
-          )}
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                      Order Date <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={orderDate}
+                      onChange={(e) => setOrderDate(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
 
-          {/* Line Items Card */}
-          <section className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
-            <header className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3 dark:border-white/5">
-              <div className="flex items-center gap-2">
-                <Tag className="h-4 w-4 text-blue-500" />
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                    Line Items
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Catalog products to include in this order with unit pricing and discounts.
-                  </p>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                      Expected Delivery Date <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={expectedDate}
+                      onChange={(e) => setExpectedDate(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {partyId ? (
+              </section>
+
+              {/* Billing & Shipping Addresses */}
+              {selectedParty && (
+                <OrderAddressSelector
+                  party={selectedParty}
+                  billingAddress={billingAddress}
+                  shippingAddress={shippingAddress}
+                  onBillingAddressChange={setBillingAddress}
+                  onShippingAddressChange={setShippingAddress}
+                  saveShippingToParty={saveShippingToParty}
+                  onSaveShippingToPartyChange={setSaveShippingToParty}
+                />
+              )}
+
+              {/* Catalog Line Items */}
+              <section className="rounded-xl border border-slate-200/90 bg-white p-6 shadow-xs dark:border-white/10 dark:bg-slate-900">
+                <header className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-white/5">
+                  <div className="flex items-center gap-2">
+                    <ShoppingCart className="h-4 w-4 text-blue-500" />
+                    <div>
+                      <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                        Line Items ({lines.filter((l) => l.productId).length})
+                      </h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Add products and specify quantities.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={addLine}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition dark:bg-blue-950/40 dark:text-blue-400 cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Add Item</span>
+                    </button>
+                  </div>
+                </header>
+
+                <div className="overflow-x-auto min-h-[320px] pb-40">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-100 dark:border-white/5 text-slate-500 dark:text-slate-400">
+                        <th className="pb-2 font-semibold">Product</th>
+                        <th className="pb-2 font-semibold w-24">Qty</th>
+                        <th className="pb-2 font-semibold w-20">Free</th>
+                        <th className="pb-2 font-semibold w-28">Price (₹)</th>
+                        <th className="pb-2 font-semibold w-20">Disc %</th>
+                        <th className="pb-2 font-semibold w-20">GST %</th>
+                        <th className="pb-2 font-semibold w-28 text-right">Total (₹)</th>
+                        <th className="pb-2 font-semibold w-10 text-center"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                      {lines.map((line, idx) => {
+                        return (
+                          <tr
+                            key={line.key}
+                            className="group relative"
+                            style={{ zIndex: (lines.length - idx) * 10 + 20 }}
+                          >
+                            <td
+                              className="py-2.5 pr-3 align-top min-w-[240px] relative"
+                              style={{ zIndex: (lines.length - idx) * 10 + 25 }}
+                            >
+                              <ProductAutocomplete
+                                products={products}
+                                selectedId={line.productId}
+                                onChange={(pId) => onProductRowChange(line.key, pId)}
+                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50"
+                              />
+                              {line.productId && (
+                                <div className="mt-1">
+                                  <input
+                                    type="text"
+                                    placeholder="Item remarks (optional)..."
+                                    value={line.remarks}
+                                    onChange={(e) => updateLine(line.key, { remarks: e.target.value })}
+                                    className="w-full rounded border border-slate-200/80 bg-white/50 px-2 py-0.5 text-2xs text-slate-700 placeholder:text-slate-400 focus:bg-white dark:border-white/10 dark:bg-slate-950 dark:text-slate-200"
+                                  />
+                                </div>
+                              )}
+                            </td>
+
+                            <td className="py-2.5 pr-2 align-top">
+                              <input
+                                type="number"
+                                min={1}
+                                value={line.quantity}
+                                onChange={(e) =>
+                                  updateLine(line.key, {
+                                    quantity: Math.max(1, Number(e.target.value) || 1),
+                                  })
+                                }
+                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right"
+                              />
+                            </td>
+
+                            <td className="py-2.5 pr-2 align-top">
+                              <input
+                                type="number"
+                                min={0}
+                                value={line.free_qty}
+                                onChange={(e) =>
+                                  updateLine(line.key, {
+                                    free_qty: Math.max(0, Number(e.target.value) || 0),
+                                  })
+                                }
+                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right"
+                              />
+                            </td>
+
+                            <td className="py-2.5 pr-2 align-top">
+                              <input
+                                type="number"
+                                step="any"
+                                min={0}
+                                value={line.unit_price}
+                                onChange={(e) =>
+                                  updateLine(line.key, {
+                                    unit_price: Math.max(0, Number(e.target.value) || 0),
+                                  })
+                                }
+                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right font-mono"
+                              />
+                            </td>
+
+                            <td className="py-2.5 pr-2 align-top">
+                              <input
+                                type="number"
+                                step="any"
+                                min={0}
+                                max={100}
+                                value={line.discount_percent}
+                                onChange={(e) =>
+                                  updateLine(line.key, {
+                                    discount_percent: Math.max(0, Number(e.target.value) || 0),
+                                  })
+                                }
+                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right"
+                              />
+                            </td>
+
+                            <td className="py-2.5 pr-2 align-top">
+                              <input
+                                type="number"
+                                step="any"
+                                min={0}
+                                value={line.gst_percent}
+                                onChange={(e) =>
+                                  updateLine(line.key, {
+                                    gst_percent: Math.max(0, Number(e.target.value) || 0),
+                                  })
+                                }
+                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right"
+                              />
+                            </td>
+
+                            <td className="py-2.5 pr-2 align-top text-right font-mono font-medium text-slate-900 dark:text-slate-100">
+                              ₹{formatMoney(lineTotal(line))}
+                            </td>
+
+                            <td className="py-2.5 text-center align-top">
+                              <button
+                                type="button"
+                                onClick={() => removeLine(line.key)}
+                                className="rounded p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition cursor-pointer"
+                                title="Remove line"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-4 flex justify-start">
                   <button
                     type="button"
-                    onClick={() => setPreviousItemsModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/5"
+                    onClick={addLine}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
                   >
-                    <History className="h-3.5 w-3.5" />
-                    Previous items
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Add another item</span>
                   </button>
-                ) : null}
-                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
-                  {lines.length} {lines.length === 1 ? "item" : "items"}
-                </span>
-              </div>
-            </header>
+                </div>
+              </section>
 
-            {productsQ.isError && (
-              <p className="mb-3 text-xs text-rose-600 dark:text-rose-400">
-                Could not load products.
-              </p>
-            )}
-
-            <div className="space-y-4">
-              {lines.map((row, idx) => {
-                return (
-                  <div
-                    key={row.key}
-                    className="relative space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 dark:border-white/5 dark:bg-slate-955/30"
-                  >
-                    {/* Mobile delete bar */}
-                    <div className="flex items-center justify-between lg:hidden border-b border-slate-100 pb-2 dark:border-white/5">
-                      <span className="text-xs font-semibold text-slate-500">
-                        Item #{idx + 1}
-                      </span>
-                      <button
-                        type="button"
-                        className="text-xs font-semibold text-rose-500 hover:text-rose-600"
-                        disabled={lines.length <= 1}
-                        onClick={() =>
-                          setLines((prev) => prev.filter((l) => l.key !== row.key))
-                        }
-                      >
-                        Remove
-                      </button>
-                    </div>
-
-                    {/* Tier 1 Grid: Product, Qty, Free, Price, Disc, GST */}
-                    <div className="grid gap-3 grid-cols-1 lg:grid-cols-12">
-                      {/* Product */}
-                      <div className="space-y-1 lg:col-span-5">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Product
-                        </span>
-                        <ProductAutocomplete
-                          products={products}
-                          selectedId={row.productId}
-                          onChange={(val) => onProductRowChange(row.key, val)}
-                          className={inputClass}
-                        />
-                      </div>
-
-                      {/* Qty */}
-                      <div className="space-y-1 lg:col-span-2">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Qty
-                        </span>
-                        <input
-                          type="number"
-                          min={1}
-                          step={1}
-                          value={row.quantity}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((l) =>
-                                l.key === row.key
-                                  ? {
-                                    ...l,
-                                    quantity: Number(e.target.value) || 0,
-                                  }
-                                  : l,
-                              ),
-                            )
-                          }
-                          className={inputClass}
-                        />
-                      </div>
-
-                      {/* Free Qty */}
-                      <div className="space-y-1 lg:col-span-1">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Free
-                        </span>
-                        <input
-                          type="number"
-                          min={0}
-                          step={1}
-                          value={row.free_qty}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((l) =>
-                                l.key === row.key
-                                  ? {
-                                    ...l,
-                                    free_qty: Number(e.target.value) || 0,
-                                  }
-                                  : l,
-                              ),
-                            )
-                          }
-                          className={inputClass}
-                        />
-                      </div>
-
-                      {/* Unit Price */}
-                      <div className="space-y-1 lg:col-span-2">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Price (₹)
-                        </span>
-                        <input
-                          type="number"
-                          min={0}
-                          step="any"
-                          value={row.unit_price}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((l) =>
-                                l.key === row.key
-                                  ? {
-                                    ...l,
-                                    unit_price: Number(e.target.value) || 0,
-                                  }
-                                  : l,
-                              ),
-                            )
-                          }
-                          className={inputClass}
-                        />
-                      </div>
-
-                      {/* Disc % */}
-                      <div className="space-y-1 lg:col-span-1">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Disc %
-                        </span>
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          step="any"
-                          value={row.discount_percent}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((l) =>
-                                l.key === row.key
-                                  ? {
-                                    ...l,
-                                    discount_percent: Number(e.target.value) || 0,
-                                  }
-                                  : l,
-                              ),
-                            )
-                          }
-                          className={inputClass}
-                        />
-                      </div>
-
-                      {/* GST % */}
-                      <div className="space-y-1 lg:col-span-1">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          GST %
-                        </span>
-                        <input
-                          type="number"
-                          min={0}
-                          step="any"
-                          value={row.gst_percent}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((l) =>
-                                l.key === row.key
-                                  ? {
-                                    ...l,
-                                    gst_percent: Number(e.target.value) || 0,
-                                  }
-                                  : l,
-                              ),
-                            )
-                          }
-                          className={inputClass}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Tier 2 Grid: Remarks, Line Total & Action */}
-                    <div className="grid gap-3 grid-cols-1 lg:grid-cols-12 pt-2 border-t border-slate-100/50 dark:border-white/5">
-                      {/* Remarks */}
-                      <div className="space-y-1 lg:col-span-9">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Line Remarks
-                        </span>
-                        <input
-                          placeholder="Internal item specifications..."
-                          value={row.remarks}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((l) =>
-                                l.key === row.key
-                                  ? {
-                                    ...l,
-                                    remarks: e.target.value,
-                                  }
-                                  : l,
-                              ),
-                            )
-                          }
-                          className={inputClass}
-                        />
-                      </div>
-
-                      {/* Line Total */}
-                      <div className="space-y-1 lg:col-span-2">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Line Total
-                        </span>
-                        <div className="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2 text-sm font-semibold tabular-nums text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-slate-50 h-[38px] flex items-center">
-                          ₹{formatMoney(lineTotal(row))}
-                        </div>
-                      </div>
-
-                      {/* Actions (Trash) */}
-                      <div className="hidden lg:flex lg:col-span-1 items-end justify-end pb-0.5">
-                        <button
-                          type="button"
-                          className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-slate-200/95 bg-white p-2 text-xs font-semibold text-rose-600 shadow-sm transition hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:bg-slate-955 dark:text-rose-400 dark:hover:bg-rose-950/20"
-                          disabled={lines.length <= 1}
-                          onClick={() =>
-                            setLines((prev) => prev.filter((l) => l.key !== row.key))
-                          }
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Add Line */}
-            <div className="mt-4 flex justify-between items-center border-t border-slate-100 pt-4 dark:border-white/5">
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/5"
-                onClick={() => setLines((prev) => [...prev, newLine()])}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add Item Line
-              </button>
-            </div>
-          </section>
-        </div>
-
-        {/* Right Column: Sticky Sidebar form metadata & actions */}
-        <div className="space-y-6">
-          <div className="sticky top-6 space-y-6">
-            <section className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900 space-y-4">
-              <header className="border-b border-slate-100 pb-3 dark:border-white/5">
-                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-50">
-                  Order Metadata
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Specify details and save draft.
-                </p>
-              </header>
-
-              <div className="space-y-1">
-                <label htmlFor="co-order-date" className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Order Date <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  id="co-order-date"
-                  type="date"
-                  required
-                  value={orderDate}
-                  onChange={(e) => setOrderDate(e.target.value)}
-                  className={inputClass}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label htmlFor="co-eta" className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Expected Delivery <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  id="co-eta"
-                  type="date"
-                  required
-                  value={expectedDate}
-                  onChange={(e) => setExpectedDate(e.target.value)}
-                  className={inputClass}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label htmlFor="co-remarks" className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Remarks
+              {/* Remarks */}
+              <section className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-slate-900">
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  Order Remarks (Optional)
                 </label>
                 <textarea
-                  id="co-remarks"
-                  rows={3}
+                  rows={2}
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
-                  className={`${inputClass} resize-none`}
-                  placeholder="Notes, instructions or special considerations..."
+                  placeholder="Additional order instructions or notes…"
+                  className={`${inputClass} mt-1`}
                 />
-              </div>
-            </section>
+              </section>
+            </div>
 
-            {/* Order Summary & Actions */}
-            <section className="rounded-xl border border-blue-100 bg-blue-50/20 p-5 shadow-sm dark:border-blue-900/30 dark:bg-blue-950/10">
-              <header className="mb-4 border-b border-blue-100/50 pb-3 dark:border-blue-900/20">
-                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-50">
-                  Order Summary
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Calculated financial estimate of current items.
-                </p>
-              </header>
+            {/* Right Column: Assignment & Summary Sidebar */}
+            <div className="space-y-6">
+              {/* Sales Representative Card */}
+              <section className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-slate-900">
+                <header className="mb-3 flex items-center gap-2 border-b border-slate-100 pb-2.5 dark:border-white/5">
+                  <User className="h-4 w-4 text-blue-500" />
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                      Sales Representative
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Order creator & assigned representative.
+                    </p>
+                  </div>
+                </header>
 
-              <div className="space-y-2.5 text-sm">
-                <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                  <span>Gross Subtotal</span>
-                  <span className="font-medium tabular-nums">₹{formatMoney(liveSummary.subtotal)}</span>
+                <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800/60 border border-slate-100 dark:border-white/5">
+                  <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+                    {String(user?.name || user?.username || "You")}
+                  </div>
+                  {user?.email && (
+                    <div className="text-2xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      {String(user.email)}
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-between text-rose-600 dark:text-rose-400">
-                  <span>Total Discount</span>
-                  <span className="font-medium tabular-nums">-₹{formatMoney(liveSummary.discount)}</span>
-                </div>
-                <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                  <span>Taxable Amount</span>
-                  <span className="font-medium tabular-nums">₹{formatMoney(liveSummary.taxable)}</span>
-                </div>
-                <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                  <span>Estimated GST</span>
-                  <span className="font-medium tabular-nums">₹{formatMoney(liveSummary.gst)}</span>
-                </div>
-                <div className="border-t border-blue-100 pt-3 dark:border-blue-900/20">
-                  <div className="flex justify-between text-base font-bold text-blue-600 dark:text-blue-400">
-                    <span>Grand Total</span>
-                    <span className="text-lg tabular-nums">₹{formatMoney(liveSummary.total)}</span>
+              </section>
+
+              {/* Order Summary & Actions */}
+              <section className="rounded-xl border border-blue-100 bg-blue-50/20 p-5 shadow-xs dark:border-blue-900/30 dark:bg-blue-950/10">
+                <header className="mb-4 border-b border-blue-100/50 pb-3 dark:border-blue-900/20">
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-50">
+                    Order Summary
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Calculated estimate of current items.
+                  </p>
+                </header>
+
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                    <span>Total Items</span>
+                    <span className="font-semibold text-slate-900 dark:text-slate-200">
+                      {liveSummary.itemCount}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                    <span>Subtotal</span>
+                    <span className="font-mono text-slate-900 dark:text-slate-200">
+                      ₹{formatMoney(liveSummary.subtotal)}
+                    </span>
+                  </div>
+                  {liveSummary.discount > 0 && (
+                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                      <span>Discount</span>
+                      <span className="font-mono">-₹{formatMoney(liveSummary.discount)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                    <span>Taxable Amount</span>
+                    <span className="font-mono text-slate-900 dark:text-slate-200">
+                      ₹{formatMoney(liveSummary.taxable)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                    <span>GST (Estimated)</span>
+                    <span className="font-mono text-slate-900 dark:text-slate-200">
+                      ₹{formatMoney(liveSummary.gst)}
+                    </span>
+                  </div>
+
+                  <div className="border-t border-blue-200/60 pt-2.5 mt-2 flex justify-between text-sm font-bold text-slate-900 dark:text-slate-50">
+                    <span>Estimated Total</span>
+                    <span className="font-mono text-blue-600 dark:text-blue-400">
+                      ₹{formatMoney(liveSummary.total)}
+                    </span>
                   </div>
                 </div>
-              </div>
 
-              <div className="mt-5 pt-3 border-t border-blue-100/50 dark:border-blue-900/20 flex flex-col gap-2">
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={handleNextToStep2}
-                  className="w-full font-semibold shadow-md shadow-primary/25 gap-2 cursor-pointer"
-                >
-                  <span>Next: Performa Invoice</span>
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full py-2 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition cursor-pointer"
-                >
-                  {isLoading ? "Saving..." : "Or save draft now without Performa"}
-                </button>
-              </div>
-            </section>
+                <div className="mt-5 space-y-2">
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={handleNextToStep2}
+                    className="w-full font-semibold shadow-md shadow-primary/25 gap-2 cursor-pointer"
+                  >
+                    <span>Next: Performa Invoice</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition cursor-pointer"
+                  >
+                    {isLoading ? "Saving draft..." : "Or save draft now without Performa"}
+                  </button>
+                </div>
+              </section>
+            </div>
           </div>
-        </div>
-      </div>
-      )}
+        )}
 
         {/* Step 2: Performa Invoice */}
         {step === 2 && (
           <div className="space-y-6">
-            {/* Step 2 Overview Banner */}
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
+            {/* Overview Banner */}
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200/90 bg-white p-4 shadow-xs dark:border-white/10 dark:bg-slate-900">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
                   <FileText className="h-5 w-5" />
@@ -1517,7 +1478,7 @@ export default function CreateOrderPage() {
                     Step 2: Performa Invoice Details
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Provide commercial, transport, payment terms, and KYC compliance info.
+                    Commercial details, transport carrier, payment terms, and compliance attachments.
                   </p>
                 </div>
               </div>
@@ -1528,8 +1489,8 @@ export default function CreateOrderPage() {
                   <span className="font-semibold text-slate-900 dark:text-slate-100">{selectedPartyName || "—"}</span>
                 </div>
                 <div className="rounded-lg bg-slate-50 px-3 py-1.5 border border-slate-200/80 dark:bg-slate-800 dark:border-white/5">
-                  <span className="text-slate-500 dark:text-slate-400">Items: </span>
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">{lines.filter(l => l.productId).length}</span>
+                  <span className="text-slate-500 dark:text-slate-400">Sales Rep: </span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{String(user?.name || user?.username || "—")}</span>
                 </div>
                 <div className="rounded-lg bg-emerald-50 px-3 py-1.5 border border-emerald-200/80 dark:bg-emerald-950/40 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-bold">
                   Total: ₹{formatMoney(liveSummary.total)}

@@ -38,7 +38,8 @@ export function resolveCreateOrderPortal(
   if (
     portalBasePath === "/account" ||
     portalBasePath === "/finance" ||
-    portalBasePath === "/super_admin"
+    portalBasePath === "/super_admin" ||
+    portalBasePath === "/coordinator"
   ) {
     return portalBasePath;
   }

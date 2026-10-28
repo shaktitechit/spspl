@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { useSelector } from "react-redux";
 
 import {
@@ -171,21 +172,52 @@ export function NotificationBell() {
     if (open) setHasNewPulse(false);
   }, [open]);
 
+  const router = useRouter();
+  const pathname = usePathname();
+  const user = useSelector((s: RootState) => s.auth.user);
+
   const onNotificationActivate = useCallback(
     async (row: unknown) => {
       const nid = notificationId(row);
-      if (!nid) return;
-
       const unreadRow = isUnread(row);
-      if (!unreadRow) return;
 
-      try {
-        await markRead(nid).unwrap();
-      } catch {
-        toast.error("Could not mark notification as read.");
+      if (nid && unreadRow) {
+        try {
+          await markRead(nid).unwrap();
+        } catch {
+          // best effort mark read
+        }
+      }
+
+      if (row && typeof row === "object") {
+        const o = row as Record<string, any>;
+        const link = o.link;
+        const entityType = o.entity_type;
+        const entityId = o.entity_id;
+        const metadata = o.metadata || {};
+
+        let targetUrl = "";
+        if (typeof link === "string" && link.trim()) {
+          targetUrl = link.trim();
+        } else if (entityType === "flag" || metadata.flag_id) {
+          const currentPortal = pathname?.split("/")[1] || (user as any)?.department || "admin";
+          const orderId = metadata.order_id || o.order_id;
+          const flagId = entityId || metadata.flag_id;
+          if (orderId) {
+            targetUrl = `/${currentPortal}/order/${orderId}${flagId ? `?openFlag=${flagId}` : ""}`;
+          }
+        } else if (entityType === "order" && entityId) {
+          const currentPortal = pathname?.split("/")[1] || (user as any)?.department || "admin";
+          targetUrl = `/${currentPortal}/order/${entityId}`;
+        }
+
+        if (targetUrl) {
+          setOpen(false);
+          router.push(targetUrl);
+        }
       }
     },
-    [markRead],
+    [markRead, pathname, router, user],
   );
 
   const errorToastShown = useRef(false);
@@ -374,32 +406,19 @@ export function NotificationBell() {
 
                   return (
                     <li key={nid} role="listitem">
-                      {unreadRow ? (
-                        <button
-                          type="button"
-                          disabled={Boolean(marking || !realId)}
-                          onClick={() => void onNotificationActivate(row)}
-                          className={[
-                            shellClassName,
-                            "w-full cursor-pointer hover:bg-surface-muted",
-                            "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-                          ].join(" ")}
-                          aria-label={`${title}. Unread — press to mark as read.`}
-                        >
-                          {bodyBlock}
-                        </button>
-                      ) : (
-                        <div
-                          className={[
-                            shellClassName,
-                            "cursor-default hover:bg-surface-muted/60",
-                          ].join(" ")}
-                          role="group"
-                          aria-label={`${title}. Read`}
-                        >
-                          {bodyBlock}
-                        </div>
-                      )}
+                      <button
+                        type="button"
+                        disabled={Boolean(marking && unreadRow)}
+                        onClick={() => void onNotificationActivate(row)}
+                        className={[
+                          shellClassName,
+                          "w-full cursor-pointer hover:bg-surface-muted",
+                          "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                        ].join(" ")}
+                        aria-label={`${title}.${unreadRow ? " Unread — press to view and mark as read." : " Read — press to view."}`}
+                      >
+                        {bodyBlock}
+                      </button>
                     </li>
                   );
                 })}

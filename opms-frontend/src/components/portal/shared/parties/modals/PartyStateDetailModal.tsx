@@ -16,7 +16,7 @@ export type PartyStateDetailModalProps = {
   create?: boolean;
   defaultCountryId?: string;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (state?: any) => void;
 };
 
 const inputClass =
@@ -89,14 +89,15 @@ export default function PartyStateDetailModal({
         description: description.trim(),
         is_active: isActive,
       };
+      let savedState;
       if (isEdit && stateId) {
-        await patchState({ id: stateId, patch: body }).unwrap();
+        savedState = await patchState({ id: stateId, patch: body }).unwrap();
         toast.success("State updated");
       } else {
-        await createState(body).unwrap();
+        savedState = await createState(body).unwrap();
         toast.success("State created");
       }
-      onSuccess?.();
+      onSuccess?.(savedState);
       onClose();
     } catch (err: any) {
       toast.error(err?.data?.message || "Failed to save state");
@@ -107,7 +108,7 @@ export default function PartyStateDetailModal({
 
   return (
     <LargeModalPortal>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+      <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
         <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-white/5">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">

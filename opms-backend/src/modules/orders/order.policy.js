@@ -22,10 +22,10 @@ function assertDepartment(user, allowedList) {
 function assertMayEditOrderPricing(user, order) {
   if (!user) throw new ApiError(401, 'Unauthorized');
   if (isOpmsAdmin(user)) return;
-  if (hasOpmsRole(user, ROLES.SALES) && !orderRules.salesMayEditPricing(order.status)) {
-    throw new ApiError(403, 'Sales cannot edit pricing after finance approval (blocking rule)');
+  if (hasAnyOpmsRole(user, [ROLES.SALES, ROLES.COORDINATOR]) && !orderRules.salesMayEditPricing(order.status)) {
+    throw new ApiError(403, 'Sales/Coordinator cannot edit pricing after finance approval (blocking rule)');
   }
-  if (hasOpmsRole(user, ROLES.DISPATCH) && !hasAnyOpmsRole(user, [ROLES.SALES, ROLES.FINANCE, ROLES.ACCOUNT])) {
+  if (hasOpmsRole(user, ROLES.DISPATCH) && !hasAnyOpmsRole(user, [ROLES.SALES, ROLES.COORDINATOR, ROLES.FINANCE, ROLES.ACCOUNT])) {
     throw new ApiError(403, 'This department cannot edit order commercial fields');
   }
 }
@@ -45,7 +45,7 @@ function assertDispatchMayNotChangeCommercials(user, payloadKeys) {
   ]);
   // Only enforce when user is dispatch-only (no overlapping commercial roles)
   if (!hasOpmsRole(user, ROLES.DISPATCH)) return;
-  if (hasAnyOpmsRole(user, [ROLES.ADMIN, ROLES.SUPER_ADMIN, ROLES.SALES, ROLES.FINANCE, ROLES.ACCOUNT])) {
+  if (hasAnyOpmsRole(user, [ROLES.ADMIN, ROLES.SUPER_ADMIN, ROLES.SALES, ROLES.COORDINATOR, ROLES.FINANCE, ROLES.ACCOUNT])) {
     return;
   }
   for (const k of Object.keys(payloadKeys)) {

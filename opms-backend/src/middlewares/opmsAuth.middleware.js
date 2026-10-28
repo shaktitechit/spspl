@@ -15,6 +15,7 @@ const OPMS_ACCESS_ROLES = Object.freeze([
   ROLES.FINANCE,
   ROLES.ACCOUNT,
   ROLES.DISPATCH,
+  ROLES.COORDINATOR,
 ]);
 
 /** Priority for audit/actor fields when a user has multiple access_roles. */
@@ -24,6 +25,7 @@ const OPMS_ROLE_PRIORITY = Object.freeze([
   ROLES.FINANCE,
   ROLES.ACCOUNT,
   ROLES.DISPATCH,
+  ROLES.COORDINATOR,
   ROLES.SALES,
 ]);
 
@@ -36,6 +38,7 @@ function normalizeRole(raw) {
   if (s === 'accounts' || s === 'accounting') return 'account';
   if (s === 'salesman' || s === 'sales_user') return 'sales';
   if (s === 'dispatches' || s === 'dispatch_team') return 'dispatch';
+  if (s === 'coordinator' || s === 'co-ordinator' || s === 'co_ordinator' || s === 'sales_coordinator' || s === 'order_coordinator') return 'coordinator';
   return s;
 }
 

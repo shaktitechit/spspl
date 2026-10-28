@@ -1427,10 +1427,14 @@ function registerModels() {
       approved_total_amount: { type: Number, default: 0 },
       rejected_total_amount: { type: Number, default: 0 },
 
-      // Decisions/Signatures for Sales/Admin
+      // Decisions/Signatures for Sales/Coordinator/Admin
       is_sales_submited: { type: Boolean, default: false },
       sales_submitted_by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       sales_submitted_at: Date,
+      is_coordinator_submitted: { type: Boolean, default: false },
+      coordinator_submitted_by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      coordinator_submitted_at: Date,
+      submitted_by_role: { type: String, enum: ["sales", "coordinator", "admin"] },
       is_admin_approved: { type: Boolean, default: false },
       admin_approved_by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       admin_approved_at: Date,
@@ -1549,59 +1553,114 @@ function registerModels() {
   const orderFlagSchema = new mongoose.Schema(
     {
       order: { type: mongoose.Schema.Types.ObjectId, ref: "Order", required: true, index: true },
-  
+
       flag_type: {
         type: String,
         enum: [
           "urgent",
+          "payment_issue",
           "dispatch_issue",
           "stock_issue",
           "customer_issue",
           "document_missing",
           "approval_delay",
           "vehicle_issue",
+          "pod_missing",
+          "invoice_mismatch",
+          "customer_dispute",
         ],
         required: true,
       },
-  
+
       severity: {
         type: String,
         enum: ["low", "medium", "high", "critical"],
         default: "medium",
       },
-  
+
       title: { type: String, required: true },
       description: String,
-  
+
       blocks_order: { type: Boolean, default: false },
-  
+
       status: {
         type: String,
         enum: ["open", "in_progress", "resolved", "dismissed"],
         default: "open",
         index: true,
       },
-  
+
       department: {
         type: String,
-        enum: ["sales", "finance", "account", "dispatch"],
+        enum: ["sales", "finance", "account", "dispatch", "coordinator", "admin"],
       },
-  
+
       raised_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-      assigned_to: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-  
+      assigned_to: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
+      tagged_members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+      participants: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+
+      message_count: { type: Number, default: 0 },
+      last_message_at: Date,
+      last_message_preview: String,
+
       due_date: Date,
-  
+
       resolved_by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       resolved_at: Date,
-  
+
       resolution_note: String,
     },
     { timestamps: true }
   );
-  
+
   orderFlagSchema.index({ order: 1, status: 1 });
   mongoose.model("OrderFlag", orderFlagSchema);
+
+  // --- Schemas for FlagMessage (Chat Loop) ---
+  const flagMessageSchema = new mongoose.Schema(
+    {
+      flag: { type: mongoose.Schema.Types.ObjectId, ref: "OrderFlag", required: true, index: true },
+      order: { type: mongoose.Schema.Types.ObjectId, ref: "Order", required: true, index: true },
+      sender: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+      sender_name: { type: String, required: true },
+      sender_role: { type: String },
+      sender_department: { type: String },
+      message_type: {
+        type: String,
+        enum: ["text", "status_change", "system_event", "file"],
+        default: "text",
+      },
+      content: { type: String, trim: true, default: "" },
+      status_change: {
+        from_status: String,
+        to_status: String,
+      },
+      attachments: [
+        {
+          attachment_id: { type: mongoose.Schema.Types.ObjectId, ref: "Attachment" },
+          fileId: String,
+          original_name: String,
+          file_url: String,
+          view_url: String,
+          download_url: String,
+          mime_type: String,
+          size_bytes: Number,
+        },
+      ],
+      mentions: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+      read_by: [
+        {
+          user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+          read_at: { type: Date, default: Date.now },
+        },
+      ],
+    },
+    { timestamps: true }
+  );
+
+  flagMessageSchema.index({ flag: 1, createdAt: 1 });
+  mongoose.model("FlagMessage", flagMessageSchema);
 
 
 
@@ -2371,6 +2430,7 @@ function registerModels() {
     OrderAmmendmentUser:
       mongoose.models.OrderAmmendmentUser || mongoose.model('OrderAmmendmentUser', orderAmmendmentUserSchema),
     OrderFlag: mongoose.models.OrderFlag || mongoose.model('OrderFlag', orderFlagSchema),
+    FlagMessage: mongoose.models.FlagMessage || mongoose.model('FlagMessage', flagMessageSchema),
     Attachment: mongoose.models.Attachment || mongoose.model('Attachment', attachmentSchema),
     OrderDispatch: mongoose.models.OrderDispatch || mongoose.model('OrderDispatch', orderDispatchSchema),
     TransportShipment:

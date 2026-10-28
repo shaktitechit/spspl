@@ -14,7 +14,7 @@ export type PartyCountryDetailModalProps = {
   countryId: string | null;
   create?: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (country?: any) => void;
 };
 
 const inputClass =
@@ -75,14 +75,15 @@ export default function PartyCountryDetailModal({
         description: description.trim(),
         is_active: isActive,
       };
+      let savedCountry;
       if (isEdit && countryId) {
-        await patchCountry({ id: countryId, patch: body }).unwrap();
+        savedCountry = await patchCountry({ id: countryId, patch: body }).unwrap();
         toast.success("Country updated");
       } else {
-        await createCountry(body).unwrap();
+        savedCountry = await createCountry(body).unwrap();
         toast.success("Country created");
       }
-      onSuccess?.();
+      onSuccess?.(savedCountry);
       onClose();
     } catch (err: any) {
       toast.error(err?.data?.message || "Failed to save country");
@@ -93,7 +94,7 @@ export default function PartyCountryDetailModal({
 
   return (
     <LargeModalPortal>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+      <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
         <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/[0.01]">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">

@@ -25,6 +25,36 @@ export function buildUserNameById(usersRaw: unknown): Record<string, string> {
   return map;
 }
 
+export function buildUserRoleById(usersRaw: unknown): Record<string, string> {
+  const list = pickUsersList(usersRaw);
+  const map: Record<string, string> = {};
+  for (const row of list) {
+    if (!row || typeof row !== "object") continue;
+    const o = row as Record<string, unknown>;
+    const id = o._id != null ? String(o._id) : o.id != null ? String(o.id) : "";
+    if (!id) continue;
+    const dept =
+      typeof o.department === "string"
+        ? o.department
+        : typeof o.department === "object" && o.department !== null
+        ? String((o.department as Record<string, unknown>).code || (o.department as Record<string, unknown>).name || "")
+        : "";
+    const role =
+      typeof o.access_role === "string"
+        ? o.access_role
+        : typeof o.role === "string"
+        ? o.role
+        : "";
+    const norm = `${dept} ${role}`.toLowerCase();
+    if (norm.includes("coordinator")) {
+      map[id] = "coordinator";
+    } else if (norm.includes("sales")) {
+      map[id] = "sales";
+    }
+  }
+  return map;
+}
+
 export function resolveUserDisplay(
   userVal: unknown,
   nameById: Record<string, string>,

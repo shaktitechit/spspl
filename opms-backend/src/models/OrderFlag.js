@@ -12,12 +12,16 @@ const orderFlagSchema = new mongoose.Schema(
       type: String,
       enum: [
         "urgent",
+        "payment_issue",
         "dispatch_issue",
         "stock_issue",
         "customer_issue",
         "document_missing",
         "approval_delay",
         "vehicle_issue",
+        "pod_missing",
+        "invoice_mismatch",
+        "customer_dispute",
       ],
       required: true,
     },
@@ -42,11 +46,17 @@ const orderFlagSchema = new mongoose.Schema(
 
     department: {
       type: String,
-      enum: ["sales", "finance", "account", "dispatch"],
+      enum: ["sales", "finance", "account", "dispatch", "coordinator", "admin"],
     },
 
     raised_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    assigned_to: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    assigned_to: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
+    tagged_members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    participants: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+
+    message_count: { type: Number, default: 0 },
+    last_message_at: Date,
+    last_message_preview: String,
 
     due_date: Date,
 

@@ -23,6 +23,11 @@ const DEPT_CAN_SET_STATUS = Object.freeze({
     ORDER_STATUS.CANCELLED,
   ]),
 
+  coordinator: new Set([
+    ORDER_STATUS.SUBMITTED,
+    ORDER_STATUS.CANCELLED,
+  ]),
+
   admin: new Set([
     ORDER_STATUS.SUBMITTED,
     ORDER_STATUS.SALES_APPROVED,
@@ -107,7 +112,7 @@ function departmentAllowsTransitionSingle(userDept, fromStatus, toStatus) {
   const from = normalizeOrderStatus(fromStatus);
   const to = normalizeOrderStatus(toStatus);
 
-  if (['sales', 'finance', 'account'].includes(userDept)) {
+  if (['sales', 'coordinator', 'finance', 'account'].includes(userDept)) {
     if (from === ORDER_STATUS.DRAFT) {
       return [ORDER_STATUS.SUBMITTED, ORDER_STATUS.CANCELLED].includes(to);
     }
@@ -115,7 +120,7 @@ function departmentAllowsTransitionSingle(userDept, fromStatus, toStatus) {
 
   if (from === ORDER_STATUS.ON_HOLD && to !== ORDER_STATUS.ON_HOLD) {
     if (to === ORDER_STATUS.SUBMITTED) {
-      return ['sales', 'admin', 'super_admin', 'finance', 'account'].includes(userDept);
+      return ['sales', 'coordinator', 'admin', 'super_admin', 'finance', 'account'].includes(userDept);
     }
     if (to === ORDER_STATUS.FINANCE_REVIEW) {
       return ['finance', 'admin', 'super_admin'].includes(userDept);
@@ -127,17 +132,17 @@ function departmentAllowsTransitionSingle(userDept, fromStatus, toStatus) {
       return ['dispatch', 'account', 'admin', 'super_admin'].includes(userDept);
     }
     if (to === ORDER_STATUS.CANCELLED) {
-      return ['sales', 'finance', 'account', 'admin', 'super_admin'].includes(userDept);
+      return ['sales', 'coordinator', 'finance', 'account', 'admin', 'super_admin'].includes(userDept);
     }
     return false;
   }
 
   if (from === ORDER_STATUS.FINANCE_REJECTED) {
     if (to === ORDER_STATUS.SUBMITTED) {
-      return ['sales', 'admin', 'super_admin', 'finance', 'account'].includes(userDept);
+      return ['sales', 'coordinator', 'admin', 'super_admin', 'finance', 'account'].includes(userDept);
     }
     if (to === ORDER_STATUS.CANCELLED) {
-      return ['sales', 'finance', 'account', 'admin', 'super_admin'].includes(userDept);
+      return ['sales', 'coordinator', 'finance', 'account', 'admin', 'super_admin'].includes(userDept);
     }
     return false;
   }

@@ -10,6 +10,7 @@ import FinanceOverview from "./finance/FinanceOverview";
 import AccountOverview from "./account/AccountOverview";
 import SalesOverview from "./sales/SalesOverview";
 import SuperAdminOverview from "./super_admin/SuperAdminOverview";
+import CoordinatorOverview from "./coordinator/CoordinatorOverview";
 
 export const PORTAL_OVERVIEW_BY_KEY: Record<PortalKey, ComponentType> = {
   admin: AdminOverview,
@@ -18,4 +19,5 @@ export const PORTAL_OVERVIEW_BY_KEY: Record<PortalKey, ComponentType> = {
   dispatch: DispatchOverview,
   super_admin: SuperAdminOverview,
   account: AccountOverview,
+  coordinator: CoordinatorOverview,
 };

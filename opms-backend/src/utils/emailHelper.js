@@ -25,6 +25,7 @@ const EMAIL_TEMPLATES = {
   PASSWORD_RESET: 'password_reset',
   LEAD_QUOTATION: 'lead_quotation',
   COMPANY_LETTERHEAD: 'company_letterhead',
+  FLAG_ALERT: 'flag_alert',
 };
 
 function getServiceToken() {
@@ -46,7 +47,7 @@ function getServiceToken() {
  * @param {string} params.templateName
  * @param {object} [params.templateParams]
  */
-async function shootAutoEmail({ recipient, templateName, templateParams = {} }) {
+async function shootAutoEmail({ recipient, templateName, templateParams = {}, cc = [], attachments = [] }) {
   if (!recipient || (Array.isArray(recipient) && recipient.length === 0)) {
     return null;
   }
@@ -62,6 +63,15 @@ async function shootAutoEmail({ recipient, templateName, templateParams = {} }) 
 
   if (recipients.length === 0) return null;
 
+  const rawCcList = Array.isArray(cc) ? cc : (typeof cc === 'string' ? cc.split(',') : []);
+  const normalizedCc = Array.from(
+    new Set(
+      rawCcList
+        .map((r) => (typeof r === 'string' ? r.trim() : ''))
+        .filter((r) => Boolean(r && r.includes('@') && !recipients.includes(r)))
+    )
+  );
+
   const token = getServiceToken();
   const url = `${MESSAGE_SERVICE_URL.replace(/\/$/, '')}/api/auto-emails/trigger`;
 
@@ -73,9 +83,12 @@ async function shootAutoEmail({ recipient, templateName, templateParams = {} }) 
           {
             recipient: toEmail,
             templateName,
+            cc: normalizedCc,
+            attachments,
             templateParams: {
               ...templateParams,
               recipient: toEmail,
+              cc: normalizedCc,
             },
           },
           {

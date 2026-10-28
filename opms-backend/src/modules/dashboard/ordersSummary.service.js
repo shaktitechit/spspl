@@ -5,7 +5,7 @@
  */
 const { getModels } = require('../../data/mongoRegistry');
 const { deriveOrderWorkflowStatus } = require('../orders/orderListPage.service');
-const { isSalesUser } = require('../orders/orderAssignee.util');
+const { isSalesUser, isCoordinatorUser } = require('../orders/orderAssignee.util');
 
 const TAB_IDS = [
   'all',
@@ -312,7 +312,7 @@ async function computeOrdersSummary(query, user, buildBaseQuery, cacheKey) {
   const { countProcessStages } = require('../orders/orderListPage.service');
   const dataType = query.dataType === 'billed' ? 'billed' : 'approved';
   const kpiBasis = dataType === 'billed' ? 'dispatched' : 'approved';
-  const salesTabs = isSalesUser(user);
+  const salesTabs = isSalesUser(user) || isCoordinatorUser(user);
   const scopeQuery = await buildBaseQuery(
     salesTabs ? {} : { exclude_status: 'draft' },
     user,

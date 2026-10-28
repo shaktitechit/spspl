@@ -28,6 +28,7 @@ import {
   ProfilePage,
 } from "@/components/portal";
 import CreateOrderPage from "@/components/portal/sales/CreateOrderPage";
+import CoordinatorCreateOrderPage from "@/components/portal/coordinator/CreateOrderPage";
 import PortalOrdersRoute from "@/components/portal/shared/orders/list/PortalOrdersRoute";
 import {
   type PortalKey,
@@ -210,6 +211,43 @@ export default function PortalCatchAllPage() {
   }
   if (portal === "sales" && restArr[0] === "orders" && restArr.length <= 2) {
     return <PortalOrdersRoute portalHome="/sales" stage={restArr[1]} />;
+  }
+
+  // ── COORDINATOR ──────────────────────────────────────────────────────────
+  if (portal === "coordinator" && restArr.length === 1 && restArr[0] === "create-order") {
+    return <CoordinatorCreateOrderPage />;
+  }
+  if (portal === "coordinator" && restArr[0] === "orders" && restArr.length <= 2) {
+    return <PortalOrdersRoute portalHome="/coordinator" stage={restArr[1]} />;
+  }
+  if (portal === "coordinator" && restArr.length === 1 && restArr[0] === "parties") {
+    return <ListPartiesPage portalHome="/coordinator" />;
+  }
+  if (portal === "coordinator" && restArr.length === 1 && restArr[0] === "products") {
+    return <ListProductsPage portalHome="/coordinator" />;
+  }
+  if (portal === "coordinator" && restArr.length === 1 && restArr[0] === "transport-agents") {
+    return <ListTransportAgentsPage portalHome="/coordinator" />;
+  }
+  if (portal === "coordinator" && restArr.length === 1 && restArr[0] === "transport-planner") {
+    return <ListTransportPlansPage portalHome="/coordinator" />;
+  }
+  if (portal === "coordinator" && restArr.length === 2 && restArr[0] === "transport-planner" && restArr[1] === "calendar") {
+    return <TransportPlanCalendarPage portalHome="/coordinator" />;
+  }
+  if (portal === "coordinator" && restArr.length === 2 && restArr[0] === "transport-planner" && restArr[1] === "new") {
+    return <TransportPlanFormPage mode="create" portalHome="/coordinator" />;
+  }
+  if (
+    portal === "coordinator" &&
+    restArr.length === 3 &&
+    restArr[0] === "transport-planner" &&
+    restArr[2] === "edit"
+  ) {
+    return <TransportPlanFormPage mode="edit" planId={restArr[1]} portalHome="/coordinator" />;
+  }
+  if (portal === "coordinator" && restArr.length === 2 && restArr[0] === "transport-planner") {
+    return <TransportPlanDetailPage planId={restArr[1]} portalHome="/coordinator" />;
   }
 
 

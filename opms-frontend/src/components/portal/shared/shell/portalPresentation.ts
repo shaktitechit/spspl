@@ -35,6 +35,16 @@ export function resolvePortalPresentation(portal: string): PortalPresentation {
     };
   }
 
+  if (portal === "coordinator") {
+    return {
+      portalName: "Coordinator Portal",
+      gradientClass:
+        "from-indigo-500/10 to-blue-500/10 border-indigo-500/10 dark:from-indigo-500/5 dark:to-blue-500/5",
+      badgeClass:
+        "bg-indigo-50 text-indigo-700 ring-indigo-700/10 dark:bg-indigo-500/10 dark:text-indigo-400 dark:ring-indigo-500/20",
+    };
+  }
+
   return {
     portalName: "Admin Portal",
     gradientClass:

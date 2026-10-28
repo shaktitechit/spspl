@@ -11,6 +11,7 @@ import {
   FINANCE_LIST_ORDERS_CONFIG,
   SALES_LIST_ORDERS_CONFIG,
   SUPER_ADMIN_LIST_ORDERS_CONFIG,
+  COORDINATOR_LIST_ORDERS_CONFIG,
   type ListOrdersPageConfig,
   type ListOrdersPortalHome,
   type ListOrdersTabId,
@@ -28,6 +29,7 @@ const CONFIG_BY_PORTAL: Record<ListOrdersPortalHome, ListOrdersPageConfig> = {
   "/finance": FINANCE_LIST_ORDERS_CONFIG,
   "/dispatch": DISPATCH_LIST_ORDERS_CONFIG,
   "/sales": SALES_LIST_ORDERS_CONFIG,
+  "/coordinator": COORDINATOR_LIST_ORDERS_CONFIG,
 };
 
 /**

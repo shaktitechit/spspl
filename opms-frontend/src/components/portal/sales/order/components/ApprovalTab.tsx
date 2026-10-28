@@ -5,6 +5,7 @@ import { Clock } from "lucide-react";
 import { useListOrderApprovalsQuery, useListUsersQuery } from "@/store/api";
 import { DashboardCard } from "@/components/widgets";
 import { ApprovalRecordCard } from "@/components/portal/shared/orders/detail/approvals/ApprovalRecordCard";
+import { buildUserRoleById } from "@/components/portal/shared/lib/userDisplay";
 
 type ApprovalTabProps = {
   orderId: string;
@@ -42,6 +43,8 @@ export function ApprovalTab({ orderId, detail, partyLabel = "—" }: ApprovalTab
     return map;
   }, [usersQ.data]);
 
+  const userRoleById = useMemo(() => buildUserRoleById(usersQ.data), [usersQ.data]);
+
   const orderNo = String(detail?.order_no ?? orderId);
 
   return (
@@ -77,12 +80,14 @@ export function ApprovalTab({ orderId, detail, partyLabel = "—" }: ApprovalTab
             {approvals.map((app) => (
               <ApprovalRecordCard
                 key={String(app._id ?? app.id)}
+                portal="sales"
                 approval={app}
                 orderNo={orderNo}
                 partyLabel={partyLabel}
                 orderDate={detail?.order_date}
                 expectedDeliveryDate={detail?.expected_delivery_date}
                 userNameById={userNameById}
+                userRoleById={userRoleById}
               />
             ))}
           </div>

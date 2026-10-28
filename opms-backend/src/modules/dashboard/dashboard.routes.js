@@ -9,6 +9,7 @@ const { requireAuth } = require('../../middlewares/auth.middleware');
 const { requireOpmsAccess } = require('../../middlewares/opmsAuth.middleware');
 const adminDash = require('./admin.dashboard');
 const salesDash = require('./sales.dashboard');
+const coordinatorDash = require('./coordinator.dashboard');
 const financeDash = require('./finance.dashboard');
 const dispatchDash = require('./dispatch.dashboard');
 const accountDash = require('./account.dashboard');
@@ -40,6 +41,13 @@ router.get(
   '/sales',
   asyncHandler(async (req, res) => {
     res.json({ success: true, data: await salesDash.forUser(req.user._id) });
+  })
+);
+
+router.get(
+  '/coordinator',
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, data: await coordinatorDash.overview(req.user._id) });
   })
 );
 

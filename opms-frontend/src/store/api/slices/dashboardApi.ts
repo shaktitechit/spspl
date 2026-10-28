@@ -83,6 +83,11 @@ export const dashboardApi = medicaApi.injectEndpoints({
       transformResponse: (raw: ApiEnvelope<unknown>) => unwrapEnvelope(raw),
       providesTags: [{ type: "Dashboard", id: "account" }],
     }),
+    getDashboardCoordinator: build.query<unknown, void>({
+      query: () => ({ url: "dashboard/coordinator", method: "GET" }),
+      transformResponse: (raw: ApiEnvelope<unknown>) => unwrapEnvelope(raw),
+      providesTags: [{ type: "Dashboard", id: "coordinator" }],
+    }),
     getDashboardSuper: build.query<unknown, void>({
       query: () => ({ url: "dashboard/super", method: "GET" }),
       transformResponse: (raw: ApiEnvelope<unknown>) => unwrapEnvelope(raw),
@@ -95,6 +100,7 @@ export const {
   useGetDashboardOrdersSummaryQuery,
   useGetDashboardAdminQuery,
   useGetDashboardSalesQuery,
+  useGetDashboardCoordinatorQuery,
   useGetDashboardFinanceQuery,
   useGetDashboardDispatchQuery,
   useGetDashboardAccountQuery,

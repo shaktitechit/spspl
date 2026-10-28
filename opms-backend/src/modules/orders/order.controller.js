@@ -34,13 +34,14 @@ exports.create = asyncHandler(async (req, res) => {
   if (
     !hasAnyOpmsRole(req.user, [
       ROLES.SALES,
+      ROLES.COORDINATOR,
       ROLES.ADMIN,
       ROLES.FINANCE,
       ROLES.ACCOUNT,
       ROLES.SUPER_ADMIN,
     ])
   ) {
-    throw new ApiError(403, 'Only sales, admin, finance, or account can create orders');
+    throw new ApiError(403, 'Only sales, coordinator, admin, finance, or account can create orders');
   }
   res.status(201).json({ success: true, data: await service.create(req.body, req.user) });
 });
@@ -57,6 +58,7 @@ exports.closeAfterFullDelivery = asyncHandler(async (req, res) => {
       ROLES.ACCOUNT,
       ROLES.ADMIN,
       ROLES.SUPER_ADMIN,
+      ROLES.COORDINATOR,
     ])
   ) {
     throw new ApiError(403, 'Not authorized to close order after delivery');
@@ -114,10 +116,10 @@ exports.restore = asyncHandler(async (req, res) => {
 
 exports.submit = asyncHandler(async (req, res) => {
   if (
-    !hasAnyOpmsRole(req.user, [ROLES.SALES, ROLES.ADMIN, ROLES.FINANCE, ROLES.ACCOUNT]) &&
+    !hasAnyOpmsRole(req.user, [ROLES.SALES, ROLES.COORDINATOR, ROLES.ADMIN, ROLES.FINANCE, ROLES.ACCOUNT]) &&
     !isOpmsAdmin(req.user)
   ) {
-    throw new ApiError(403, 'Only sales, admin, finance, or account can submit orders');
+    throw new ApiError(403, 'Only sales, coordinator, admin, finance, or account can submit orders');
   }
   const data = await service.submitOrder(
     req.params.id,

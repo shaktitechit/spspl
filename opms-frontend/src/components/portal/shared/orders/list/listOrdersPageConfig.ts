@@ -6,14 +6,16 @@ export type ListOrdersPortalHome =
   | "/account"
   | "/finance"
   | "/dispatch"
-  | "/sales";
+  | "/sales"
+  | "/coordinator";
 
 export type ListOrdersFlagDepartment =
   | "admin"
   | "account"
   | "finance"
   | "dispatch"
-  | "sales";
+  | "sales"
+  | "coordinator";
 
 export type ListOrdersSheetPortal = "admin" | "account" | "finance" | "super_admin";
 
@@ -197,6 +199,36 @@ export const SALES_LIST_ORDERS_CONFIG: ListOrdersPageConfig = {
   headerActions: ["refresh", "dashboard", "createDraft"],
   createDraftLabel: "New Draft",
   emptyNoOrdersHint: "Get started by logging your first sales draft order.",
+  accents: {
+    strip:
+      "border-primary/10 bg-gradient-to-r from-primary/5 to-primary/10 dark:from-primary/5 dark:to-primary/5",
+    searchFocus:
+      "focus:border-primary focus:ring-primary/25 dark:focus:border-primary",
+    tabActive:
+      "border-primary text-primary dark:border-primary dark:text-primary",
+    searchResult: "text-primary dark:text-primary",
+    countBadge: "bg-primary",
+  },
+  allowDraftDelete: true,
+  allowSuperAdminEdit: false,
+  useSuperAdminSheet: false,
+};
+
+export const COORDINATOR_LIST_ORDERS_CONFIG: ListOrdersPageConfig = {
+  portalHome: "/coordinator",
+  title: "Coordinator Orders",
+  subtitle:
+    "Create drafts, review status progressions, and track coordinator orders pipeline.",
+  defaultTab: "draft",
+  flagDepartment: "coordinator",
+  showDueSheetBadge: true,
+  showFlagBadge: true,
+  showPricing: true,
+  scopeToSalesUser: false,
+  includeDraftTab: true,
+  headerActions: ["unbilled", "refresh", "dashboard", "createDraft"],
+  createDraftLabel: "New Draft",
+  emptyNoOrdersHint: "Get started by logging your first draft order.",
   accents: {
     strip:
       "border-primary/10 bg-gradient-to-r from-primary/5 to-primary/10 dark:from-primary/5 dark:to-primary/5",

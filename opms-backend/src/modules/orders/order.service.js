@@ -1106,7 +1106,7 @@ async function create(body, user) {
   const order_items = normalizeItems(body.order_items);
   if (order_items.length === 0) throw new ApiError(400, 'order_items required');
 
-  if (!isOpmsAdmin(user) && !hasAnyOpmsRole(user, [ROLES.SALES, ROLES.SUPER_ADMIN, ROLES.FINANCE, ROLES.ACCOUNT])) {
+  if (!isOpmsAdmin(user) && !hasAnyOpmsRole(user, [ROLES.SALES, ROLES.COORDINATOR, ROLES.SUPER_ADMIN, ROLES.FINANCE, ROLES.ACCOUNT])) {
     await resolveNegotiatedRates(order_items, body.party);
   }
 
@@ -1285,6 +1285,7 @@ async function update(id, patch, user) {
     if (
       !hasAnyOpmsRole(user, [
         ROLES.SALES,
+        ROLES.COORDINATOR,
         ROLES.ADMIN,
         ROLES.SUPER_ADMIN,
         ROLES.FINANCE,
@@ -1304,6 +1305,7 @@ async function update(id, patch, user) {
     if (
       !hasAnyOpmsRole(user, [
         ROLES.SALES,
+        ROLES.COORDINATOR,
         ROLES.ADMIN,
         ROLES.SUPER_ADMIN,
         ROLES.FINANCE,
@@ -1320,12 +1322,13 @@ async function update(id, patch, user) {
   }
 
   if (p.payment_status !== undefined) {
-    if (hasOpmsRole(user, ROLES.SALES) && !isOpmsAdmin(user)) {
+    if (hasAnyOpmsRole(user, [ROLES.SALES, ROLES.COORDINATOR]) && !isOpmsAdmin(user)) {
       policy.assertMayEditOrderPricing(user, order);
     }
     if (
       !hasAnyOpmsRole(user, [
         ROLES.SALES,
+        ROLES.COORDINATOR,
         ROLES.ADMIN,
         ROLES.SUPER_ADMIN,
         ROLES.FINANCE,
@@ -1338,7 +1341,7 @@ async function update(id, patch, user) {
 
   if (
     p.order_date !== undefined &&
-    !hasAnyOpmsRole(user, [ROLES.ADMIN, ROLES.SUPER_ADMIN, ROLES.FINANCE, ROLES.ACCOUNT])
+    !hasAnyOpmsRole(user, [ROLES.ADMIN, ROLES.SUPER_ADMIN, ROLES.FINANCE, ROLES.ACCOUNT, ROLES.COORDINATOR])
   ) {
     policy.assertMayEditOrderPricing(user, order);
   }
@@ -1361,6 +1364,7 @@ async function update(id, patch, user) {
       ROLES.ADMIN,
       ROLES.SUPER_ADMIN,
       ROLES.SALES,
+      ROLES.COORDINATOR,
       ROLES.FINANCE,
       ROLES.ACCOUNT,
     ])

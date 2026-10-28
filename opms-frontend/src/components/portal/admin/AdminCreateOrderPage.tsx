@@ -13,7 +13,6 @@ import {
   Search,
   User,
   Users,
-  Tag,
   Trash2,
   Plus,
   ArrowLeft,
@@ -25,9 +24,7 @@ import {
   Mail,
 } from "lucide-react";
 
-import {
-  mutationRejectedMessage,
-} from "@/lib/mutationMessages";
+import { mutationRejectedMessage } from "@/lib/mutationMessages";
 import { toast } from "@/lib/toast";
 import { ModalOverlay } from "@/components/portal/shared/ui/modals/ModalOverlay";
 import {
@@ -39,6 +36,8 @@ import {
   PreviousPartyItemsModal,
   type PreviousPartyOrderItem,
 } from "@/components/portal/shared/orders/modals/PreviousPartyItemsModal";
+import { PartyDetailModal } from "@/components/portal/shared/parties/modals/PartyDetailModal";
+import { ProductDetailModal } from "@/components/portal/shared/products/modals/ProductDetailModal";
 import { Button } from "@/components/ui/Button";
 import {
   PerformaInvoiceFields,
@@ -183,6 +182,7 @@ interface PartyAutocompleteProps {
   selectedId: string;
   onChange: (id: string) => void;
   className?: string;
+  onQuickAdd?: (searchName: string) => void;
 }
 
 function PartyAutocomplete({
@@ -190,6 +190,7 @@ function PartyAutocomplete({
   selectedId,
   onChange,
   className,
+  onQuickAdd,
 }: PartyAutocompleteProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -234,7 +235,7 @@ function PartyAutocomplete({
   }, [selectedParty]);
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div ref={containerRef} className={`relative w-full ${isOpen ? "z-[100]" : "z-10"}`}>
       <div className="relative">
         <input
           type="text"
@@ -258,43 +259,74 @@ function PartyAutocomplete({
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-slate-900">
+        <div className="absolute z-[9999] mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-2xl dark:border-white/10 dark:bg-slate-900 ring-1 ring-black/5">
           {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">
-              No parties found
-            </div>
-          ) : (
-            filtered.map((p) => {
-              const id = String(p._id ?? p.id ?? "");
-              const isSelected = id === selectedId;
-              const name = String(p.party_name || "Party");
-              const type = p.party_type ? ` (${p.party_type})` : "";
-              return (
+            <div className="p-2 text-sm text-slate-500 dark:text-slate-400">
+              <div className="px-2 py-1 text-xs text-slate-400">No parties found</div>
+              {onQuickAdd && (
                 <button
-                  key={id}
                   type="button"
                   onClick={() => {
-                    onChange(id);
                     setIsOpen(false);
+                    onQuickAdd(search.trim());
                   }}
-                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-white/5 ${isSelected
-                      ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400 font-medium"
-                      : "text-slate-800 dark:text-slate-200"
-                    }`}
+                  className="mt-1 flex w-full items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-600 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-400 dark:hover:bg-blue-900/40 cursor-pointer"
                 >
-                  <span>
-                    {name}
-                    {type && <span className="text-xs text-slate-400 ml-1">{type}</span>}
-                    {p.sra === true && (
-                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-1.5 py-0.5 text-2xs font-bold text-emerald-700 ring-1 ring-inset ring-emerald-600/10 dark:bg-emerald-500/10 dark:text-emerald-400 ml-1.5">
-                        SRA
-                      </span>
-                    )}
-                  </span>
-                  {isSelected && <Check className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+                  <Plus className="h-3.5 w-3.5" />
+                  Quick Add Party {search.trim() ? `"${search.trim()}"` : ""}
                 </button>
-              );
-            })
+              )}
+            </div>
+          ) : (
+            <>
+              {filtered.map((p) => {
+                const id = String(p._id ?? p.id ?? "");
+                const isSelected = id === selectedId;
+                const name = String(p.party_name || "Party");
+                const type = p.party_type ? ` (${p.party_type})` : "";
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      onChange(id);
+                      setIsOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer ${
+                      isSelected
+                        ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400 font-medium"
+                        : "text-slate-800 dark:text-slate-200"
+                    }`}
+                  >
+                    <span>
+                      {name}
+                      {type && <span className="text-xs text-slate-400 ml-1">{type}</span>}
+                      {p.sra === true && (
+                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-1.5 py-0.5 text-2xs font-bold text-emerald-700 ring-1 ring-inset ring-emerald-600/10 dark:bg-emerald-500/10 dark:text-emerald-400 ml-1.5">
+                          SRA
+                        </span>
+                      )}
+                    </span>
+                    {isSelected && <Check className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+                  </button>
+                );
+              })}
+              {onQuickAdd && (
+                <div className="border-t border-slate-100 p-1 dark:border-white/5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOpen(false);
+                      onQuickAdd(search.trim());
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-blue-600 transition hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/30 cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Quick Add Party {search.trim() ? `"${search.trim()}"` : ""}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -307,6 +339,7 @@ interface ProductAutocompleteProps {
   selectedId: string;
   onChange: (id: string) => void;
   className?: string;
+  onQuickAdd?: (searchName: string) => void;
 }
 
 function ProductAutocomplete({
@@ -314,6 +347,7 @@ function ProductAutocomplete({
   selectedId,
   onChange,
   className,
+  onQuickAdd,
 }: ProductAutocompleteProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -362,7 +396,7 @@ function ProductAutocomplete({
   }, [selectedProduct]);
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div ref={containerRef} className={`relative w-full ${isOpen ? "z-[100]" : "z-10"}`}>
       <div className="relative">
         <input
           type="text"
@@ -386,40 +420,71 @@ function ProductAutocomplete({
       </div>
 
       {isOpen && (
-        <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-slate-900">
+        <div className="absolute left-0 right-0 z-[9999] mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-2xl dark:border-white/10 dark:bg-slate-900 ring-1 ring-black/5 min-w-[280px]">
           {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
-              No products found
-            </div>
-          ) : (
-            filtered.map((p) => {
-              const id = String(p._id ?? p.id ?? "");
-              const isSelected = id === selectedId;
-              const name = String(p.product_name || "Product");
-              const sku = p.sku ? ` · ${p.sku}` : "";
-              const brand = p.brand ? ` (${p.brand})` : "";
-              return (
+            <div className="p-2 text-xs text-slate-500 dark:text-slate-400">
+              <div className="px-2 py-1 text-2xs text-slate-400">No products found</div>
+              {onQuickAdd && (
                 <button
-                  key={id}
                   type="button"
                   onClick={() => {
-                    onChange(id);
                     setIsOpen(false);
+                    onQuickAdd(search.trim());
                   }}
-                  className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition hover:bg-slate-50 dark:hover:bg-white/5 ${isSelected
-                      ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400 font-medium"
-                      : "text-slate-800 dark:text-slate-200"
-                    }`}
+                  className="mt-1 flex w-full items-center gap-2 rounded-lg bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-600 transition hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-400 dark:hover:bg-blue-900/40 cursor-pointer"
                 >
-                  <span className="truncate">
-                    {name}
-                    {sku && <span className="text-2xs text-slate-500 dark:text-slate-400 ml-1">{sku}</span>}
-                    {brand && <span className="text-2xs text-slate-400 ml-1">{brand}</span>}
-                  </span>
-                  {isSelected && <Check className="h-3.5 w-3.5 flex-shrink-0 text-blue-600 dark:text-blue-400" />}
+                  <Plus className="h-3.5 w-3.5" />
+                  Quick Add Product {search.trim() ? `"${search.trim()}"` : ""}
                 </button>
-              );
-            })
+              )}
+            </div>
+          ) : (
+            <>
+              {filtered.map((p) => {
+                const id = String(p._id ?? p.id ?? "");
+                const isSelected = id === selectedId;
+                const name = String(p.product_name || "Product");
+                const sku = p.sku ? ` · ${p.sku}` : "";
+                const brand = p.brand ? ` (${p.brand})` : "";
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      onChange(id);
+                      setIsOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer ${
+                      isSelected
+                        ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400 font-medium"
+                        : "text-slate-800 dark:text-slate-200"
+                    }`}
+                  >
+                    <span className="truncate">
+                      {name}
+                      {sku && <span className="text-2xs text-slate-500 dark:text-slate-400 ml-1">{sku}</span>}
+                      {brand && <span className="text-2xs text-slate-400 ml-1">{brand}</span>}
+                    </span>
+                    {isSelected && <Check className="h-3.5 w-3.5 flex-shrink-0 text-blue-600 dark:text-blue-400" />}
+                  </button>
+                );
+              })}
+              {onQuickAdd && (
+                <div className="border-t border-slate-100 p-1 dark:border-white/5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOpen(false);
+                      onQuickAdd(search.trim());
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-blue-600 transition hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/30 cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Quick Add Product {search.trim() ? `"${search.trim()}"` : ""}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -434,7 +499,7 @@ function getDepartmentBadge(dept: unknown): { label: string; className: string }
       ? String(
           (dept as Record<string, unknown>).name ||
             (dept as Record<string, unknown>).code ||
-            ""
+            "",
         )
       : String(dept);
   const normalized = raw.toLowerCase().trim();
@@ -458,6 +523,12 @@ function getDepartmentBadge(dept: unknown): { label: string; className: string }
         label: "Super Admin",
         className:
           "bg-violet-50 text-violet-700 ring-violet-600/20 dark:bg-violet-950/40 dark:text-violet-300",
+      };
+    case "coordinator":
+      return {
+        label: "Coordinator",
+        className:
+          "bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-950/40 dark:text-sky-300",
       };
     case "finance":
       return {
@@ -517,7 +588,7 @@ function SalesAutocomplete({
 
   const isInputMatchingSelected = Boolean(
     selectedUser &&
-      search.trim() === String(selectedUser.name || selectedUser.username || "").trim()
+      search.trim() === String(selectedUser.name || selectedUser.username || "").trim(),
   );
 
   const filtered = useMemo(() => {
@@ -532,7 +603,7 @@ function SalesAutocomplete({
           ? String(
               (u.department as Record<string, unknown>).name ||
                 (u.department as Record<string, unknown>).code ||
-                ""
+                "",
             )
           : String(u.department || "");
       const dept = rawDept.toLowerCase();
@@ -593,7 +664,7 @@ function SalesAutocomplete({
                 onChange("");
                 setSearch("");
               }}
-              className="rounded p-0.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200"
+              className="rounded p-0.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-slate-200 cursor-pointer"
               title="Clear selection"
             >
               <X className="h-3.5 w-3.5" />
@@ -632,7 +703,7 @@ function SalesAutocomplete({
               setSearch("");
               setIsOpen(false);
             }}
-            className="flex w-full items-center px-3 py-2 text-left text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 italic"
+            className="flex w-full items-center px-3 py-2 text-left text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 italic cursor-pointer"
           >
             — Unassigned —
           </button>
@@ -657,7 +728,7 @@ function SalesAutocomplete({
                     onChange(id);
                     setIsOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-white/5 ${
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer ${
                     isSelected
                       ? "bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400 font-medium"
                       : "text-slate-800 dark:text-slate-200"
@@ -698,7 +769,8 @@ export type StaffCreateOrderPortalHome =
   | "/admin"
   | "/super_admin"
   | "/finance"
-  | "/account";
+  | "/account"
+  | "/coordinator";
 
 type StaffCreateOrderPortalConfig = {
   assignedUserField:
@@ -754,6 +826,15 @@ const PORTAL_CREATE_CONFIG: Record<
         ? `Order ${orderNo} created and fully cleared successfully`
         : "Order created and fully cleared successfully",
   },
+  "/coordinator": {
+    assignedUserField: "assigned_admin_user",
+    approvalFlags: {},
+    approvalNotes: "Initial creation by coordinator",
+    successToast: (orderNo) =>
+      orderNo
+        ? `Order ${orderNo} created successfully`
+        : "Order created successfully",
+  },
 };
 
 export type StaffCreateOrderLinePrefill = {
@@ -807,8 +888,25 @@ export default function AdminCreateOrderPage({
   const productsQ = useListProductsQuery({});
   const salesUsersQ = useListUsersQuery({});
 
-  const parties = useMemo(() => pickList(partiesQ.data), [partiesQ.data]);
-  const products = useMemo(() => pickList(productsQ.data), [productsQ.data]);
+  const [locallyAddedParties, setLocallyAddedParties] = useState<Entity[]>([]);
+  const [locallyAddedProducts, setLocallyAddedProducts] = useState<Entity[]>([]);
+
+  const parties = useMemo(() => {
+    const list = pickList(partiesQ.data);
+    if (!locallyAddedParties.length) return list;
+    const existingIds = new Set(list.map((p) => String(p._id ?? p.id ?? "")));
+    const fresh = locallyAddedParties.filter((p) => !existingIds.has(String(p._id ?? p.id ?? "")));
+    return [...fresh, ...list];
+  }, [partiesQ.data, locallyAddedParties]);
+
+  const products = useMemo(() => {
+    const list = pickList(productsQ.data);
+    if (!locallyAddedProducts.length) return list;
+    const existingIds = new Set(list.map((p) => String(p._id ?? p.id ?? "")));
+    const fresh = locallyAddedProducts.filter((p) => !existingIds.has(String(p._id ?? p.id ?? "")));
+    return [...fresh, ...list];
+  }, [productsQ.data, locallyAddedProducts]);
+
   const salesUsers = useMemo(() => pickList(salesUsersQ.data), [salesUsersQ.data]);
 
   const [partyId, setPartyId] = useState("");
@@ -819,6 +917,14 @@ export default function AdminCreateOrderPage({
   const [assignedSales, setAssignedSales] = useState("");
   const [lines, setLines] = useState<LineRow[]>(() => [newLine()]);
   const prefillAppliedRef = useRef(false);
+
+  // Quick Add Party & Product Modals State
+  const [quickPartyModalOpen, setQuickPartyModalOpen] = useState(false);
+  const [quickPartyInitialName, setQuickPartyInitialName] = useState("");
+
+  const [quickProductModalOpen, setQuickProductModalOpen] = useState(false);
+  const [quickProductInitialName, setQuickProductInitialName] = useState("");
+  const [quickProductTargetRowKey, setQuickProductTargetRowKey] = useState<string | null>(null);
 
   const [mapTarget, setMapTarget] = useState<MapOrderLinePriceTarget | null>(null);
   const [mapModalOpen, setMapModalOpen] = useState(false);
@@ -932,14 +1038,16 @@ export default function AdminCreateOrderPage({
         pType === "government" ? "Government" :
         "Direct Customer";
 
-      const salesName = selectedSalesUser?.name || selectedSalesUser?.username || user?.name || user?.username || "";
+      const salesRepName = selectedSalesUser
+        ? String(selectedSalesUser.name || selectedSalesUser.username || "").trim()
+        : "";
 
       setPerformaValues((prev) => ({
         ...prev,
         customer_type: prev.customer_type || friendlyCustomerType,
         payment_terms: prev.payment_terms || String((selectedParty as any).payment_terms || "30 days"),
         freight_charges: prev.freight_charges || "Included",
-        sales_person: prev.sales_person || String(salesName || ""),
+        sales_person: salesRepName || prev.sales_person,
         ship_to_address: prev.ship_to_address || formatAddressOneLine(chosen || bAddr),
       }));
     } else {
@@ -967,6 +1075,18 @@ export default function AdminCreateOrderPage({
     }
   }, [expectedDate]);
 
+  useEffect(() => {
+    if (selectedSalesUser) {
+      const repName = String(selectedSalesUser.name || selectedSalesUser.username || "").trim();
+      if (repName) {
+        setPerformaValues((prev) => ({
+          ...prev,
+          sales_person: repName,
+        }));
+      }
+    }
+  }, [selectedSalesUser]);
+
   const resetForm = useCallback(() => {
     setPartyId("");
     setOrderDate(todayInputValue());
@@ -977,6 +1097,16 @@ export default function AdminCreateOrderPage({
     setMapTarget(null);
     setMapModalOpen(false);
     setPreviousItemsModalOpen(false);
+    setStep(1);
+    setPerformaValues(INITIAL_PERFORMA_VALUES);
+    setAttachmentFiles({
+      po_file: null,
+      cost_sheet_file: null,
+      aadhaar_file: null,
+      pan_file: null,
+      gst_file: null,
+      kyc_files: [],
+    });
     prefillAppliedRef.current = false;
   }, []);
 
@@ -1050,11 +1180,11 @@ export default function AdminCreateOrderPage({
   ]);
 
   const onPartyChange = useCallback(
-    (id: string) => {
+    (id: string, skipPreviousItems = false) => {
       setPartyId(id);
       if (id) {
         // Prefill from unbilled already supplies lines — don't auto-open previous items.
-        if (!(initialLinePrefills && initialLinePrefills.length > 0)) {
+        if (!skipPreviousItems && !(initialLinePrefills && initialLinePrefills.length > 0)) {
           setPreviousItemsModalOpen(true);
         }
       } else {
@@ -1062,6 +1192,31 @@ export default function AdminCreateOrderPage({
       }
     },
     [initialLinePrefills],
+  );
+
+  const openQuickPartyModal = useCallback((initialName = "") => {
+    setQuickPartyInitialName(initialName);
+    setQuickPartyModalOpen(true);
+  }, []);
+
+  const handlePartyCreated = useCallback(
+    (newParty: Record<string, unknown>) => {
+      const pId = String(newParty._id ?? newParty.id ?? "");
+      setLocallyAddedParties((prev) => [newParty, ...prev]);
+      if (pId) {
+        onPartyChange(pId, true);
+      }
+    },
+    [onPartyChange],
+  );
+
+  const openQuickProductModal = useCallback(
+    (targetRowKey: string | null = null, initialName = "") => {
+      setQuickProductTargetRowKey(targetRowKey);
+      setQuickProductInitialName(initialName);
+      setQuickProductModalOpen(true);
+    },
+    [],
   );
 
   const lineRateCheckInput = useMemo(() => {
@@ -1136,6 +1291,52 @@ export default function AdminCreateOrderPage({
       return changed ? next : prev;
     });
   }, [rateCheckQ.data, rateItemByLine]);
+
+  const liveSummary = useMemo(() => {
+    let subtotal = 0;
+    let discount = 0;
+    let taxable = 0;
+    let gst = 0;
+    let total = 0;
+
+    for (const line of lines) {
+      if (!line.productId) continue;
+      subtotal += lineGross(line);
+      discount += lineDiscount(line);
+      taxable += lineTaxable(line);
+      gst += lineGst(line);
+      total += lineTotal(line);
+    }
+
+    const headerDisc = Number(headerDiscount || 0);
+    const finalTotal = Math.max(0, total - headerDisc);
+
+    return {
+      subtotal,
+      discount,
+      taxable,
+      gst,
+      total: finalTotal,
+      itemCount: lines.filter((l) => l.productId).length,
+    };
+  }, [lines, headerDiscount]);
+
+  const updateLine = useCallback((key: string, patch: Partial<LineRow>) => {
+    setLines((prev) =>
+      prev.map((r) => (r.key === key ? { ...r, ...patch } : r)),
+    );
+  }, []);
+
+  const removeLine = useCallback((key: string) => {
+    setLines((prev) => {
+      const next = prev.filter((r) => r.key !== key);
+      return next.length ? next : [newLine()];
+    });
+  }, []);
+
+  const addLine = useCallback(() => {
+    setLines((prev) => [...prev, newLine()]);
+  }, []);
 
   const openMapModal = useCallback(
     (row: LineRow) => {
@@ -1215,7 +1416,8 @@ export default function AdminCreateOrderPage({
             };
           }
           const pid = String(p._id ?? p.id ?? "");
-          const price = resolvePriceForLine(pid, row.applied_rate_type, p);
+          const rateType = row.applied_rate_type || "SR";
+          const price = resolvePriceForLine(pid, rateType, p);
           return {
             ...row,
             productId: pid,
@@ -1233,6 +1435,48 @@ export default function AdminCreateOrderPage({
       );
     },
     [products, resolvePriceForLine],
+  );
+
+  const handleProductCreated = useCallback(
+    (newProd: Record<string, unknown>) => {
+      const pId = String(newProd._id ?? newProd.id ?? "");
+      setLocallyAddedProducts((prev) => [newProd, ...prev]);
+
+      if (!pId) return;
+
+      if (quickProductTargetRowKey) {
+        onProductRowChange(quickProductTargetRowKey, pId);
+      } else {
+        const rowKey = `line-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const price = resolvePriceForLine(pId, "SR", newProd);
+        const newLineItem: LineRow = {
+          key: rowKey,
+          productId: pId,
+          product_name: String(newProd.product_name ?? ""),
+          sku: String(newProd.sku ?? ""),
+          brand: String(newProd.brand ?? ""),
+          manufacturer: String(newProd.manufacturer ?? ""),
+          product_group: String(newProd.product_group ?? ""),
+          product_subgroup: String(newProd.product_subgroup ?? ""),
+          unit: String(newProd.unit ?? "Pcs"),
+          quantity: 1,
+          free_qty: 0,
+          unit_price: price,
+          discount_percent: 0,
+          discount_amount: 0,
+          gst_percent: Number(newProd.gst_percent ?? 18),
+          applied_rate_type: "SR",
+          remarks: "",
+        };
+        setLines((prev) => {
+          if (prev.length === 1 && !prev[0].productId) {
+            return [newLineItem];
+          }
+          return [...prev, newLineItem];
+        });
+      }
+    },
+    [quickProductTargetRowKey, onProductRowChange, resolvePriceForLine],
   );
 
   const onRateTypeChange = useCallback(
@@ -1255,68 +1499,41 @@ export default function AdminCreateOrderPage({
     [products, resolvePriceForLine],
   );
 
-  const liveSummary = useMemo(() => {
-    let subtotal = 0;
-    let discount = 0;
-    let taxable = 0;
-    let gst = 0;
-    let total = 0;
-
-    for (const line of lines) {
-      if (!line.productId) continue;
-      const gross = lineGross(line);
-      const disc = lineDiscount(line);
-      const tax = lineTaxable(line);
-      const g = lineGst(line);
-      const tot = lineTotal(line);
-
-      subtotal += gross;
-      discount += disc;
-      taxable += tax;
-      gst += g;
-      total += tot;
-    }
-
-    return {
-      subtotal,
-      discount,
-      taxable,
-      gst,
-      total,
-    };
-  }, [lines]);
-
-  const loadPreviousItems = useCallback((items: PreviousPartyOrderItem[]) => {
-    const mappedLines: LineRow[] = items.map((item) => ({
-      key:
-        typeof crypto !== "undefined" && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `line-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      productId: item.productId,
-      product_name: item.product_name,
-      sku: item.sku,
-      brand: item.brand,
-      manufacturer: item.manufacturer,
-      product_group: item.product_group,
-      product_subgroup: item.product_subgroup,
-      unit: item.unit,
-      quantity: item.quantity,
-      free_qty: item.free_qty,
-      unit_price: item.unit_price,
-      discount_percent: item.discount_percent,
-      discount_amount: item.discount_amount,
-      gst_percent: item.gst_percent,
-      applied_rate_type: item.applied_rate_type,
-      remarks: item.remarks,
-    }));
-
-    if (mappedLines.length > 0) {
+  const loadPreviousItems = useCallback(
+    (items: PreviousPartyOrderItem[]) => {
+      if (!items || items.length === 0) return;
+      const mappedLines: LineRow[] = items.map((item) => {
+        const prod = products.find(
+          (p) => String(p._id ?? p.id ?? "") === item.productId,
+        );
+        const base = newLine();
+        return {
+          ...base,
+          productId: item.productId,
+          product_name: item.product_name,
+          sku: item.sku || (prod ? String(prod.sku || "") : ""),
+          brand: prod ? String(prod.brand || "") : (item.brand || ""),
+          manufacturer: prod ? String(prod.manufacturer || "") : (item.manufacturer || ""),
+          product_group: prod ? String(prod.product_group || "") : (item.product_group || ""),
+          product_subgroup: prod ? String(prod.product_subgroup || "") : (item.product_subgroup || ""),
+          unit: prod ? String(prod.unit || "") : (item.unit || ""),
+          quantity: item.quantity > 0 ? item.quantity : 1,
+          free_qty: item.free_qty || 0,
+          unit_price: item.unit_price,
+          discount_percent: item.discount_percent || 0,
+          discount_amount: item.discount_amount || 0,
+          gst_percent: item.gst_percent || 18,
+          applied_rate_type: item.applied_rate_type || "SR",
+          remarks: item.remarks || "",
+        };
+      });
       setLines(mappedLines);
       toast.success(
         `Loaded ${mappedLines.length} previous item${mappedLines.length === 1 ? "" : "s"} for this party.`,
       );
-    }
-  }, []);
+    },
+    [products],
+  );
 
   const onSubmit = useCallback(
     async (e: FormEvent) => {
@@ -1415,8 +1632,8 @@ export default function AdminCreateOrderPage({
           };
         });
 
-        const selectedParty = parties.find((p) => String(p._id ?? p.id ?? "") === String(partyId));
-        const partyContacts = contactsFromParty(selectedParty);
+        const currentSelectedParty = parties.find((p) => String(p._id ?? p.id ?? "") === String(partyId));
+        const partyContacts = contactsFromParty(currentSelectedParty);
         const selectedContacts: string[] = [];
         const selectedContactNames: string[] = [];
         const firstWithPhone = partyContacts.find((c) => c.phone.trim());
@@ -1446,16 +1663,18 @@ export default function AdminCreateOrderPage({
             ? formatAddressOneLine(billingAddress)
             : selectedPartyAddress);
 
-        const salesName =
-          selectedSalesUser?.name ||
-          selectedSalesUser?.username ||
-          user?.name ||
-          user?.username ||
-          "";
+        const salesRep =
+          selectedSalesUser ||
+          salesUsers.find((u) => String(u._id ?? u.id ?? "") === String(assignedSales));
+        const salesRepName = salesRep
+          ? String(salesRep.name || salesRep.username || "").trim()
+          : "";
 
         const finalPerforma: PerformaFormValues = {
           ...performaValues,
-          sales_person: performaValues.sales_person.trim() || String(salesName || ""),
+          sales_person:
+            performaValues.sales_person.trim() ||
+            String(salesRepName || ""),
           dispatch_date: performaValues.dispatch_date || expectedDate,
           ship_to_address: finalShipTo,
           payment_terms: performaValues.payment_terms.trim() || String((selectedParty as any)?.payment_terms || "30 days"),
@@ -1665,6 +1884,7 @@ export default function AdminCreateOrderPage({
       selectedParty,
       selectedPartyAddress,
       selectedSalesUser,
+      salesUsers,
       emailOptions,
     ],
   );
@@ -1694,12 +1914,17 @@ export default function AdminCreateOrderPage({
       toast.error("Expected delivery date is required.");
       return;
     }
-    const salesName =
-      selectedSalesUser?.name ||
-      selectedSalesUser?.username ||
-      user?.name ||
-      user?.username ||
-      "";
+    if (!assignedSales) {
+      toast.error("Please select a sales representative.");
+      return;
+    }
+
+    const salesRep =
+      selectedSalesUser ||
+      salesUsers.find((u) => String(u._id ?? u.id ?? "") === String(assignedSales));
+    const salesRepName = salesRep
+      ? String(salesRep.name || salesRep.username || "").trim()
+      : "";
 
     const pType = String((selectedParty as any)?.party_type || "").toLowerCase();
     const friendlyCustomerType =
@@ -1718,7 +1943,7 @@ export default function AdminCreateOrderPage({
 
     setPerformaValues((prev) => ({
       ...prev,
-      sales_person: prev.sales_person || String(salesName || ""),
+      sales_person: salesRepName || prev.sales_person,
       dispatch_date: prev.dispatch_date || expectedDate,
       ship_to_address: prev.ship_to_address || currentShipTo,
       payment_terms: prev.payment_terms || String((selectedParty as any)?.payment_terms || "30 days"),
@@ -1727,7 +1952,19 @@ export default function AdminCreateOrderPage({
     }));
     setStep(2);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [partyId, lines, orderDate, expectedDate, selectedSalesUser, user, selectedParty, shippingAddress, billingAddress, selectedPartyAddress]);
+  }, [
+    partyId,
+    lines,
+    orderDate,
+    expectedDate,
+    assignedSales,
+    salesUsers,
+    selectedSalesUser,
+    selectedParty,
+    shippingAddress,
+    billingAddress,
+    selectedPartyAddress,
+  ]);
 
   if (asModal && !isOpen) return null;
 
@@ -1736,78 +1973,88 @@ export default function AdminCreateOrderPage({
       className={
         asModal
           ? "flex h-full min-h-0 w-full flex-col overflow-hidden bg-white dark:bg-slate-900"
-          : "mx-auto w-full max-w-[min(100rem,calc(100vw-2rem))] space-y-6"
+          : "mx-auto w-full max-w-[min(100rem,calc(100vw-2rem))] space-y-6 font-sans"
       }
     >
-      {/* Header */}
+      {/* Page Header */}
       <div
         className={
           asModal
-            ? "flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-200/60 px-5 py-4 dark:border-white/10"
-            : "flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/60 pb-4 dark:border-white/10"
+            ? "flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-200/60 px-6 py-4 dark:border-white/10"
+            : "flex flex-wrap items-center justify-between gap-4"
         }
       >
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
-            <ShoppingCart className="h-5 w-5" />
-          </div>
-          <div>
-            <h1
-              className={
-                asModal
-                  ? "text-sm font-bold tracking-tight text-slate-900 dark:text-slate-50"
-                  : "text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50"
-              }
-            >
-              Create New Order
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {modalSubtitle ||
-                "Create and submit a new purchase or sales order."}
-            </p>
-          </div>
+        <div>
+          {!asModal && (
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <Link
+                href={`${portalHome}/orders`}
+                className="hover:text-slate-700 dark:hover:text-slate-200 transition"
+              >
+                Orders
+              </Link>
+              <span>/</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-200">
+                Create Order
+              </span>
+            </div>
+          )}
+          <h1
+            className={
+              asModal
+                ? "text-base font-bold tracking-tight text-slate-900 dark:text-slate-50"
+                : "mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50"
+            }
+          >
+            Create Order
+          </h1>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            {modalSubtitle || "Create and submit a new purchase or sales order."}
+          </p>
         </div>
-        {asModal ? (
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/5 dark:hover:text-slate-200"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        ) : (
-          <Link
-            href={portalHome}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-slate-50"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to overview
-          </Link>
-        )}
+
+        <div className="flex items-center gap-2">
+          {asModal ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/5 dark:hover:text-slate-200 cursor-pointer"
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          ) : (
+            <Link
+              href={`${portalHome}/orders`}
+              className="rounded-lg border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-white/5 transition"
+            >
+              Back to Orders
+            </Link>
+          )}
+        </div>
       </div>
 
-      {/* Stepper Navigation */}
-      <div className="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/70 p-1.5 dark:border-white/10 dark:bg-slate-900/60">
+      {/* Step Tabs Header */}
+      <div
+        className={
+          asModal
+            ? "flex shrink-0 items-center gap-3 border-b border-slate-200 px-6 py-3 dark:border-white/10"
+            : "flex items-center gap-3 border-b border-slate-200 pb-3 dark:border-white/10"
+        }
+      >
         <button
           type="button"
           onClick={() => setStep(1)}
-          className={`flex items-center gap-2.5 rounded-lg px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+          className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
             step === 1
-              ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/90 dark:bg-slate-800 dark:text-blue-400 dark:ring-white/10"
-              : "text-slate-600 hover:text-slate-900 hover:bg-white/50 dark:text-slate-400 dark:hover:text-slate-200"
+              ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+              : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
           }`}
         >
-          <span
-            className={`flex h-5 w-5 items-center justify-center rounded-full text-2xs font-bold ${
-              step === 1
-                ? "bg-blue-600 text-white"
-                : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
-            }`}
-          >
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-2xs font-bold text-white">
             1
           </span>
-          <span>Step 1: Order Details & Items</span>
+          <span>Order Details & Items</span>
         </button>
 
         <span className="text-slate-300 dark:text-slate-700">/</span>
@@ -1815,22 +2062,16 @@ export default function AdminCreateOrderPage({
         <button
           type="button"
           onClick={handleNextToStep2}
-          className={`flex items-center gap-2.5 rounded-lg px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+          className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
             step === 2
-              ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/90 dark:bg-slate-800 dark:text-blue-400 dark:ring-white/10"
-              : "text-slate-600 hover:text-slate-900 hover:bg-white/50 dark:text-slate-400 dark:hover:text-slate-200"
+              ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+              : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
           }`}
         >
-          <span
-            className={`flex h-5 w-5 items-center justify-center rounded-full text-2xs font-bold ${
-              step === 2
-                ? "bg-blue-600 text-white"
-                : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
-            }`}
-          >
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-2xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
             2
           </span>
-          <span>Step 2: Performa Invoice</span>
+          <span>Performa Invoice</span>
         </button>
       </div>
 
@@ -1838,576 +2079,484 @@ export default function AdminCreateOrderPage({
         onSubmit={onSubmit}
         className={
           asModal
-            ? "min-h-0 flex-1 overflow-auto px-5 py-5"
+            ? "min-h-0 flex-1 overflow-auto px-6 py-5 space-y-6"
             : "space-y-6"
         }
       >
+        {/* Step 1: Order Details & Line Items */}
         {step === 1 && (
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
-          {/* Left Column: Form Details & Line Items */}
-          <div className="min-w-0 space-y-6">
-          {/* Party & Terms */}
-          <section className="rounded-xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900">
-            <header className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-white/5">
-              <User className="h-4 w-4 text-blue-500" />
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                  Party & Terms
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Required customer or vendor information.
-                </p>
-              </div>
-            </header>
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+            {/* Left Column */}
+            <div className="min-w-0 space-y-6">
+              {/* Party & Dates Section */}
+              <section className="rounded-xl border border-slate-200/90 bg-white p-6 shadow-xs dark:border-white/10 dark:bg-slate-900">
+                <header className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3 dark:border-white/5">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-blue-500" />
+                    <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                      Party & Dates
+                    </h2>
+                  </div>
+                  {partyId && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviousItemsModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-white/5 cursor-pointer"
+                    >
+                      <History className="h-3.5 w-3.5 text-slate-400" />
+                      <span>Past Party Orders</span>
+                    </button>
+                  )}
+                </header>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="space-y-1 sm:col-span-2 lg:col-span-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="sm:col-span-2 space-y-1 relative z-30">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                        Select Party <span className="text-rose-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => openQuickPartyModal("")}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 cursor-pointer"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Quick Add Party
+                      </button>
+                    </div>
+                    <PartyAutocomplete
+                      parties={parties}
+                      selectedId={partyId}
+                      onChange={onPartyChange}
+                      onQuickAdd={openQuickPartyModal}
+                      className={inputClass}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                      Order Date <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={orderDate}
+                      onChange={(e) => setOrderDate(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                      Expected Delivery Date <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={expectedDate}
+                      onChange={(e) => setExpectedDate(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {/* Billing & Shipping Addresses */}
+              {selectedParty && (
+                <OrderAddressSelector
+                  party={selectedParty}
+                  billingAddress={billingAddress}
+                  shippingAddress={shippingAddress}
+                  onBillingAddressChange={setBillingAddress}
+                  onShippingAddressChange={setShippingAddress}
+                  saveShippingToParty={saveShippingToParty}
+                  onSaveShippingToPartyChange={setSaveShippingToParty}
+                />
+              )}
+
+              {/* Catalog Line Items */}
+              <section className="rounded-xl border border-slate-200/90 bg-white p-6 shadow-xs dark:border-white/10 dark:bg-slate-900">
+                <header className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-white/5">
+                  <div className="flex items-center gap-2">
+                    <ShoppingCart className="h-4 w-4 text-blue-500" />
+                    <div>
+                      <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                        Line Items ({lines.filter((l) => l.productId).length})
+                      </h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Add products and specify quantities.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openQuickProductModal(null)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/60 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition dark:border-blue-900/40 dark:bg-blue-950/40 dark:text-blue-400 cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Quick Add Product</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={addLine}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition dark:bg-blue-950/40 dark:text-blue-400 cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Add Item</span>
+                    </button>
+                  </div>
+                </header>
+
+                <div className="overflow-x-auto min-h-[320px] pb-40">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-100 dark:border-white/5 text-slate-500 dark:text-slate-400">
+                        <th className="pb-2 font-semibold">Product</th>
+                        <th className="pb-2 font-semibold w-20">Rate</th>
+                        <th className="pb-2 font-semibold w-24">Qty</th>
+                        <th className="pb-2 font-semibold w-20">Free</th>
+                        <th className="pb-2 font-semibold w-28">Price (₹)</th>
+                        <th className="pb-2 font-semibold w-20">Disc %</th>
+                        <th className="pb-2 font-semibold w-20">GST %</th>
+                        <th className="pb-2 font-semibold w-28 text-right">Total (₹)</th>
+                        <th className="pb-2 font-semibold w-10 text-center"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                      {lines.map((line, idx) => {
+                        const rateItem = line.productId
+                          ? rateItemByLine.get(
+                              rateLookupKey(line.productId, line.applied_rate_type),
+                            )
+                          : undefined;
+                        const displayStatus = resolveRateDisplayStatus(
+                          rateItem,
+                          line.unit_price,
+                        );
+
+                        return (
+                          <tr
+                            key={line.key}
+                            className="group relative"
+                            style={{ zIndex: (lines.length - idx) * 10 + 20 }}
+                          >
+                            <td
+                              className="py-2.5 pr-3 align-top min-w-[240px] relative"
+                              style={{ zIndex: (lines.length - idx) * 10 + 25 }}
+                            >
+                              <ProductAutocomplete
+                                products={products}
+                                selectedId={line.productId}
+                                onChange={(pId) => onProductRowChange(line.key, pId)}
+                                onQuickAdd={(name) => openQuickProductModal(line.key, name)}
+                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50"
+                              />
+                              {line.productId && (
+                                <div className="mt-1 space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <LineRateStatusBadge
+                                      status={displayStatus}
+                                      rateItem={rateItem}
+                                      formatMoney={formatMoney}
+                                    />
+                                    {canMapPrice && (
+                                      <button
+                                        type="button"
+                                        onClick={() => openMapModal(line)}
+                                        className="text-2xs font-medium text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+                                      >
+                                        Map Rate
+                                      </button>
+                                    )}
+                                  </div>
+                                  <input
+                                    type="text"
+                                    placeholder="Item remarks (optional)..."
+                                    value={line.remarks}
+                                    onChange={(e) => updateLine(line.key, { remarks: e.target.value })}
+                                    className="w-full rounded border border-slate-200/80 bg-white/50 px-2 py-0.5 text-2xs text-slate-700 placeholder:text-slate-400 focus:bg-white dark:border-white/10 dark:bg-slate-950 dark:text-slate-200"
+                                  />
+                                </div>
+                              )}
+                            </td>
+
+                            <td className="py-2.5 pr-2 align-top">
+                              <select
+                                value={line.applied_rate_type}
+                                onChange={(e) => onRateTypeChange(line.key, e.target.value)}
+                                className="w-full rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-slate-950 dark:text-slate-200 cursor-pointer"
+                              >
+                                <option value="SR">SR</option>
+                                <option value="SRA">SRA</option>
+                                <option value="CR">CR</option>
+                              </select>
+                            </td>
+
+                            <td className="py-2.5 pr-2 align-top">
+                              <input
+                                type="number"
+                                min={1}
+                                value={line.quantity}
+                                onChange={(e) =>
+                                  updateLine(line.key, {
+                                    quantity: Math.max(1, Number(e.target.value) || 1),
+                                  })
+                                }
+                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right"
+                              />
+                            </td>
+
+                            <td className="py-2.5 pr-2 align-top">
+                              <input
+                                type="number"
+                                min={0}
+                                value={line.free_qty}
+                                onChange={(e) =>
+                                  updateLine(line.key, {
+                                    free_qty: Math.max(0, Number(e.target.value) || 0),
+                                  })
+                                }
+                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right"
+                              />
+                            </td>
+
+                            <td className="py-2.5 pr-2 align-top">
+                              <input
+                                type="number"
+                                step="any"
+                                min={0}
+                                value={line.unit_price}
+                                onChange={(e) =>
+                                  updateLine(line.key, {
+                                    unit_price: Math.max(0, Number(e.target.value) || 0),
+                                  })
+                                }
+                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right font-mono"
+                              />
+                            </td>
+
+                            <td className="py-2.5 pr-2 align-top">
+                              <input
+                                type="number"
+                                step="any"
+                                min={0}
+                                max={100}
+                                value={line.discount_percent}
+                                onChange={(e) =>
+                                  updateLine(line.key, {
+                                    discount_percent: Math.max(0, Number(e.target.value) || 0),
+                                  })
+                                }
+                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right"
+                              />
+                            </td>
+
+                            <td className="py-2.5 pr-2 align-top">
+                              <input
+                                type="number"
+                                step="any"
+                                min={0}
+                                value={line.gst_percent}
+                                onChange={(e) =>
+                                  updateLine(line.key, {
+                                    gst_percent: Math.max(0, Number(e.target.value) || 0),
+                                  })
+                                }
+                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right"
+                              />
+                            </td>
+
+                            <td className="py-2.5 pr-2 align-top text-right font-mono font-medium text-slate-900 dark:text-slate-100">
+                              ₹{formatMoney(lineTotal(line))}
+                            </td>
+
+                            <td className="py-2.5 text-center align-top">
+                              <button
+                                type="button"
+                                onClick={() => removeLine(line.key)}
+                                className="rounded p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition cursor-pointer"
+                                title="Remove line"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-4 flex justify-start">
+                  <button
+                    type="button"
+                    onClick={addLine}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Add another item</span>
+                  </button>
+                </div>
+              </section>
+
+              {/* Workflow Email Controls */}
+              <section className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-slate-900">
+                <header className="mb-3 flex items-center gap-2 border-b border-slate-100 pb-2.5 dark:border-white/5">
+                  <Mail className="h-4 w-4 text-blue-500" />
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                      Email Notification Settings
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Configure automated order confirmation emails upon order creation.
+                    </p>
+                  </div>
+                </header>
+                <WorkflowEmailControls
+                  party={selectedParty}
+                  order={{
+                    party: selectedParty,
+                    assigned_sales_user: selectedSalesUser || (assignedSales ? { _id: assignedSales } : null),
+                  }}
+                  scope="admin_approve"
+                  value={emailOptions}
+                  onChange={setEmailOptions}
+                />
+              </section>
+
+              {/* Remarks */}
+              <section className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-slate-900">
                 <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Party <span className="text-rose-500">*</span>
-                </label>
-                <PartyAutocomplete
-                  parties={parties}
-                  selectedId={partyId}
-                  onChange={onPartyChange}
-                  className={inputClass}
-                />
-                {partiesQ.isError && (
-                  <p className="text-xs text-rose-600 dark:text-rose-400 mt-1">
-                    Could not load parties.
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-1 sm:col-span-2 lg:col-span-2">
-                <label htmlFor="co-order-date" className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Order Date <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  id="co-order-date"
-                  type="date"
-                  required
-                  value={orderDate}
-                  onChange={(e) => setOrderDate(e.target.value)}
-                  className={inputClass}
-                />
-              </div>
-
-              <div className="space-y-1 sm:col-span-2 lg:col-span-2">
-                <label htmlFor="co-eta" className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Expected delivery <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  id="co-eta"
-                  type="date"
-                  required
-                  value={expectedDate}
-                  onChange={(e) => setExpectedDate(e.target.value)}
-                  className={inputClass}
-                />
-              </div>
-
-              <div className="space-y-1 sm:col-span-2 lg:col-span-4">
-                <label htmlFor="co-remarks" className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Remarks
+                  Order Remarks (Optional)
                 </label>
                 <textarea
-                  id="co-remarks"
                   rows={2}
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
-                  className={`${inputClass} resize-none`}
-                  placeholder="Notes, instructions or special considerations..."
+                  placeholder="Additional order instructions or notes…"
+                  className={`${inputClass} mt-1`}
                 />
-              </div>
+              </section>
             </div>
-          </section>
 
-          {/* Invoicing & Delivery Destination Card */}
-          {selectedParty && (
-            <OrderAddressSelector
-              party={selectedParty}
-              billingAddress={billingAddress}
-              shippingAddress={shippingAddress}
-              onBillingAddressChange={setBillingAddress}
-              onShippingAddressChange={setShippingAddress}
-              saveShippingToParty={saveShippingToParty}
-              onSaveShippingToPartyChange={setSaveShippingToParty}
-            />
-          )}
+            {/* Right Column: Assignment & Summary Sidebar */}
+            <div className="space-y-6">
+              {/* Sales Representative Assignment */}
+              <section className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-slate-900">
+                <header className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-white/5">
+                  <Users className="h-4 w-4 text-blue-500" />
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                      Assignment
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Required — assign sales rep for order tracking.
+                    </p>
+                  </div>
+                </header>
 
-          {/* Workflow Email Controls */}
-          <section className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
-            <header className="mb-3 flex items-center gap-2 border-b border-slate-100 pb-2.5 dark:border-white/5">
-              <Mail className="h-4 w-4 text-blue-500" />
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                  Email Notification Settings
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Configure automated order confirmation emails upon order creation.
-                </p>
-              </div>
-            </header>
-            <WorkflowEmailControls
-              party={selectedParty}
-              order={{
-                party: selectedParty,
-                assigned_sales_user: selectedSalesUser || (assignedSales ? { _id: assignedSales } : null),
-              }}
-              scope="admin_approve"
-              value={emailOptions}
-              onChange={setEmailOptions}
-            />
-          </section>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    Sales Representative <span className="text-rose-500">*</span>
+                  </label>
+                  <SalesAutocomplete
+                    salesUsers={salesUsers}
+                    selectedId={assignedSales}
+                    onChange={setAssignedSales}
+                    className={inputClass}
+                  />
+                </div>
+              </section>
 
-          {/* Line Items */}
-          <section className="rounded-xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900">
-            <header className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3 dark:border-white/5">
-              <div className="flex items-center gap-2">
-                <Tag className="h-4 w-4 text-blue-500" />
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                    Line Items
+              {/* Order Summary & Actions */}
+              <section className="rounded-xl border border-blue-100 bg-blue-50/20 p-5 shadow-xs dark:border-blue-900/30 dark:bg-blue-950/10">
+                <header className="mb-4 border-b border-blue-100/50 pb-3 dark:border-blue-900/20">
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-50">
+                    Order Summary
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Catalog products to include in this order.
+                    Calculated estimate of current items.
                   </p>
+                </header>
+
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                    <span>Total Items</span>
+                    <span className="font-semibold text-slate-900 dark:text-slate-200">
+                      {liveSummary.itemCount}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                    <span>Subtotal</span>
+                    <span className="font-mono text-slate-900 dark:text-slate-200">
+                      ₹{formatMoney(liveSummary.subtotal)}
+                    </span>
+                  </div>
+                  {liveSummary.discount > 0 && (
+                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                      <span>Discount</span>
+                      <span className="font-mono">-₹{formatMoney(liveSummary.discount)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                    <span>Taxable Amount</span>
+                    <span className="font-mono text-slate-900 dark:text-slate-200">
+                      ₹{formatMoney(liveSummary.taxable)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                    <span>GST (Estimated)</span>
+                    <span className="font-mono text-slate-900 dark:text-slate-200">
+                      ₹{formatMoney(liveSummary.gst)}
+                    </span>
+                  </div>
+
+                  <div className="border-t border-blue-200/60 pt-2.5 mt-2 flex justify-between text-sm font-bold text-slate-900 dark:text-slate-50">
+                    <span>Estimated Total</span>
+                    <span className="font-mono text-blue-600 dark:text-blue-400">
+                      ₹{formatMoney(liveSummary.total)}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {partyId ? (
-                  <button
+
+                <div className="mt-5 space-y-2">
+                  {!assignedSales && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 font-medium text-center">
+                      Select a sales representative to proceed.
+                    </p>
+                  )}
+                  {!allItemsNegotiated && lines.some((l) => l.productId) && (
+                    <p className="text-xs text-rose-600 dark:text-rose-400 font-medium text-center">
+                      All items must be negotiated to proceed.
+                    </p>
+                  )}
+                  <Button
                     type="button"
-                    onClick={() => setPreviousItemsModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/5"
+                    variant="primary"
+                    onClick={handleNextToStep2}
+                    className="w-full font-semibold shadow-md shadow-primary/25 gap-2 cursor-pointer"
                   >
-                    <History className="h-3.5 w-3.5" />
-                    Previous items
+                    <span>Next: Performa Invoice</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                  <button
+                    type="submit"
+                    disabled={isLoading || !allItemsNegotiated || !assignedSales}
+                    className="w-full py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition cursor-pointer"
+                  >
+                    {isLoading ? "Submitting order..." : "Or create & submit without Performa"}
                   </button>
-                ) : null}
-                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
-                  {lines.length} {lines.length === 1 ? "item" : "items"}
-                </span>
-              </div>
-            </header>
-
-            {productsQ.isError && (
-              <p className="mb-3 text-xs text-rose-600 dark:text-rose-400">
-                Could not load products.
-              </p>
-            )}
-
-            {!partyId ? (
-              <p className="mb-3 text-xs text-amber-700 dark:text-amber-300">
-                Select a party to check negotiated rates and map prices.
-              </p>
-            ) : null}
-
-            <div className="space-y-4">
-              {lines.map((row, idx) => {
-                const rateItem = row.productId
-                  ? rateItemByLine.get(
-                    rateLookupKey(row.productId, row.applied_rate_type),
-                  )
-                  : undefined;
-                const displayStatus = resolveRateDisplayStatus(rateItem, row.unit_price);
-
-                return (
-                  <div
-                    key={row.key}
-                    className="relative space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 dark:border-white/5 dark:bg-slate-955/30"
-                  >
-                    {/* Row Top Header (Mobile view item badge + delete) */}
-                    <div className="flex items-center justify-between lg:hidden border-b border-slate-100 pb-2 dark:border-white/5">
-                      <span className="text-xs font-semibold text-slate-500">
-                        Item #{idx + 1}
-                      </span>
-                      <button
-                        type="button"
-                        className="text-xs font-semibold text-rose-500 hover:text-rose-600"
-                        disabled={lines.length <= 1}
-                        onClick={() =>
-                          setLines((prev) => prev.filter((l) => l.key !== row.key))
-                        }
-                      >
-                        Remove
-                      </button>
-                    </div>
-
-                    {/* Tier 1 Grid */}
-                    <div className="grid gap-3 grid-cols-1 lg:grid-cols-12">
-                      {/* Product */}
-                      <div className="space-y-1 lg:col-span-4">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-550">
-                          Product
-                        </span>
-                        <ProductAutocomplete
-                          products={products}
-                          selectedId={row.productId}
-                          onChange={(val) => onProductRowChange(row.key, val)}
-                          className={inputClass}
-                        />
-                      </div>
-
-                      {/* Qty */}
-                      <div className="space-y-1 lg:col-span-1">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Qty
-                        </span>
-                        <input
-                          type="number"
-                          min={1}
-                          step={1}
-                          value={row.quantity}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((l) =>
-                                l.key === row.key
-                                  ? {
-                                    ...l,
-                                    quantity: Number(e.target.value) || 0,
-                                  }
-                                  : l,
-                              ),
-                            )
-                          }
-                          className={inputClass}
-                        />
-                      </div>
-
-                      {/* Free Qty */}
-                      <div className="space-y-1 lg:col-span-1">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Free
-                        </span>
-                        <input
-                          type="number"
-                          min={0}
-                          step={1}
-                          value={row.free_qty}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((l) =>
-                                l.key === row.key
-                                  ? {
-                                    ...l,
-                                    free_qty: Number(e.target.value) || 0,
-                                  }
-                                  : l,
-                              ),
-                            )
-                          }
-                          className={inputClass}
-                        />
-                      </div>
-
-                      {/* Rate Type */}
-                      <div className="space-y-1 lg:col-span-1">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-550">
-                          Rate Type
-                        </span>
-                        <select
-                          value={row.applied_rate_type}
-                          onChange={(e) =>
-                            onRateTypeChange(row.key, e.target.value)
-                          }
-                          className={inputClass}
-                        >
-                          <option value="SR">SR</option>
-                          <option value="SRA">SRA</option>
-                          <option value="CR">CR</option>
-                        </select>
-                      </div>
-
-                      {/* Unit Price */}
-                      <div className="space-y-1 lg:col-span-2">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Price
-                        </span>
-                        <input
-                          type="number"
-                          min={0}
-                          step="any"
-                          value={row.unit_price}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((l) =>
-                                l.key === row.key
-                                  ? {
-                                    ...l,
-                                    unit_price: Number(e.target.value) || 0,
-                                  }
-                                  : l,
-                              ),
-                            )
-                          }
-                          className={inputClass}
-                        />
-                      </div>
-
-                      {/* Disc % */}
-                      <div className="space-y-1 lg:col-span-2">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Disc %
-                        </span>
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          step="any"
-                          value={row.discount_percent}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((l) =>
-                                l.key === row.key
-                                  ? {
-                                    ...l,
-                                    discount_percent: Number(e.target.value) || 0,
-                                  }
-                                  : l,
-                              ),
-                            )
-                          }
-                          className={inputClass}
-                        />
-                      </div>
-
-                      {/* GST % */}
-                      <div className="space-y-1 lg:col-span-2">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          GST %
-                        </span>
-                        <input
-                          type="number"
-                          min={0}
-                          step="any"
-                          value={row.gst_percent}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((l) =>
-                                l.key === row.key
-                                  ? {
-                                    ...l,
-                                    gst_percent: Number(e.target.value) || 0,
-                                  }
-                                  : l,
-                              ),
-                            )
-                          }
-                          className={inputClass}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Tier 2 Grid */}
-                    <div className="grid gap-3 grid-cols-1 lg:grid-cols-12 pt-2 border-t border-slate-100/50 dark:border-white/5">
-                      {/* Line Remarks */}
-                      <div className="space-y-1 lg:col-span-7">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Line Remarks
-                        </span>
-                        <input
-                          placeholder="Internal item specifications..."
-                          value={row.remarks}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((l) =>
-                                l.key === row.key
-                                  ? {
-                                    ...l,
-                                    remarks: e.target.value,
-                                  }
-                                  : l,
-                              ),
-                            )
-                          }
-                          className={inputClass}
-                        />
-                      </div>
-
-                      {/* Price Mapping Status & Map action */}
-                      <div className="space-y-1 lg:col-span-3">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Price Mapping
-                        </span>
-                        <div className="h-[38px] flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
-                          {row.productId ? (
-                            rateCheckQ.isFetching ? (
-                              <span className="text-2xs text-slate-400 italic">
-                                Checking...
-                              </span>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <LineRateStatusBadge
-                                  status={displayStatus}
-                                  rateItem={rateItem}
-                                  formatMoney={formatMoney}
-                                />
-                                {canMapPrice ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => openMapModal(row)}
-                                    className="inline-flex items-center justify-center rounded bg-blue-600 px-2 py-0.5 text-2xs font-bold text-white shadow-sm hover:bg-blue-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed dark:bg-blue-500 dark:hover:bg-blue-400 cursor-pointer transition-colors"
-                                  >
-                                    Map
-                                  </button>
-                                ) : null}
-                              </div>
-                            )
-                          ) : (
-                            <span className="text-2xs text-slate-400 italic">—</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Line Total */}
-                      <div className="space-y-1 lg:col-span-2">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          Line Total
-                        </span>
-                        <div className="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2 text-sm font-semibold tabular-nums text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-slate-50 h-[38px] flex items-center">
-                          ₹{formatMoney(lineTotal(row))}
-                        </div>
-                      </div>
-
-                      {/* Actions (Trash Can Icon) */}
-                      <div className="hidden lg:flex lg:col-span-1 items-end justify-end pb-0.5">
-                        <button
-                          type="button"
-                          className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-slate-200/95 bg-white p-2 text-xs font-semibold text-rose-600 shadow-sm transition hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:bg-slate-955 dark:text-rose-400 dark:hover:bg-rose-950/20"
-                          disabled={lines.length <= 1}
-                          onClick={() =>
-                            setLines((prev) => prev.filter((l) => l.key !== row.key))
-                          }
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                </div>
+              </section>
             </div>
-
-            {/* Add Line Button */}
-            <div className="mt-4 flex justify-between items-center border-t border-slate-100 pt-4 dark:border-white/5">
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-white/5"
-                onClick={() => setLines((prev) => [...prev, newLine()])}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add Item Line
-              </button>
-            </div>
-          </section>
-        </div>
-
-        {/* Right Column: Sticky Sidebar summary */}
-        <div className="space-y-6">
-          <div className="sticky top-6 space-y-6">
-            {/* Sales Representative Assignment */}
-            <section className="rounded-xl border border-slate-200/90 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
-              <header className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-white/5">
-                <Users className="h-4 w-4 text-blue-500" />
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                    Assignment
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Required — assign sales rep for order tracking.
-                  </p>
-                </div>
-              </header>
-
-              <div className="space-y-1">
-                <label htmlFor="co-sales" className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Sales Representative <span className="text-rose-500">*</span>
-                </label>
-                <SalesAutocomplete
-                  salesUsers={salesUsers}
-                  selectedId={assignedSales}
-                  onChange={setAssignedSales}
-                  className={inputClass}
-                />
-              </div>
-            </section>
-
-            {/* Order Summary & Actions */}
-            <section className="rounded-xl border border-blue-100 bg-blue-50/20 p-5 shadow-sm dark:border-blue-900/30 dark:bg-blue-950/10">
-              <header className="mb-4 border-b border-blue-100/50 pb-3 dark:border-blue-900/20">
-                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-50">
-                  Order Summary
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Calculated estimate of current items.
-                </p>
-              </header>
-
-              <div className="space-y-2.5 text-sm">
-                <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                  <span>Gross Subtotal</span>
-                  <span className="font-medium tabular-nums">₹{formatMoney(liveSummary.subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-rose-600 dark:text-rose-400">
-                  <span>Total Discount</span>
-                  <span className="font-medium tabular-nums">-₹{formatMoney(liveSummary.discount)}</span>
-                </div>
-                <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                  <span>Taxable Amount</span>
-                  <span className="font-medium tabular-nums">₹{formatMoney(liveSummary.taxable)}</span>
-                </div>
-                <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                  <span>Estimated GST</span>
-                  <span className="font-medium tabular-nums">₹{formatMoney(liveSummary.gst)}</span>
-                </div>
-                <div className="border-t border-blue-100 pt-3 dark:border-blue-900/20">
-                  <div className="flex justify-between text-base font-bold text-blue-600 dark:text-blue-400">
-                    <span>Grand Total</span>
-                    <span className="text-lg tabular-nums">₹{formatMoney(liveSummary.total)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-5 pt-3 border-t border-blue-100/50 dark:border-blue-900/20 space-y-2">
-                {!assignedSales && (
-                  <p className="text-xs text-amber-700 dark:text-amber-300">
-                    Select a sales representative to submit.
-                  </p>
-                )}
-                {!allItemsNegotiated && lines.some((l) => l.productId) && (
-                  <p className="text-xs text-rose-600 dark:text-rose-455 font-medium text-center font-sans">
-                    All items must be negotiated to submit order
-                  </p>
-                )}
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={handleNextToStep2}
-                  className="w-full font-semibold shadow-md shadow-primary/25 gap-2 cursor-pointer"
-                >
-                  <span>Next: Performa Invoice</span>
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-                <button
-                  type="submit"
-                  disabled={isLoading || !allItemsNegotiated || !assignedSales}
-                  className="w-full py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition cursor-pointer"
-                >
-                  {isLoading ? "Submitting order..." : "Or create & submit without Performa"}
-                </button>
-              </div>
-            </section>
           </div>
-        </div>
-      </div>
-      )}
+        )}
 
         {/* Step 2: Performa Invoice */}
         {step === 2 && (
           <div className="space-y-6">
-            {/* Step 2 Overview Banner */}
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
+            {/* Overview Banner */}
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200/90 bg-white p-4 shadow-xs dark:border-white/10 dark:bg-slate-900">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
                   <FileText className="h-5 w-5" />
@@ -2417,7 +2566,7 @@ export default function AdminCreateOrderPage({
                     Step 2: Performa Invoice Details
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Commercial representations, transport carrier, payment terms, and compliance.
+                    Commercial details, transport carrier, payment terms, and compliance attachments.
                   </p>
                 </div>
               </div>
@@ -2428,7 +2577,7 @@ export default function AdminCreateOrderPage({
                   <span className="font-semibold text-slate-900 dark:text-slate-100">{selectedPartyName || "—"}</span>
                 </div>
                 <div className="rounded-lg bg-slate-50 px-3 py-1.5 border border-slate-200/80 dark:bg-slate-800 dark:border-white/5">
-                  <span className="text-slate-500 dark:text-slate-400">Sales: </span>
+                  <span className="text-slate-500 dark:text-slate-400">Sales Rep: </span>
                   <span className="font-semibold text-slate-900 dark:text-slate-100">{String(selectedSalesUser?.name || selectedSalesUser?.username || "—")}</span>
                 </div>
                 <div className="rounded-lg bg-emerald-50 px-3 py-1.5 border border-emerald-200/80 dark:bg-emerald-950/40 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-bold">
@@ -2494,6 +2643,27 @@ export default function AdminCreateOrderPage({
         partyId={partyId}
         partyName={selectedPartyName}
         onLoad={loadPreviousItems}
+      />
+
+      {/* Quick Add Party Modal (Unified Single Form) */}
+      <PartyDetailModal
+        open={quickPartyModalOpen}
+        create={true}
+        partyId={null}
+        initialName={quickPartyInitialName}
+        portalHome={portalHome}
+        onClose={() => setQuickPartyModalOpen(false)}
+        onSuccess={handlePartyCreated}
+      />
+
+      {/* Quick Add Product Modal (Unified Single Form) */}
+      <ProductDetailModal
+        open={quickProductModalOpen}
+        create={true}
+        productId={null}
+        initialName={quickProductInitialName}
+        onClose={() => setQuickProductModalOpen(false)}
+        onSuccess={handleProductCreated}
       />
     </div>
   );

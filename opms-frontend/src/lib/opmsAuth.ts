@@ -12,6 +12,7 @@ export const OPMS_ACCESS_ROLES = [
   "finance",
   "account",
   "dispatch",
+  "coordinator",
 ] as const;
 
 export type OpmsAccessRole = (typeof OPMS_ACCESS_ROLES)[number];
@@ -23,6 +24,7 @@ export const OPMS_ROLE_PRIORITY: readonly OpmsAccessRole[] = [
   "finance",
   "account",
   "dispatch",
+  "coordinator",
   "sales",
 ] as const;
 
@@ -50,6 +52,7 @@ export function normalizeRole(raw: unknown): string {
   if (s === "accounts" || s === "accounting") return "account";
   if (s === "salesman" || s === "sales_user") return "sales";
   if (s === "dispatches" || s === "dispatch_team") return "dispatch";
+  if (s === "coordinator" || s === "co-ordinator" || s === "co_ordinator" || s === "sales_coordinator" || s === "order_coordinator") return "coordinator";
   return s;
 }
 
@@ -108,38 +111,41 @@ export function getOpmsAccessRoles(user: unknown): string[] {
     if (pa.role) add(pa.role);
   }
 
-  if (u.access_role) add(u.access_role);
-  if (Array.isArray(u.access_roles)) {
-    for (const r of u.access_roles) add(r);
-  }
-  if (u.role) add(u.role);
-  if (Array.isArray(u.roles)) {
-    for (const r of u.roles) {
-      if (typeof r === "string") add(r);
-      else if (r && typeof r === "object") {
-        const ro = r as { code?: unknown; name?: unknown; role?: unknown };
-        if (ro.code) add(ro.code);
-        else if (ro.name) add(ro.name);
-        else if (ro.role) add(ro.role);
+  // Only fall back to user-level fields/department if no portal-scoped roles were found
+  if (collected.length === 0) {
+    if (u.access_role) add(u.access_role);
+    if (Array.isArray(u.access_roles)) {
+      for (const r of u.access_roles) add(r);
+    }
+    if (u.role) add(u.role);
+    if (Array.isArray(u.roles)) {
+      for (const r of u.roles) {
+        if (typeof r === "string") add(r);
+        else if (r && typeof r === "object") {
+          const ro = r as { code?: unknown; name?: unknown; role?: unknown };
+          if (ro.code) add(ro.code);
+          else if (ro.name) add(ro.name);
+          else if (ro.role) add(ro.role);
+        }
       }
     }
+    if (Array.isArray(u.role_codes)) {
+      for (const r of u.role_codes) add(r);
+    }
+    if (Array.isArray(u.role_names)) {
+      for (const r of u.role_names) add(r);
+    }
+    const dept = (u as { department?: unknown }).department;
+    if (typeof dept === "string") {
+      add(dept);
+    } else if (dept && typeof dept === "object") {
+      const d = dept as { code?: unknown; name?: unknown };
+      if (d.code) add(d.code);
+      else if (d.name) add(d.name);
+    }
+    if (u.department_code) add(u.department_code);
+    if (u.department_name) add(u.department_name);
   }
-  if (Array.isArray(u.role_codes)) {
-    for (const r of u.role_codes) add(r);
-  }
-  if (Array.isArray(u.role_names)) {
-    for (const r of u.role_names) add(r);
-  }
-  const dept = (u as { department?: unknown }).department;
-  if (typeof dept === "string") {
-    add(dept);
-  } else if (dept && typeof dept === "object") {
-    const d = dept as { code?: unknown; name?: unknown };
-    if (d.code) add(d.code);
-    else if (d.name) add(d.name);
-  }
-  if (u.department_code) add(u.department_code);
-  if (u.department_name) add(u.department_name);
 
   // Return filtered by OPMS_ACCESS_ROLES and ordered by OPMS_ROLE_PRIORITY
   const opmsMatched = collected.filter((r) =>

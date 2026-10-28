@@ -10,6 +10,7 @@ import FinanceOrderDetail from "@/components/portal/finance/order/FinanceOrderDe
 import AccountOrderDetail from "@/components/portal/account/order/AccountOrderDetail";
 import DispatchOrderDetail from "@/components/portal/dispatch/order/DispatchOrderDetail";
 import SuperAdminOrderDetail from "@/components/portal/super_admin/order/SuperAdminOrderDetail";
+import CoordinatorOrderDetails from "@/components/portal/coordinator/order/CoordinatorOrderDetails";
 
 export default function OrderRoutingPage() {
   const params = useParams();
@@ -33,6 +34,8 @@ export default function OrderRoutingPage() {
       return <DispatchOrderDetail orderId={orderId} />;
     case "super_admin":
       return <SuperAdminOrderDetail orderId={orderId} />;
+    case "coordinator":
+      return <CoordinatorOrderDetails orderId={orderId} />;
     default:
       notFound();
   }

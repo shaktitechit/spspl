@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{subject}}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #1e293b;
+      background-color: #f1f5f9;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .wrapper {
+      width: 100%;
+      background-color: #f1f5f9;
+      padding: 30px 15px;
+      box-sizing: border-box;
+    }
+
+    .letterhead-card {
+      max-width: 680px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e2e8f0;
+    }
+
+    /* ── Header ── */
+    .letterhead-header {
+      padding: 28px 32px 16px 32px;
+      background-color: #ffffff;
+      text-align: center;
+    }
+
+    .header-logo {
+      max-height: 64px;
+      max-width: 180px;
+      display: block;
+      margin: 0 auto 12px auto;
+    }
+
+    .company-name {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 800;
+      color: #1e3a5f;
+      letter-spacing: -0.3px;
+      text-transform: uppercase;
+    }
+
+    .company-tagline {
+      font-size: 12px;
+      color: #64748b;
+      font-style: italic;
+      margin-top: 4px;
+    }
+
+    .header-divider {
+      height: 3px;
+      background: linear-gradient(90deg, #dc2626 0%, #ea580c 50%, #2563eb 100%);
+      margin-top: 16px;
+      border-radius: 2px;
+    }
+
+    /* ── Alert Badge ── */
+    .badge-bar {
+      text-align: center;
+      padding: 16px 32px 0 32px;
+    }
+
+    .doc-badge {
+      display: inline-block;
+      background-color: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #dc2626;
+      padding: 5px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    /* ── Main Content ── */
+    .content {
+      padding: 24px 32px;
+    }
+
+    .greeting {
+      font-size: 15px;
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 8px;
+    }
+
+    .headline {
+      font-size: 19px;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 0 0 14px 0;
+      line-height: 1.4;
+    }
+
+    .intro-text {
+      font-size: 14px;
+      color: #475569;
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+
+    /* ── Metadata Grid ── */
+    .meta-box {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 22px;
+    }
+
+    .meta-grid {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .meta-grid td {
+      padding: 6px 8px;
+      font-size: 13px;
+      vertical-align: top;
+    }
+
+    .meta-label {
+      width: 32%;
+      color: #64748b;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.3px;
+    }
+
+    .meta-val {
+      color: #1e293b;
+      font-weight: 600;
+    }
+
+    /* ── Message Highlight Card ── */
+    .message-card {
+      background-color: #ffffff;
+      border-left: 4px solid #2563eb;
+      border-top: 1px solid #e2e8f0;
+      border-right: 1px solid #e2e8f0;
+      border-bottom: 1px solid #e2e8f0;
+      border-radius: 0 8px 8px 0;
+      padding: 16px 18px;
+      margin-bottom: 24px;
+    }
+
+    .message-card-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #2563eb;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .message-card-body {
+      font-size: 14px;
+      color: #1e293b;
+      line-height: 1.6;
+      word-break: break-word;
+    }
+
+    /* ── Attachments ── */
+    .attachment-box {
+      background-color: #f1f5f9;
+      border: 1px dashed #cbd5e1;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 24px;
+    }
+
+    .attachment-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    /* ── CTA Button ── */
+    .cta-container {
+      text-align: center;
+      margin: 32px 0 16px 0;
+    }
+
+    .cta-button {
+      display: inline-block;
+      background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+      color: #ffffff !important;
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+      padding: 12px 28px;
+      border-radius: 8px;
+      letter-spacing: 0.3px;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28);
+    }
+
+    /* ── Footer ── */
+    .footer {
+      border-top: 1px solid #e2e8f0;
+      padding: 24px 32px;
+      background-color: #f8fafc;
+      text-align: center;
+      font-size: 12px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrapper">
+    <div class="letterhead-card">
+      <!-- Letterhead Header -->
+      <div class="letterhead-header">
+        {{companyLogoHtml}}
+        <h1 class="company-name">{{companyName}}</h1>
+        {{#if companyTagline}}<p class="company-tagline">{{companyTagline}}</p>{{/if}}
+        <div class="header-divider"></div>
+      </div>
+
+      <!-- Badge Bar -->
+      <div class="badge-bar">
+        <span class="doc-badge">{{badgeText}}</span>
+      </div>
+
+      <!-- Content -->
+      <div class="content">
+        <div class="greeting">Hello {{recipientName}},</div>
+        <div class="headline">{{alertHeadline}}</div>
+        <div class="intro-text">{{introDescription}}</div>
+
+        <!-- Meta Table -->
+        <div class="meta-box">
+          <table class="meta-grid">
+            <tr>
+              <td class="meta-label">Order Reference</td>
+              <td class="meta-val">#{{orderNo}}</td>
+            </tr>
+            <tr>
+              <td class="meta-label">Customer / Party</td>
+              <td class="meta-val">{{customerName}}</td>
+            </tr>
+            <tr>
+              <td class="meta-label">Flag Title</td>
+              <td class="meta-val">{{flagTitle}}</td>
+            </tr>
+            <tr>
+              <td class="meta-label">Severity Level</td>
+              <td class="meta-val">{{severityLevel}}</td>
+            </tr>
+            <tr>
+              <td class="meta-label">Raised By</td>
+              <td class="meta-val">{{raisedByName}}</td>
+            </tr>
+            <tr>
+              <td class="meta-label">Primary Assignee (To)</td>
+              <td class="meta-val">{{assignedToName}}</td>
+            </tr>
+            <tr>
+              <td class="meta-label">Tagged Members (CC)</td>
+              <td class="meta-val">{{taggedMembersNames}}</td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Message Body -->
+        <div class="message-card">
+          <div class="message-card-label">{{messageSectionTitle}}</div>
+          <div class="message-card-body">{{messageBody}}</div>
+        </div>
+
+        <!-- Attachments if any -->
+        {{attachmentsBlock}}
+
+        <!-- Call to action button -->
+        <div class="cta-container">
+          <a href="{{actionUrl}}" class="cta-button" target="_blank" rel="noopener noreferrer">
+            💬 Open Flag & Chat Loop
+          </a>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <p style="margin: 0 0 8px 0; font-weight: 600; color: #475569;">OPMS Order Processing & Management System</p>
+        <p style="margin: 0 0 8px 0;">This is an automated system notification regarding an active flag on Order #{{orderNo}}.</p>
+        {{companyFooterHtml}}
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>
