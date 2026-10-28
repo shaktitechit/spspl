@@ -42,6 +42,33 @@ export function formatDateShort(v: unknown): string {
   });
 }
 
+export function formatDateOnly(v: unknown): string {
+  if (v == null || v === "") return "—";
+  const d = v instanceof Date ? v : new Date(String(v));
+  if (Number.isNaN(d.getTime())) return String(v);
+  return d.toLocaleDateString();
+}
+
+export function billDocumentMeta(
+  billDocument: unknown,
+): { name: string; url: string; mime: string } | null {
+  if (!billDocument) return null;
+  if (typeof billDocument === "object" && billDocument !== null) {
+    const doc = billDocument as Record<string, unknown>;
+    const url = String(doc.url ?? "");
+    const name = String(doc.original_name ?? doc.file_name ?? "Bill document");
+    if (url) {
+      return {
+        name,
+        url,
+        mime: String(doc.mime_type ?? ""),
+      };
+    }
+  }
+  return null;
+}
+
+
 export function detailRefId(value: unknown): string {
   if (!value) return "";
   if (typeof value === "string") return value.trim();

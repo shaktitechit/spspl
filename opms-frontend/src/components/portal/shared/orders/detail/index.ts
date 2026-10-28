@@ -6,6 +6,8 @@ export {
   pickList,
   formatDate,
   formatDateShort,
+  formatDateOnly,
+  billDocumentMeta,
   detailRefId,
   pickOrderAttachments,
   filterAttachmentsByVisibility,

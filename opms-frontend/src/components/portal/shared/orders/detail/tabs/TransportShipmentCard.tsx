@@ -18,6 +18,15 @@ function formatOptionalCount(value: unknown): string {
   return Number.isFinite(n) ? String(n) : "—";
 }
 
+const STATUS_PIPELINE = [
+  { key: "in_transit",       label: "In Transit",       color: "blue"    },
+  { key: "out_for_delivery", label: "Out for Delivery", color: "amber"   },
+  { key: "delivered",        label: "Delivered",        color: "emerald" },
+  { key: "returned",         label: "Returned",         color: "rose"    },
+] as const;
+
+const TERMINAL_STATUSES = ["delivered", "returned", "delivery_failed"];
+
 function statusBadgeClass(shipmentStatus: string): string {
   if (shipmentStatus === "delivered") {
     return "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400";
@@ -43,6 +52,7 @@ export function TransportShipmentCard({
   const shipmentStatus = String(tr.shipment_status ?? tr.status ?? "created");
   const vehicleNumber = tr.vehicle_number ?? tr.vehicle_no;
   const driverMobile = tr.driver_mobile ?? tr.driver_phone;
+  const isTerminal = TERMINAL_STATUSES.includes(shipmentStatus);
 
   const agentId =
     tr.transport_agent && typeof tr.transport_agent === "object"
@@ -77,8 +87,84 @@ export function TransportShipmentCard({
             Dispatch Date: {formatDate(tr.dispatch_date)}
           </p>
         </div>
-        {actions}
+        <div className="flex flex-wrap items-center gap-2">
+          {actions}
+          {isTerminal ? (
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+                shipmentStatus === "delivered"
+                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
+                  : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+              }`}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-3 w-3"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              {shipmentStatus === "delivered" ? "Delivered" : "Finalized"}
+            </span>
+          ) : null}
+        </div>
       </div>
+
+      {/* ── Progress Pipeline ── */}
+      {!isTerminal && (
+        <>
+          <div className="mt-3 mb-1 flex items-center gap-1">
+            {STATUS_PIPELINE.map((step, idx) => {
+              const stepOrder = STATUS_PIPELINE.findIndex(
+                (s) => s.key === shipmentStatus,
+              );
+              const isDone = idx <= stepOrder && stepOrder >= 0;
+              return (
+                <div
+                  key={step.key}
+                  className="flex items-center gap-1 flex-1 last:flex-none"
+                >
+                  <div
+                    className={`h-1.5 w-full rounded-full transition-colors ${
+                      isDone
+                        ? "bg-emerald-500"
+                        : "bg-slate-200 dark:bg-slate-700"
+                    }`}
+                  />
+                  {idx === STATUS_PIPELINE.length - 1 && (
+                    <div
+                      className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+                        isDone
+                          ? "bg-emerald-500"
+                          : "bg-slate-200 dark:bg-slate-700"
+                      }`}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-1 mb-3 flex justify-between text-2xs font-semibold uppercase tracking-wider text-slate-400 px-0.5">
+            {STATUS_PIPELINE.map((s) => (
+              <span
+                key={s.key}
+                className={
+                  shipmentStatus === s.key
+                    ? "text-slate-700 dark:text-slate-200"
+                    : ""
+                }
+              >
+                {s.label}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
 
       <div className="grid gap-6 mt-4 sm:grid-cols-3">
         <div className="space-y-4">
@@ -107,7 +193,30 @@ export function TransportShipmentCard({
               </div>
             </>
           ) : (
-            <div className="text-xs italic text-slate-400">Internal fleet delivery</div>
+            <>
+              {tr.transporter_name || tr.transporter_phone ? (
+                <>
+                  <div>
+                    <span className="block text-2xs text-slate-400">
+                      Transporter Name
+                    </span>
+                    <span className="text-sm text-slate-800 dark:text-slate-200">
+                      {tr.transporter_name || "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-2xs text-slate-400">Phone</span>
+                    <span className="text-sm text-slate-800 dark:text-slate-200">
+                      {tr.transporter_phone || "—"}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs italic text-slate-400">
+                  Internal fleet delivery
+                </div>
+              )}
+            </>
           )}
           {agentObj ? (
             <div className="mt-2 pt-2 border-t border-slate-100 dark:border-white/5 space-y-1">
@@ -190,6 +299,30 @@ export function TransportShipmentCard({
               To: {tr.destination_location || "—"}
             </span>
           </div>
+          {tr.route_details && (
+            <div>
+              <span className="block text-2xs text-slate-400">Route Details</span>
+              <span className="text-sm text-slate-800 dark:text-slate-200">
+                {tr.route_details}
+              </span>
+            </div>
+          )}
+          {(tr.lr_number || tr.eway_bill_no || tr.tracking_number) && (
+            <div>
+              <span className="block text-2xs text-slate-400">LR / E-way / Tracking</span>
+              <span className="text-sm text-slate-800 dark:text-slate-200 font-mono block">
+                LR: {tr.lr_number || "—"}
+              </span>
+              <span className="text-sm text-slate-800 dark:text-slate-200 font-mono block mt-0.5">
+                E-way: {tr.eway_bill_no || "—"}
+              </span>
+              {tr.tracking_number && (
+                <span className="text-sm text-slate-800 dark:text-slate-200 font-mono block mt-0.5">
+                  Tracking: {tr.tracking_number}
+                </span>
+              )}
+            </div>
+          )}
           <div>
             <span className="block text-2xs text-slate-400">Expected Delivery</span>
             <span className="text-sm text-slate-800 dark:text-slate-200">

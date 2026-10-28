@@ -3,6 +3,7 @@
 import { Fragment, type ReactNode } from "react";
 import { formatAgentType } from "@/components/portal/shared/lib/fleetDisplay";
 import { nestDispatchLinesForDisplay } from "../dispatchKitDisplay";
+import { billDocumentMeta, formatDateOnly } from "../orderDetailUtils";
 
 type DispatchBatchCardProps = {
   dispatch: Record<string, any>;
@@ -13,6 +14,8 @@ type DispatchBatchCardProps = {
   formatDate: (v: unknown) => string;
   actions?: ReactNode;
   footer?: ReactNode;
+  onViewBillDocument?: (billDoc: { name: string; url: string; mime: string }) => void;
+  onDownloadBillDocument?: (url: string, name: string) => void;
 };
 
 function ProductCell({
@@ -61,8 +64,13 @@ export function DispatchBatchCard({
   formatDate,
   actions,
   footer,
+  onViewBillDocument,
+  onDownloadBillDocument,
 }: DispatchBatchCardProps) {
   const dispId = String(disp._id ?? disp.id ?? "");
+  const billDoc = billDocumentMeta(disp.bill_document);
+  const billNumber = String(disp.bill_number ?? "").trim();
+  const billingDate = disp.billing_date;
   const dispatchStatus = String(
     disp.dispatch_status ?? disp.status ?? "partially_dispatched",
   );
@@ -257,6 +265,57 @@ export function DispatchBatchCard({
         </div>
 
         <div className="space-y-3 rounded-lg bg-slate-50/50 p-4 border border-slate-100 dark:bg-slate-950/10 dark:border-white/5 text-xs">
+          <div>
+            <span className="block text-2xs font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+              Bill Number
+            </span>
+            <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+              {billNumber || "—"}
+            </span>
+          </div>
+          <div>
+            <span className="block text-2xs font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+              Billing Date
+            </span>
+            <span className="font-semibold text-slate-800 dark:text-slate-200">
+              {formatDateOnly(billingDate)}
+            </span>
+          </div>
+          <div>
+            <span className="block text-2xs font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+              Bill Document
+            </span>
+            {billDoc ? (
+              <div className="flex flex-wrap gap-2">
+                {onViewBillDocument ? (
+                  <button
+                    type="button"
+                    onClick={() => onViewBillDocument(billDoc)}
+                    className="rounded border border-slate-200 px-2 py-0.5 text-2xs font-semibold text-blue-700 transition hover:bg-blue-50 dark:border-white/10 dark:text-blue-300 dark:hover:bg-blue-950/30"
+                  >
+                    View
+                  </button>
+                ) : null}
+                {onDownloadBillDocument ? (
+                  <button
+                    type="button"
+                    onClick={() => void onDownloadBillDocument(billDoc.url, billDoc.name)}
+                    className="rounded border border-slate-200 px-2 py-0.5 text-2xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
+                  >
+                    Download
+                  </button>
+                ) : null}
+                <span
+                  className="block w-full truncate text-2xs text-slate-500 dark:text-slate-400"
+                  title={billDoc.name}
+                >
+                  {billDoc.name}
+                </span>
+              </div>
+            ) : (
+              <span className="text-slate-500 dark:text-slate-400">—</span>
+            )}
+          </div>
           <div>
             <span className="block text-2xs font-bold uppercase tracking-wider text-slate-400 mb-0.5">
               Warehouse Location

@@ -1,8 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { DashboardCard } from "@/components/widgets";
 import { useListDispatchesQuery, useListTransportsQuery, useListUsersQuery, useListTransportAgentsQuery } from "@/store/api";
+import { toast } from "@/lib/toast";
+import { useAppSelector } from "@/store/hooks";
+import { fetchFileBlob, resolveFileUrl } from "@/lib/env";
+import {
+  FilePreviewModal,
+  useFilePreview,
+  type PreviewFile,
+} from "@/components/portal/shared/ui/modals/FilePreviewModal";
+import { billDocumentMeta, formatDateOnly } from "@/components/portal/shared/orders/detail/orderDetailUtils";
 
 type DispatchesTabProps = {
   orderId: string;
@@ -35,6 +44,61 @@ function formatAgentType(t: unknown): string {
 }
 
 export function DispatchesTab({ orderId, detail }: DispatchesTabProps) {
+  const token = useAppSelector((state) => state.auth.token);
+  const {
+    previewDoc,
+    previewBlobUrl,
+    previewLoading,
+    openPreview,
+    closePreview,
+  } = useFilePreview(token);
+
+  const handleDownloadBillDocument = useCallback(
+    async (fileUrl: string, fileName: string) => {
+      try {
+        const response = await fetchFileBlob(fileUrl, token);
+        if (!response.ok) {
+          if (response.status === 404) {
+            toast.error("Document file is not found on storage server.");
+          } else {
+            toast.error(`Failed to download bill document (${response.status})`);
+          }
+          return;
+        }
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.setAttribute("download", fileName);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(blobUrl);
+      } catch {
+        toast.error("Failed to download bill document");
+      }
+    },
+    [token],
+  );
+
+  const handleViewBillDocument = useCallback(
+    (billDoc: { name: string; url: string; mime: string }) => {
+      void openPreview({
+        name: billDoc.name,
+        url: resolveFileUrl(billDoc.url),
+        mime: billDoc.mime,
+      });
+    },
+    [openPreview],
+  );
+
+  const handlePreviewBillDownload = useCallback(
+    (doc: PreviewFile) => {
+      void handleDownloadBillDocument(doc.url, doc.name);
+    },
+    [handleDownloadBillDocument],
+  );
+
   const dispatchesQ = useListDispatchesQuery({ order: orderId });
   const transportsQ = useListTransportsQuery({ order: orderId });
   const usersQ = useListUsersQuery({});
@@ -61,6 +125,15 @@ export function DispatchesTab({ orderId, detail }: DispatchesTabProps) {
 
   return (
     <div className="space-y-6">
+      <FilePreviewModal
+        doc={previewDoc}
+        blobUrl={previewBlobUrl}
+        loading={previewLoading}
+        onClose={closePreview}
+        onDownload={handlePreviewBillDownload}
+        subtitle="Bill document preview"
+      />
+
       <DashboardCard
         title="Recorded Dispatch Batches"
         description="View dispatch details, dispatched items list, and associated logistics assignments."
@@ -108,6 +181,10 @@ export function DispatchesTab({ orderId, detail }: DispatchesTabProps) {
 
               // Display active transport if it exists, otherwise display the latest returned transport
               const transport = activeTransport || dispatchTransports[dispatchTransports.length - 1];
+
+              const billDoc = billDocumentMeta(disp.bill_document);
+              const billNumber = String(disp.bill_number ?? "").trim();
+              const billingDate = disp.billing_date;
 
               return (
                 <div
@@ -187,6 +264,50 @@ export function DispatchesTab({ orderId, detail }: DispatchesTabProps) {
                     </div>
 
                     <div className="space-y-3 rounded-lg bg-slate-50/50 p-4 border border-slate-100 dark:bg-slate-950/10 dark:border-white/5 text-xs">
+                      <div>
+                        <span className="block text-2xs font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+                          Bill Number
+                        </span>
+                        <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                          {billNumber || "—"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-2xs font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+                          Billing Date
+                        </span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {formatDateOnly(billingDate)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-2xs font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+                          Bill Document
+                        </span>
+                        {billDoc ? (
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleViewBillDocument(billDoc)}
+                              className="rounded border border-slate-200 px-2 py-0.5 text-2xs font-semibold text-blue-700 transition hover:bg-blue-50 dark:border-white/10 dark:text-blue-300 dark:hover:bg-blue-950/30"
+                            >
+                              View
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDownloadBillDocument(billDoc.url, billDoc.name)}
+                              className="rounded border border-slate-200 px-2 py-0.5 text-2xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
+                            >
+                              Download
+                            </button>
+                            <span className="block w-full truncate text-2xs text-slate-500 dark:text-slate-400" title={billDoc.name}>
+                              {billDoc.name}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-500 dark:text-slate-400">—</span>
+                        )}
+                      </div>
                       <div>
                         <span className="block text-2xs font-bold uppercase tracking-wider text-slate-400 mb-0.5">
                           Warehouse Location

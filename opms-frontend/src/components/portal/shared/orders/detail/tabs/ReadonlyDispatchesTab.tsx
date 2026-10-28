@@ -1,7 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { DashboardCard } from "@/components/widgets";
+import { toast } from "@/lib/toast";
+import { useAppSelector } from "@/store/hooks";
+import { fetchFileBlob, resolveFileUrl } from "@/lib/env";
+import {
+  FilePreviewModal,
+  useFilePreview,
+  type PreviewFile,
+} from "@/components/portal/shared/ui/modals/FilePreviewModal";
 import {
   useListDispatchesQuery,
   useListTransportsQuery,
@@ -21,6 +29,61 @@ export function ReadonlyDispatchesTab({
   orderId,
   detail,
 }: ReadonlyDispatchesTabProps) {
+  const token = useAppSelector((state) => state.auth.token);
+  const {
+    previewDoc,
+    previewBlobUrl,
+    previewLoading,
+    openPreview,
+    closePreview,
+  } = useFilePreview(token);
+
+  const handleDownloadBillDocument = useCallback(
+    async (fileUrl: string, fileName: string) => {
+      try {
+        const response = await fetchFileBlob(fileUrl, token);
+        if (!response.ok) {
+          if (response.status === 404) {
+            toast.error("Document file is not found on storage server.");
+          } else {
+            toast.error(`Failed to download bill document (${response.status})`);
+          }
+          return;
+        }
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.setAttribute("download", fileName);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(blobUrl);
+      } catch {
+        toast.error("Failed to download bill document");
+      }
+    },
+    [token],
+  );
+
+  const handleViewBillDocument = useCallback(
+    (billDoc: { name: string; url: string; mime: string }) => {
+      void openPreview({
+        name: billDoc.name,
+        url: resolveFileUrl(billDoc.url),
+        mime: billDoc.mime,
+      });
+    },
+    [openPreview],
+  );
+
+  const handlePreviewBillDownload = useCallback(
+    (doc: PreviewFile) => {
+      void handleDownloadBillDocument(doc.url, doc.name);
+    },
+    [handleDownloadBillDocument],
+  );
+
   const dispatchesQ = useListDispatchesQuery({ order: orderId });
   const transportsQ = useListTransportsQuery({ order: orderId });
   const usersQ = useListUsersQuery({});
@@ -55,6 +118,15 @@ export function ReadonlyDispatchesTab({
 
   return (
     <div className="space-y-6">
+      <FilePreviewModal
+        doc={previewDoc}
+        blobUrl={previewBlobUrl}
+        loading={previewLoading}
+        onClose={closePreview}
+        onDownload={handlePreviewBillDownload}
+        subtitle="Bill document preview"
+      />
+
       <DashboardCard
         title="Recorded Dispatch Batches"
         description="View dispatch details, dispatched items list, and associated logistics assignments."
@@ -76,6 +148,8 @@ export function ReadonlyDispatchesTab({
                 transportAgents={transportAgents}
                 userNameById={userNameById}
                 formatDate={formatDate}
+                onViewBillDocument={handleViewBillDocument}
+                onDownloadBillDocument={handleDownloadBillDocument}
               />
             ))}
           </div>
