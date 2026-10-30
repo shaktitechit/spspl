@@ -50,9 +50,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
 
       // Dynamic browser title
-      const companyName = info.trade_name || info.legal_name;
-      if (companyName && typeof document !== "undefined") {
-        document.title = `${companyName} - Lead Manager`;
+      const companyName = (
+        info.trade_name ||
+        info.legal_name ||
+        process.env.NEXT_PUBLIC_COMPANY_NAME ||
+        ""
+      ).trim();
+      if (typeof document !== "undefined") {
+        document.title = companyName
+          ? `Lead Manager - ${companyName}`
+          : "Lead Manager";
       }
     },
     [setThemeColor, setCustomPrimary],

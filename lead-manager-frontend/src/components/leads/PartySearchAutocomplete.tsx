@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Search, X } from "lucide-react";
+import { Check, Plus, Search, X } from "lucide-react";
 
 export type PartyItem = {
   _id?: string;
@@ -58,10 +58,11 @@ type Props = {
   parties: PartyItem[];
   selectedPartyId: string;
   onSelect: (party: PartyItem | null) => void;
+  onQuickAdd?: (searchName: string) => void;
 };
 
 /** Searchable autocomplete over Party Service `/api/parties` list. */
-export function PartySearchAutocomplete({ parties, selectedPartyId, onSelect }: Props) {
+export function PartySearchAutocomplete({ parties, selectedPartyId, onSelect, onQuickAdd }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -160,68 +161,100 @@ export function PartySearchAutocomplete({ parties, selectedPartyId, onSelect }: 
             <span className="text-[9px] text-slate-400 lowercase">click to select & autofill</span>
           </div>
           {filteredParties.length === 0 ? (
-            <div className="px-4 py-3 text-center text-xs text-slate-500 dark:text-slate-400">
-              No matching parties found for &quot;{search}&quot;
-            </div>
-          ) : (
-            filteredParties.map((p) => {
-              const id = String(p._id ?? p.id ?? "");
-              const isSelected = id === selectedPartyId;
-              const location = [p.billing_address?.city || p.district, p.billing_address?.state || p.state]
-                .filter(Boolean)
-                .join(", ");
-              return (
+            <div className="px-4 py-3 text-center text-xs text-slate-500 dark:text-slate-400 space-y-2">
+              <p>No matching parties found for &quot;{search}&quot;</p>
+              {onQuickAdd && (
                 <button
-                  key={id}
                   type="button"
                   onClick={() => {
-                    onSelect(p);
+                    const nameToUse = search.trim();
                     setIsOpen(false);
-                    setSearch("");
+                    onQuickAdd(nameToUse);
                   }}
-                  className={`flex w-full flex-col px-3 py-2 text-left text-xs transition border-b border-slate-50 dark:border-white/5 last:border-0 hover:bg-primary/10 cursor-pointer ${
-                    isSelected
-                      ? "bg-primary/15 font-medium text-primary"
-                      : "text-slate-800 dark:text-slate-200"
-                  }`}
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 transition hover:bg-blue-100 dark:bg-blue-950/50 dark:text-blue-400 dark:hover:bg-blue-900/50 cursor-pointer"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 truncate">
-                      <span className="font-bold text-slate-900 dark:text-white truncate">
-                        {p.party_name}
-                      </span>
-                      {p.party_code && (
-                        <span className="rounded bg-slate-100 px-1.5 py-0.2 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          {p.party_code}
-                        </span>
-                      )}
-                      {p.party_type && (
-                        <span className="rounded-full bg-slate-100 px-1.5 py-0.2 text-[10px] font-semibold text-slate-600 capitalize dark:bg-slate-800 dark:text-slate-300">
-                          {p.party_type}
-                        </span>
-                      )}
-                      {p.sra === true && (
-                        <span className="rounded-full bg-emerald-100 px-1.5 py-0.2 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                          SRA
-                        </span>
-                      )}
-                    </div>
-                    {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
-                  </div>
-
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                    {(p.contact_person || (p.contacts && p.contacts[0]?.name)) && (
-                      <span>👤 {p.contact_person || p.contacts?.[0]?.name}</span>
-                    )}
-                    {(p.mobile || p.phone || (p.contacts && p.contacts[0]?.phone)) && (
-                      <span>📞 {p.mobile || p.phone || p.contacts?.[0]?.phone}</span>
-                    )}
-                    {location && <span>📍 {location}</span>}
-                    {p.gst_no && <span className="font-mono text-[10px]">GST: {p.gst_no}</span>}
-                  </div>
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Quick Add Party {search.trim() ? `"${search.trim()}"` : ""}</span>
                 </button>
-              );
-            })
+              )}
+            </div>
+          ) : (
+            <>
+              {filteredParties.map((p) => {
+                const id = String(p._id ?? p.id ?? "");
+                const isSelected = id === selectedPartyId;
+                const location = [p.billing_address?.city || p.district, p.billing_address?.state || p.state]
+                  .filter(Boolean)
+                  .join(", ");
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      onSelect(p);
+                      setIsOpen(false);
+                      setSearch("");
+                    }}
+                    className={`flex w-full flex-col px-3 py-2 text-left text-xs transition border-b border-slate-50 dark:border-white/5 last:border-0 hover:bg-primary/10 cursor-pointer ${
+                      isSelected
+                        ? "bg-primary/15 font-medium text-primary"
+                        : "text-slate-800 dark:text-slate-200"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span className="font-bold text-slate-900 dark:text-white truncate">
+                          {p.party_name}
+                        </span>
+                        {p.party_code && (
+                          <span className="rounded bg-slate-100 px-1.5 py-0.2 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                            {p.party_code}
+                          </span>
+                        )}
+                        {p.party_type && (
+                          <span className="rounded-full bg-slate-100 px-1.5 py-0.2 text-[10px] font-semibold text-slate-600 capitalize dark:bg-slate-800 dark:text-slate-300">
+                            {p.party_type}
+                          </span>
+                        )}
+                        {p.sra === true && (
+                          <span className="rounded-full bg-emerald-100 px-1.5 py-0.2 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                            SRA
+                          </span>
+                        )}
+                      </div>
+                      {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                    </div>
+
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                      {(p.contact_person || (p.contacts && p.contacts[0]?.name)) && (
+                        <span>👤 {p.contact_person || p.contacts?.[0]?.name}</span>
+                      )}
+                      {(p.mobile || p.phone || (p.contacts && p.contacts[0]?.phone)) && (
+                        <span>📞 {p.mobile || p.phone || p.contacts?.[0]?.phone}</span>
+                      )}
+                      {location && <span>📍 {location}</span>}
+                      {p.gst_no && <span className="font-mono text-[10px]">GST: {p.gst_no}</span>}
+                    </div>
+                  </button>
+                );
+              })}
+              {onQuickAdd && (
+                <div className="border-t border-slate-100 p-1.5 dark:border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nameToUse = search.trim();
+                      setIsOpen(false);
+                      onQuickAdd(nameToUse);
+                    }}
+                    className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold text-blue-600 transition hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40 cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Quick Add Party {search.trim() ? `"${search.trim()}"` : ""}</span>
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

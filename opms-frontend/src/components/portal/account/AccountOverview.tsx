@@ -43,21 +43,34 @@ function notificationsSupported(): boolean {
   return typeof window !== "undefined" && "Notification" in window;
 }
 
+function resolveOpmsBaseTitle(): string {
+  if (typeof document !== "undefined") {
+    const stripped = document.title.replace(/^\([^)]+\)\s*/, "").trim();
+    if (stripped.startsWith("OPMS")) return stripped;
+  }
+  const envCompany =
+    typeof process !== "undefined"
+      ? process.env.NEXT_PUBLIC_COMPANY_NAME?.trim()
+      : "";
+  return envCompany ? `OPMS - ${envCompany}` : "OPMS";
+}
+
 function updateAccountDocumentTitle(
   dueSheet: number,
   account: number,
   openDispatch: number,
 ) {
   if (typeof document === "undefined") return;
+  const baseTitle = resolveOpmsBaseTitle();
   if (dueSheet <= 0 && account <= 0 && openDispatch <= 0) {
-    document.title = "Account Overview";
+    document.title = baseTitle;
     return;
   }
   const parts: string[] = [];
   if (dueSheet > 0) parts.push(`${dueSheet} DS`);
   if (account > 0) parts.push(`${account} AP`);
   if (openDispatch > 0) parts.push(`${openDispatch} OD`);
-  document.title = `(${parts.join(" · ")}) Account Overview`;
+  document.title = `(${parts.join(" · ")}) ${baseTitle}`;
 }
 
 export default function AccountOverview() {

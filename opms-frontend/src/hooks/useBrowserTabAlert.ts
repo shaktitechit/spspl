@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useGetCompanyInfoQuery } from "@/store/api";
 
 export type BrowserTabAlertOptions = {
   /** Number of pending items; tab badge shows when > 0. */
@@ -14,18 +15,15 @@ export type BrowserTabAlertOptions = {
 };
 
 const DEFAULT_BASE_TITLE =
-  (typeof process !== "undefined" &&
-    process.env.NEXT_PUBLIC_COMPANY_NAME?.trim()) ||
-  "OPMS";
+  typeof process !== "undefined" && process.env.NEXT_PUBLIC_COMPANY_NAME?.trim()
+    ? `OPMS - ${process.env.NEXT_PUBLIC_COMPANY_NAME.trim()}`
+    : "OPMS";
 
 function formatAlertTitle(
   count: number,
   baseTitle: string,
-  alertLabel?: string,
+  _alertLabel?: string,
 ): string {
-  if (alertLabel) {
-    return `(${count}) ${alertLabel} | ${baseTitle}`;
-  }
   return `(${count}) ${baseTitle}`;
 }
 
@@ -34,24 +32,29 @@ function formatAlertTitle(
  */
 export function useBrowserTabAlert({
   count,
-  baseTitle = DEFAULT_BASE_TITLE,
+  baseTitle,
   alertLabel,
   enabled = true,
   onlyWhenHidden = false,
 }: BrowserTabAlertOptions) {
+  const { data: companyInfo } = useGetCompanyInfoQuery();
+  const companyName =
+    companyInfo?.trade_name?.trim() ||
+    companyInfo?.legal_name?.trim() ||
+    (typeof process !== "undefined" &&
+      process.env.NEXT_PUBLIC_COMPANY_NAME?.trim()) ||
+    "";
+  const resolvedBaseTitle =
+    baseTitle ?? (companyName ? `OPMS - ${companyName}` : DEFAULT_BASE_TITLE);
   const savedTitleRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof document === "undefined") return undefined;
 
-    if (savedTitleRef.current === null) {
-      const current = document.title.trim();
-      savedTitleRef.current =
-        current && current !== baseTitle ? current : baseTitle;
-    }
+    savedTitleRef.current = resolvedBaseTitle;
 
     const restoreTitle = () => {
-      document.title = savedTitleRef.current ?? baseTitle;
+      document.title = savedTitleRef.current ?? resolvedBaseTitle;
     };
 
     const applyTitle = () => {
@@ -59,9 +62,9 @@ export function useBrowserTabAlert({
         enabled && count > 0 && (!onlyWhenHidden || document.hidden);
 
       if (shouldAlert) {
-        document.title = formatAlertTitle(count, baseTitle, alertLabel);
+        document.title = formatAlertTitle(count, resolvedBaseTitle, alertLabel);
       } else {
-        document.title = baseTitle;
+        document.title = resolvedBaseTitle;
       }
     };
 
@@ -76,5 +79,5 @@ export function useBrowserTabAlert({
       document.removeEventListener("visibilitychange", applyTitle);
       restoreTitle();
     };
-  }, [count, baseTitle, alertLabel, enabled, onlyWhenHidden]);
+  }, [count, resolvedBaseTitle, alertLabel, enabled, onlyWhenHidden]);
 }

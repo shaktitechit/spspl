@@ -39,7 +39,6 @@ export type BuildQuotationPdfInput = {
   company?: QuotationCompanyInfo;
   portalLabel?: string;
   downloadedBy?: string;
-  documentType?: "quotation" | "proforma";
 };
 
 // Brand Color Palette (RGB)
@@ -642,11 +641,10 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
     currentY += 4;
   };
 
-  // Helper: Draw Quotation / Proforma Title & Ref Bar
+  // Helper: Draw Quotation Title & Ref Bar
   const drawTitleBar = () => {
-    const isProforma = input.documentType === "proforma";
-    const docTitle = isProforma ? "PROFORMA INVOICE" : "QUOTATION";
-    const refLabel = isProforma ? "PI Ref. No. :" : "Ref. No. :";
+    const docTitle = "QUOTATION";
+    const refLabel = "Ref. No. :";
 
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(11);

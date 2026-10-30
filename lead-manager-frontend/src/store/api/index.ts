@@ -6,6 +6,7 @@ export * from "./slices/quotationsApi";
 export * from "./slices/leadQuotationsApi";
 export * from "./slices/termsAndConditionsApi";
 export * from "./slices/partiesApi";
+export * from "./slices/partyProductsApi";
 export * from "./slices/productsApi";
 export * from "./slices/usersApi";
 export * from "./slices/companyInfoApi";

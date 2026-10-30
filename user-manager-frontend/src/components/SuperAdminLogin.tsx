@@ -62,9 +62,16 @@ export function SuperAdminLogin({
               }
               link.href = resolveAssetUrl(logoOrFavicon);
             }
-            const companyName = info.trade_name || info.legal_name;
-            if (companyName && typeof document !== "undefined") {
-              document.title = `${companyName} - Super Admin Sign In`;
+            const companyName = (
+              info.trade_name ||
+              info.legal_name ||
+              process.env.NEXT_PUBLIC_COMPANY_NAME ||
+              ""
+            ).trim();
+            if (typeof document !== "undefined") {
+              document.title = companyName
+                ? `User Manager - ${companyName}`
+                : "User Manager";
             }
           }
         }

@@ -124,10 +124,6 @@ export default function DispatchOverview() {
       duration: 8_000,
     });
 
-    if (typeof document !== "undefined") {
-      document.title = `(${count}) Dispatch Overview`;
-    }
-
     await showLocalNotification({
       title,
       body,
@@ -161,9 +157,6 @@ export default function DispatchOverview() {
   // Alert immediately when pending exists, then every 5 minutes while overview stays open.
   useEffect(() => {
     if (!hasPendingTransport) {
-      if (typeof document !== "undefined" && document.title.startsWith("(")) {
-        document.title = "Dispatch Overview";
-      }
       return;
     }
 
@@ -185,9 +178,6 @@ export default function DispatchOverview() {
       cancelled = true;
       window.clearTimeout(first);
       window.clearInterval(id);
-      if (typeof document !== "undefined" && document.title.startsWith("(")) {
-        document.title = "Dispatch Overview";
-      }
     };
   }, [hasPendingTransport]);
 

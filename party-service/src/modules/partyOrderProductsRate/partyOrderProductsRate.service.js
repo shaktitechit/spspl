@@ -199,13 +199,22 @@ async function checkOrderRates(orderId) {
 
 async function createMappingAndRate(body, user) {
   const { PartyProductMapping, PartyProductRate, Order } = getModels();
-  const { orderId, productId, applied_rate_type, rate } = body;
-  
-  const order = await Order.findById(orderId).lean();
-  if (!order) throw new ApiError(404, 'Order not found');
-  
-  const partyId = order.party;
-  if (!partyId) throw new ApiError(400, 'Order has no party');
+  const orderId = body.orderId || body.order_id;
+  const productId = body.productId || body.product;
+  const applied_rate_type = body.applied_rate_type || body.rate_type || 'SR';
+  const rate = body.rate;
+
+  let partyId = body.party || body.partyId || body.party_id || null;
+  if (orderId) {
+    const order = await Order.findById(orderId).lean();
+    if (!order && !partyId) throw new ApiError(404, 'Order not found');
+    if (order && order.party) {
+      partyId = order.party;
+    }
+  }
+
+  if (!partyId) throw new ApiError(400, 'Party is required to map product rate');
+  if (!productId) throw new ApiError(400, 'Product is required to map product rate');
   
   // Prefer the most recently updated mapping when duplicates exist
   let mappingDoc = await PartyProductMapping.findOne({
@@ -231,7 +240,7 @@ async function createMappingAndRate(body, user) {
       is_orderable: true,
       priority: 100,
       expected_order_quantity: 0,
-      remarks: 'Auto-mapped from order review detail screen'
+      remarks: body.remarks || 'Auto-mapped from order review detail screen'
     };
     if (user) {
       mappingPayload.created_by = user._id;
@@ -270,12 +279,16 @@ async function createMappingAndRate(body, user) {
   if (isNaN(parsedRate) || parsedRate < 0) {
     throw new ApiError(400, 'Invalid rate value');
   }
+
+  const validStart = body.validity_start ? new Date(body.validity_start) : new Date();
+  const validEnd = body.validity_end ? new Date(body.validity_end) : new Date('2099-12-31');
   
   if (rateDoc) {
     // Update rate
     rateDoc.rate = parsedRate;
-    rateDoc.validity_start = new Date();
-    rateDoc.validity_end = new Date('2099-12-31');
+    rateDoc.validity_start = validStart;
+    rateDoc.validity_end = validEnd;
+    if (body.remarks) rateDoc.remarks = String(body.remarks).trim();
     if (user) {
       rateDoc.updated_by = user._id;
     }
@@ -288,14 +301,14 @@ async function createMappingAndRate(body, user) {
       product: productId,
       rate_type: lookupRateType,
       rate: parsedRate,
-      min_qty: 1,
-      max_qty: 999999,
-      validity_start: new Date(),
-      validity_end: new Date('2099-12-31'),
-      priority: 100,
+      min_qty: body.min_qty ? Number(body.min_qty) : 1,
+      max_qty: body.max_qty ? Number(body.max_qty) : 999999,
+      validity_start: validStart,
+      validity_end: validEnd,
+      priority: body.priority ? Number(body.priority) : 100,
       approval_required: false,
       status: 'active',
-      remarks: 'Auto-created rate from order review detail screen'
+      remarks: body.remarks || 'Auto-created rate from order review detail screen'
     };
     if (user) {
       ratePayload.created_by = user._id;
@@ -306,7 +319,8 @@ async function createMappingAndRate(body, user) {
   return {
     mappingId: mappingDoc._id,
     rateId: rateDoc._id,
-    rate: rateDoc.rate
+    rate: rateDoc.rate,
+    rateDoc,
   };
 }
 

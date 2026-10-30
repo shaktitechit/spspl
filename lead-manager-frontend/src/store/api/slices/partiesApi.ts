@@ -3,32 +3,71 @@ import { unwrapEnvelope, type ApiEnvelope } from "../unwrap";
 import { PARTY_SERVICE_URL } from "@/lib/env";
 
 export type PartyCountryRecord = {
-  _id?: string;
+  _id: string;
   id?: string;
   name: string;
   iso_code?: string;
   phone_code?: string;
   currency?: string;
+  description?: string;
   status?: string;
+  is_active?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type PartyStateRecord = {
-  _id?: string;
+  _id: string;
   id?: string;
-  country: string;
+  country: string | PartyCountryRecord;
   name: string;
   state_code?: string;
+  description?: string;
   status?: string;
+  is_active?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type PartyCityRecord = {
-  _id?: string;
+  _id: string;
   id?: string;
-  state: string;
+  state: string | PartyStateRecord;
   country?: string;
   name: string;
   district?: string;
+  description?: string;
   status?: string;
+  is_active?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type ZoneRecord = {
+  _id: string;
+  name: string;
+  description?: string;
+  is_active: boolean;
+  parties?: any[];
+  sales_persons?: any[];
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type PartyShippingAddress = {
+  _id?: string;
+  id?: string;
+  label?: string;
+  recipient_name?: string;
+  phone?: string;
+  gst_no?: string;
+  address_line_1?: string;
+  address_line_2?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  country?: string;
+  is_default?: boolean;
 };
 
 /** Common write fields for create/patch/bulk party payloads. */
@@ -43,13 +82,15 @@ export type PartyWriteBody = {
   drug_license_no?: string;
   billing_address?: Record<string, unknown>;
   shipping_address?: Record<string, unknown>;
+  shipping_addresses?: PartyShippingAddress[];
   district?: string;
   state?: string;
   city?: string;
   country?: string;
-  country_id?: string;
-  state_id?: string;
-  city_id?: string;
+  country_id?: string | null;
+  state_id?: string | null;
+  city_id?: string | null;
+  zone_id?: string | null;
   payment_terms?: string;
   is_active?: boolean;
   is_featured?: boolean;
@@ -216,6 +257,215 @@ export const partiesApi = medicaApi.injectEndpoints({
       },
       providesTags: [{ type: "Parties", id: "CITIES" }],
     }),
+    listPartyCountries: build.query<
+      { data: PartyCountryRecord[]; total: number; page: number; limit: number; pages: number },
+      Record<string, string | number | undefined> | void
+    >({
+      query: (params) => ({
+        url: `${PARTY_SERVICE_URL}/api/party-countries`,
+        params: params ?? {},
+      }),
+      transformResponse: (raw: ApiEnvelope<any>) => unwrapEnvelope(raw),
+      providesTags: [
+        { type: "PartyCountries", id: "LIST" },
+        { type: "Parties", id: "COUNTRIES" },
+      ],
+    }),
+    getPartyCountry: build.query<PartyCountryRecord, string>({
+      query: (id) => `${PARTY_SERVICE_URL}/api/party-countries/${id}`,
+      transformResponse: (raw: ApiEnvelope<PartyCountryRecord>) =>
+        unwrapEnvelope(raw) as PartyCountryRecord,
+      providesTags: (_r, _e, id) => [{ type: "PartyCountries", id }],
+    }),
+    createPartyCountry: build.mutation<PartyCountryRecord, Partial<PartyCountryRecord>>({
+      query: (body) => ({
+        url: `${PARTY_SERVICE_URL}/api/party-countries`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (raw: ApiEnvelope<PartyCountryRecord>) =>
+        unwrapEnvelope(raw) as PartyCountryRecord,
+      invalidatesTags: [
+        { type: "PartyCountries", id: "LIST" },
+        { type: "Parties", id: "COUNTRIES" },
+      ],
+    }),
+    patchPartyCountry: build.mutation<
+      PartyCountryRecord,
+      { id: string; patch: Partial<PartyCountryRecord> }
+    >({
+      query: ({ id, patch }) => ({
+        url: `${PARTY_SERVICE_URL}/api/party-countries/${id}`,
+        method: "PATCH",
+        body: patch,
+      }),
+      transformResponse: (raw: ApiEnvelope<PartyCountryRecord>) =>
+        unwrapEnvelope(raw) as PartyCountryRecord,
+      invalidatesTags: (_r, _e, arg) => [
+        "PartyCountries",
+        { type: "PartyCountries", id: arg.id },
+        { type: "PartyCountries", id: "LIST" },
+        { type: "Parties", id: "COUNTRIES" },
+      ],
+    }),
+    deletePartyCountry: build.mutation<{ success: boolean }, string>({
+      query: (id) => ({
+        url: `${PARTY_SERVICE_URL}/api/party-countries/${id}`,
+        method: "DELETE",
+      }),
+      transformResponse: (raw: ApiEnvelope<any>) => unwrapEnvelope(raw),
+      invalidatesTags: (_r, _e, id) => [
+        "PartyCountries",
+        { type: "PartyCountries", id },
+        { type: "PartyCountries", id: "LIST" },
+        { type: "Parties", id: "COUNTRIES" },
+      ],
+    }),
+    listPartyStates: build.query<
+      { data: PartyStateRecord[]; total: number; page: number; limit: number; pages: number },
+      Record<string, string | number | undefined> | void
+    >({
+      query: (params) => ({
+        url: `${PARTY_SERVICE_URL}/api/party-states`,
+        params: params ?? {},
+      }),
+      transformResponse: (raw: ApiEnvelope<any>) => unwrapEnvelope(raw),
+      providesTags: [
+        { type: "PartyStates", id: "LIST" },
+        { type: "Parties", id: "STATES" },
+      ],
+    }),
+    getPartyState: build.query<PartyStateRecord, string>({
+      query: (id) => `${PARTY_SERVICE_URL}/api/party-states/${id}`,
+      transformResponse: (raw: ApiEnvelope<PartyStateRecord>) =>
+        unwrapEnvelope(raw) as PartyStateRecord,
+      providesTags: (_r, _e, id) => [{ type: "PartyStates", id }],
+    }),
+    createPartyState: build.mutation<
+      PartyStateRecord,
+      Partial<PartyStateRecord> & { country: string }
+    >({
+      query: (body) => ({
+        url: `${PARTY_SERVICE_URL}/api/party-states`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (raw: ApiEnvelope<PartyStateRecord>) =>
+        unwrapEnvelope(raw) as PartyStateRecord,
+      invalidatesTags: [
+        { type: "PartyStates", id: "LIST" },
+        { type: "Parties", id: "STATES" },
+      ],
+    }),
+    patchPartyState: build.mutation<
+      PartyStateRecord,
+      { id: string; patch: Partial<PartyStateRecord> & { country?: string } }
+    >({
+      query: ({ id, patch }) => ({
+        url: `${PARTY_SERVICE_URL}/api/party-states/${id}`,
+        method: "PATCH",
+        body: patch,
+      }),
+      transformResponse: (raw: ApiEnvelope<PartyStateRecord>) =>
+        unwrapEnvelope(raw) as PartyStateRecord,
+      invalidatesTags: (_r, _e, arg) => [
+        "PartyStates",
+        { type: "PartyStates", id: arg.id },
+        { type: "PartyStates", id: "LIST" },
+        { type: "Parties", id: "STATES" },
+      ],
+    }),
+    deletePartyState: build.mutation<{ success: boolean }, string>({
+      query: (id) => ({
+        url: `${PARTY_SERVICE_URL}/api/party-states/${id}`,
+        method: "DELETE",
+      }),
+      transformResponse: (raw: ApiEnvelope<any>) => unwrapEnvelope(raw),
+      invalidatesTags: (_r, _e, id) => [
+        "PartyStates",
+        { type: "PartyStates", id },
+        { type: "PartyStates", id: "LIST" },
+        { type: "Parties", id: "STATES" },
+      ],
+    }),
+    listPartyCities: build.query<
+      { data: PartyCityRecord[]; total: number; page: number; limit: number; pages: number },
+      Record<string, string | number | undefined> | void
+    >({
+      query: (params) => ({
+        url: `${PARTY_SERVICE_URL}/api/party-cities`,
+        params: params ?? {},
+      }),
+      transformResponse: (raw: ApiEnvelope<any>) => unwrapEnvelope(raw),
+      providesTags: [
+        { type: "PartyCities", id: "LIST" },
+        { type: "Parties", id: "CITIES" },
+      ],
+    }),
+    getPartyCity: build.query<PartyCityRecord, string>({
+      query: (id) => `${PARTY_SERVICE_URL}/api/party-cities/${id}`,
+      transformResponse: (raw: ApiEnvelope<PartyCityRecord>) =>
+        unwrapEnvelope(raw) as PartyCityRecord,
+      providesTags: (_r, _e, id) => [{ type: "PartyCities", id }],
+    }),
+    createPartyCity: build.mutation<
+      PartyCityRecord,
+      Partial<PartyCityRecord> & { state: string }
+    >({
+      query: (body) => ({
+        url: `${PARTY_SERVICE_URL}/api/party-cities`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: (raw: ApiEnvelope<PartyCityRecord>) =>
+        unwrapEnvelope(raw) as PartyCityRecord,
+      invalidatesTags: [
+        { type: "PartyCities", id: "LIST" },
+        { type: "Parties", id: "CITIES" },
+      ],
+    }),
+    patchPartyCity: build.mutation<
+      PartyCityRecord,
+      { id: string; patch: Partial<PartyCityRecord> & { state?: string } }
+    >({
+      query: ({ id, patch }) => ({
+        url: `${PARTY_SERVICE_URL}/api/party-cities/${id}`,
+        method: "PATCH",
+        body: patch,
+      }),
+      transformResponse: (raw: ApiEnvelope<PartyCityRecord>) =>
+        unwrapEnvelope(raw) as PartyCityRecord,
+      invalidatesTags: (_r, _e, arg) => [
+        "PartyCities",
+        { type: "PartyCities", id: arg.id },
+        { type: "PartyCities", id: "LIST" },
+        { type: "Parties", id: "CITIES" },
+      ],
+    }),
+    deletePartyCity: build.mutation<{ success: boolean }, string>({
+      query: (id) => ({
+        url: `${PARTY_SERVICE_URL}/api/party-cities/${id}`,
+        method: "DELETE",
+      }),
+      transformResponse: (raw: ApiEnvelope<any>) => unwrapEnvelope(raw),
+      invalidatesTags: (_r, _e, id) => [
+        "PartyCities",
+        { type: "PartyCities", id },
+        { type: "PartyCities", id: "LIST" },
+        { type: "Parties", id: "CITIES" },
+      ],
+    }),
+    listZones: build.query<
+      { data: ZoneRecord[]; total: number; page: number; limit: number; pages: number },
+      Record<string, string | number | undefined> | void
+    >({
+      query: (params) => ({
+        url: `${PARTY_SERVICE_URL}/api/zones`,
+        params: params ?? {},
+      }),
+      transformResponse: (raw: ApiEnvelope<any>) => unwrapEnvelope(raw),
+      providesTags: [{ type: "Zones", id: "LIST" }],
+    }),
   }),
 });
 
@@ -238,6 +488,26 @@ export const {
   useLazyGetPartyStatesQuery,
   useGetPartyCitiesQuery,
   useLazyGetPartyCitiesQuery,
+  useListPartyCountriesQuery,
+  useLazyListPartyCountriesQuery,
+  useGetPartyCountryQuery,
+  useCreatePartyCountryMutation,
+  usePatchPartyCountryMutation,
+  useDeletePartyCountryMutation,
+  useListPartyStatesQuery,
+  useLazyListPartyStatesQuery,
+  useGetPartyStateQuery,
+  useCreatePartyStateMutation,
+  usePatchPartyStateMutation,
+  useDeletePartyStateMutation,
+  useListPartyCitiesQuery,
+  useLazyListPartyCitiesQuery,
+  useGetPartyCityQuery,
+  useCreatePartyCityMutation,
+  usePatchPartyCityMutation,
+  useDeletePartyCityMutation,
+  useListZonesQuery,
+  useLazyListZonesQuery,
 } = partiesApi;
 
 export const useGetPartiesQuery = useListPartiesQuery;

@@ -69,9 +69,16 @@ export default function LoginPage() {
           link.href = resolvePublicAssetUrl(faviconUrl);
         }
 
-        const companyName = info.trade_name || info.legal_name;
-        if (companyName) {
-          document.title = `${companyName} - Lead Manager Sign In`;
+        const companyName = (
+          info.trade_name ||
+          info.legal_name ||
+          process.env.NEXT_PUBLIC_COMPANY_NAME ||
+          ""
+        ).trim();
+        if (typeof document !== "undefined") {
+          document.title = companyName
+            ? `Lead Manager - ${companyName}`
+            : "Lead Manager";
         }
       } catch {
         /* keep defaults */

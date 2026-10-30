@@ -119,10 +119,6 @@ export default function FinanceOverview() {
       duration: 8_000,
     });
 
-    if (typeof document !== "undefined") {
-      document.title = `(${count}) Finance Overview`;
-    }
-
     await showLocalNotification({
       title,
       body,
@@ -156,9 +152,6 @@ export default function FinanceOverview() {
   // Alert immediately when pending exists, then every 5 minutes while overview stays open.
   useEffect(() => {
     if (!hasPendingFinance) {
-      if (typeof document !== "undefined" && document.title.startsWith("(")) {
-        document.title = "Finance Overview";
-      }
       return;
     }
 
@@ -177,9 +170,6 @@ export default function FinanceOverview() {
       cancelled = true;
       window.clearTimeout(first);
       window.clearInterval(id);
-      if (typeof document !== "undefined" && document.title.startsWith("(")) {
-        document.title = "Finance Overview";
-      }
     };
   }, [hasPendingFinance]);
 

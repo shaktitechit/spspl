@@ -199,13 +199,22 @@ async function checkOrderRates(orderId) {
 
 async function createMappingAndRate(body, user) {
   const { PartyProductMapping, PartyProductRate, Order } = getModels();
-  const { orderId, productId, applied_rate_type, rate } = body;
-  
-  const order = await Order.findById(orderId).lean();
-  if (!order) throw new ApiError(404, 'Order not found');
-  
-  const partyId = order.party;
-  if (!partyId) throw new ApiError(400, 'Order has no party');
+  const orderId = body.orderId || body.order_id;
+  const productId = body.productId || body.product;
+  const applied_rate_type = body.applied_rate_type || body.rate_type || 'SR';
+  const rate = body.rate;
+
+  let partyId = body.party || body.partyId || body.party_id || null;
+  if (orderId) {
+    const order = await Order.findById(orderId).lean();
+    if (!order && !partyId) throw new ApiError(404, 'Order not found');
+    if (order && order.party) {
+      partyId = order.party;
+    }
+  }
+
+  if (!partyId) throw new ApiError(400, 'Party is required to map product rate');
+  if (!productId) throw new ApiError(400, 'Product is required to map product rate');
   
   // Prefer the most recently updated mapping when duplicates exist
   let mappingDoc = await PartyProductMapping.findOne({

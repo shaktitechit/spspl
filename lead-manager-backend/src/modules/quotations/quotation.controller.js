@@ -228,3 +228,24 @@ exports.triggerAutoExpiry = asyncHandler(async (req, res) => {
   });
 });
 
+exports.listPartyOrders = asyncHandler(async (req, res) => {
+  const data = await quotationService.listPartyOrders(req.query, req.user);
+  res.json({
+    success: true,
+    data,
+  });
+});
+
+exports.saveConvertedOrderPerforma = asyncHandler(async (req, res) => {
+  const data = await quotationService.saveConvertedOrderPerforma(
+    req.params.orderId,
+    req.body,
+    req.user
+  );
+  res.json({
+    success: true,
+    message: 'Order performa updated successfully',
+    data,
+  });
+});
+

@@ -1713,7 +1713,7 @@ function registerModels() {
       },
   
       entity_id: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.Mixed,
         required: true,
         index: true,
       },

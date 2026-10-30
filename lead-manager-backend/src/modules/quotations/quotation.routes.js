@@ -29,6 +29,8 @@ router.get('/reports/funnel', allSalesRoles, reportsController.getConversionFunn
 
 router.get('/default-terms', allSalesRoles, controller.getDefaultTerms);
 router.get('/dashboard-stats', allSalesRoles, controller.getDashboardStats);
+router.get('/party-orders', allSalesRoles, controller.listPartyOrders);
+router.put('/orders/:orderId/performa', allSalesRoles, controller.saveConvertedOrderPerforma);
 router.post('/auto-expire', elevatedRoles, controller.triggerAutoExpiry);
 router.get('/', allSalesRoles, controller.list);
 router.post('/', elevatedRoles, controller.create);

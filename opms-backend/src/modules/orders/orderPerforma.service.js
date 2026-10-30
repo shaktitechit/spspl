@@ -33,28 +33,33 @@ function toPlain(doc) {
 }
 
 async function findPerformaAttachments(orderId, partyId) {
-  const { Attachment } = getModels();
+  const { Attachment, OrderPerforma } = getModels();
+  const mongoose = require('mongoose');
   if (!Attachment) {
     return { poDocument: null, costSheetDocument: null, kycDocuments: [] };
   }
 
+  const idQuery = mongoose.Types.ObjectId.isValid(orderId)
+    ? { $in: [new mongoose.Types.ObjectId(orderId), String(orderId)] }
+    : orderId;
+
   const orderAttachments = await Attachment.find({
     entity_type: 'order',
-    entity_id: orderId,
+    entity_id: idQuery,
     deletedAt: null,
   })
     .populate('uploaded_by', 'name username email department')
     .sort({ createdAt: -1 })
     .lean();
 
-  const poDocument = orderAttachments.find(att => {
+  let poDocument = orderAttachments.find(att => {
     const cat = String(att.category || '').toLowerCase();
     const rem = String(att.remarks || '').toLowerCase();
     const fn = String(att.original_name || att.file_name || '').toLowerCase();
     return cat === 'po' || rem.startsWith('[po]') || fn.startsWith('po_') || fn.includes('purchase_order');
   }) || null;
 
-  const costSheetDocument = orderAttachments.find(att => {
+  let costSheetDocument = orderAttachments.find(att => {
     const cat = String(att.category || '').toLowerCase();
     const rem = String(att.remarks || '').toLowerCase();
     const fn = String(att.original_name || att.file_name || '').toLowerCase();
@@ -95,9 +100,13 @@ async function findPerformaAttachments(orderId, partyId) {
 
   let partyKyc = [];
   if (partyId) {
+    const partyIdQuery = mongoose.Types.ObjectId.isValid(partyId)
+      ? { $in: [new mongoose.Types.ObjectId(partyId), String(partyId)] }
+      : partyId;
+
     partyKyc = await Attachment.find({
       entity_type: { $in: ['party', 'customer'] },
-      entity_id: partyId,
+      entity_id: partyIdQuery,
       deletedAt: null,
     })
       .populate('uploaded_by', 'name username email department')
@@ -116,7 +125,7 @@ async function findPerformaAttachments(orderId, partyId) {
   }
 
   // Strictly separate Aadhaar, PAN, and GST documents
-  const aadhaarDocument = allKyc.find(att => {
+  let aadhaarDocument = allKyc.find(att => {
     const cat = String(att.category || '').toLowerCase();
     const rem = String(att.remarks || '').toLowerCase();
     const fn = String(att.original_name || att.file_name || '').toLowerCase();
@@ -131,7 +140,7 @@ async function findPerformaAttachments(orderId, partyId) {
     );
   }) || null;
 
-  const panDocument = allKyc.find(att => {
+  let panDocument = allKyc.find(att => {
     const cat = String(att.category || '').toLowerCase();
     const rem = String(att.remarks || '').toLowerCase();
     const fn = String(att.original_name || att.file_name || '').toLowerCase();
@@ -143,7 +152,7 @@ async function findPerformaAttachments(orderId, partyId) {
     );
   }) || null;
 
-  const gstDocument = allKyc.find(att => {
+  let gstDocument = allKyc.find(att => {
     const cat = String(att.category || '').toLowerCase();
     const rem = String(att.remarks || '').toLowerCase();
     const fn = String(att.original_name || att.file_name || '').toLowerCase();
@@ -155,6 +164,47 @@ async function findPerformaAttachments(orderId, partyId) {
       fn.includes('gst')
     );
   }) || null;
+
+  // Direct reference lookup fallback if OrderPerforma already has attachment IDs
+  if (OrderPerforma && (!poDocument || !costSheetDocument || !aadhaarDocument || !panDocument || !gstDocument)) {
+    try {
+      const perfDoc = await OrderPerforma.findOne({ order: orderId, deletedAt: null }).lean();
+      if (perfDoc) {
+        if (!poDocument && perfDoc.po_attachment) {
+          const directAtt = await Attachment.findOne({ _id: perfDoc.po_attachment, deletedAt: null })
+            .populate('uploaded_by', 'name username email department')
+            .lean();
+          if (directAtt) poDocument = ensureViewUrl(directAtt);
+        }
+        if (!costSheetDocument && perfDoc.cost_sheet_attachment) {
+          const directAtt = await Attachment.findOne({ _id: perfDoc.cost_sheet_attachment, deletedAt: null })
+            .populate('uploaded_by', 'name username email department')
+            .lean();
+          if (directAtt) costSheetDocument = ensureViewUrl(directAtt);
+        }
+        if (!aadhaarDocument && perfDoc.aadhaar_attachment) {
+          const directAtt = await Attachment.findOne({ _id: perfDoc.aadhaar_attachment, deletedAt: null })
+            .populate('uploaded_by', 'name username email department')
+            .lean();
+          if (directAtt) aadhaarDocument = ensureViewUrl(directAtt);
+        }
+        if (!panDocument && perfDoc.pan_attachment) {
+          const directAtt = await Attachment.findOne({ _id: perfDoc.pan_attachment, deletedAt: null })
+            .populate('uploaded_by', 'name username email department')
+            .lean();
+          if (directAtt) panDocument = ensureViewUrl(directAtt);
+        }
+        if (!gstDocument && perfDoc.gst_attachment) {
+          const directAtt = await Attachment.findOne({ _id: perfDoc.gst_attachment, deletedAt: null })
+            .populate('uploaded_by', 'name username email department')
+            .lean();
+          if (directAtt) gstDocument = ensureViewUrl(directAtt);
+        }
+      }
+    } catch (_refErr) {
+      // Non-blocking
+    }
+  }
 
   return {
     poDocument: poDocument ? ensureViewUrl(poDocument) : null,

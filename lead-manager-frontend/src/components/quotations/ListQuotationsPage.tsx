@@ -1474,7 +1474,7 @@ export function ListQuotationsPage({
                   Mark Quotation as Accepted?
                 </h3>
                 <p className="mt-1 text-xs text-muted">
-                  This confirms customer agreement for Quotation #{acceptTarget.quotation_no}. It enables order conversion and proforma invoicing.
+                  This confirms customer agreement for Quotation #{acceptTarget.quotation_no}. It enables order conversion.
                 </p>
 
                 <div className="mt-3.5 rounded-xl border border-teal-500/20 bg-teal-500/5 p-3 text-xs space-y-1.5">

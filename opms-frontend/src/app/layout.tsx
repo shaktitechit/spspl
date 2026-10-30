@@ -10,7 +10,9 @@ import { StoreProvider } from "@/store";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: process.env.NEXT_PUBLIC_COMPANY_NAME?.trim() || "OPMS",
+  title: process.env.NEXT_PUBLIC_COMPANY_NAME?.trim()
+    ? `OPMS - ${process.env.NEXT_PUBLIC_COMPANY_NAME.trim()}`
+    : "OPMS",
   description: "Order & Operations Management Portal",
   icons: {
     icon: process.env.NEXT_PUBLIC_COMPANY_FAVICON_URL?.trim() || "/favicon.svg",

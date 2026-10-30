@@ -447,21 +447,15 @@ export function CompanyBrandingSync() {
       link.href = faviconUrl;
     });
 
-    // 3. Update document title prefix if company brand name is set
+    // 3. Update document title with "OPMS - <Company Name>"
     const companyName =
-      companyInfo?.trade_name?.trim() || companyInfo?.legal_name?.trim();
-    if (companyName && !document.title.includes(companyName)) {
-      const currentTitle = document.title;
-      const envName = process.env.NEXT_PUBLIC_COMPANY_NAME?.trim() || "";
-      if (
-        !currentTitle ||
-        currentTitle === "OPMS" ||
-        currentTitle === envName ||
-        currentTitle === "Order & Operations Management Portal"
-      ) {
-        document.title = companyName;
-      }
-    }
+      companyInfo?.trade_name?.trim() ||
+      companyInfo?.legal_name?.trim() ||
+      process.env.NEXT_PUBLIC_COMPANY_NAME?.trim() ||
+      "";
+    const baseTitle = companyName ? `OPMS - ${companyName}` : "OPMS";
+    const badgeMatch = document.title.match(/^(\([^)]+\)\s*)/);
+    document.title = badgeMatch ? `${badgeMatch[1]}${baseTitle}` : baseTitle;
   }, [companyInfo]);
 
   return null;

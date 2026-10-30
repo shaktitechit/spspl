@@ -1982,7 +1982,7 @@ async function getDashboardStats(query = {}, user) {
  * Convert quotation into a Customer (Party) + Order.
  */
 async function convert(id, body = {}, user) {
-  const { LeadQuotation, Lead, Party, Order, Product } = getModels();
+  const { LeadQuotation, Lead, Party, Order, OrderPerforma, OrderApproval, Product } = getModels();
   const quotation = await LeadQuotation.findOne({ _id: id, deletedAt: null }).populate('lead');
   if (!quotation) throw new ApiError(404, 'Quotation not found');
 
@@ -2198,10 +2198,22 @@ async function convert(id, body = {}, user) {
         product: productId,
         product_name: pName,
         sku: pDoc?.sku || prodItem.sku || undefined,
+        brand: prodItem.brand || pDoc?.brand || undefined,
+        manufacturer: prodItem.manufacturer || pDoc?.manufacturer || undefined,
+        product_group: prodItem.product_group || pDoc?.product_group || undefined,
+        product_subgroup: prodItem.product_subgroup || pDoc?.product_subgroup || undefined,
         unit: pDoc?.unit || prodItem.unit || 'pcs',
         ordered_quantity: qty,
+        approved_quantity: qty,
+        free_quantity: Math.max(0, Number(prodItem.free_quantity ?? prodItem.free_qty ?? 0) || 0),
         unit_price: unitPrice,
         applied_rate_type: rateType,
+        pricing_reference: prodItem.pricing_reference || undefined,
+        pricing_validity_start: prodItem.pricing_validity_start ? new Date(prodItem.pricing_validity_start) : undefined,
+        pricing_validity_end: prodItem.pricing_validity_end ? new Date(prodItem.pricing_validity_end) : undefined,
+        manual_price_override: Boolean(prodItem.manual_price_override),
+        approval_required: Boolean(prodItem.approval_required),
+        approval_reason: prodItem.approval_reason || undefined,
         discount_percent: discPct,
         discount_amount: discAmt,
         gst_percent: gstPct,
@@ -2227,8 +2239,30 @@ async function convert(id, body = {}, user) {
   const advanceAmount = Number(orderData.advance_amount ?? body.advance_amount ?? quotation.advance_amount ?? 0) || 0;
   const paymentMode = String(orderData.payment_mode || body.payment_mode || quotation.payment_mode || '').trim();
   const paymentReference = String(orderData.payment_reference || body.payment_reference || quotation.payment_reference || '').trim();
-  const rawDeliveryDate = orderData.delivery_date || pDetails.dispatch_date || quotation.valid_until;
+  const rawDeliveryDate = orderData.expected_delivery_date || orderData.delivery_date || pDetails.dispatch_date || quotation.valid_until;
   const expectedDeliveryDate = rawDeliveryDate ? new Date(rawDeliveryDate) : undefined;
+
+  const billingAddress = body.billing_address || existingParty?.billing_address || {
+    address_line_1: quotation.address?.address_line_1 || '',
+    city: quotation.address?.city || '',
+    state: quotation.address?.state || '',
+    pincode: quotation.address?.pincode || '',
+    country: quotation.address?.country || 'India',
+  };
+  const shippingAddress = body.shipping_address || existingParty?.shipping_address || billingAddress;
+
+  if (body.save_shipping_to_party === true && shippingAddress && targetPartyId) {
+    try {
+      await Party.updateOne(
+        { _id: targetPartyId },
+        { $push: { shipping_addresses: { ...shippingAddress, is_default: false } } }
+      );
+    } catch (_e) {
+      // ignore non-critical shipping address save error
+    }
+  }
+
+  const assignedSalesUserId = orderData.assigned_sales_user || body.assigned_sales_user || quotation.sales_person_user || quotation.created_by || user._id;
 
   createdOrder = await Order.create({
     company_id: user.company_id,
@@ -2244,10 +2278,12 @@ async function convert(id, body = {}, user) {
     customer: targetPartyId,
     lead: quotation.lead?._id || quotation.lead || undefined,
     quotation: quotation._id,
-    assigned_sales_user: orderData.assigned_sales_user || body.assigned_sales_user || quotation.sales_person_user || quotation.created_by || user._id,
-    current_assignee: orderData.assigned_sales_user || body.assigned_sales_user || quotation.sales_person_user || quotation.created_by || user._id,
-    current_department: 'sales',
-    pending_with_role: 'sales',
+    billing_address: billingAddress,
+    shipping_address: shippingAddress,
+    assigned_sales_user: assignedSalesUserId,
+    current_assignee: assignedSalesUserId,
+    current_department: 'admin',
+    pending_with_role: 'admin',
     order_items: items,
     subtotal: grossSubtotal,
     discount_amount: totalDiscount,
@@ -2257,11 +2293,109 @@ async function convert(id, body = {}, user) {
     grand_total: grandTotal,
     remarks: orderData.remarks || body.notes || quotation.subject || undefined,
     status: 'submitted',
-    lifecycle_status: 'draft',
-    workflow_stage: 'sales',
+    lifecycle_status: 'active',
+    workflow_stage: 'admin_review',
+    process_stage: 'pending_admin_approval',
     current_action: 'submitted',
+    admin_approval_status: 'pending',
+    finance_approval_status: 'pending',
+    account_approval_status: 'pending',
+    allocation_status: 'pending',
+    dispatch_status: 'pending',
+    delivery_status: 'pending',
     created_by: user._id,
+    updated_by: user._id,
   });
+
+  // Save OrderPerforma if performa data was provided
+  if (OrderPerforma) {
+    try {
+      const perfInput = body.performa && typeof body.performa === 'object' ? body.performa : {};
+      const performaDoc = await OrderPerforma.findOneAndUpdate(
+        { order: createdOrder._id, deletedAt: null },
+        {
+          $set: {
+            order: createdOrder._id,
+            order_no: createdOrder.order_no,
+            company_id: user.company_id || null,
+            sales_person: String(perfInput.sales_person || quotation.sales_person_name || user.name || '').trim(),
+            freight_charges: String(perfInput.freight_charges || 'Included').trim(),
+            orc: String(perfInput.orc || '').trim(),
+            transport: String(perfInput.transport || '').trim(),
+            dispatch_date: perfInput.dispatch_date ? new Date(perfInput.dispatch_date) : (expectedDeliveryDate || null),
+            ship_to_address: String(perfInput.ship_to_address || '').trim(),
+            payment_terms: String(perfInput.payment_terms || existingParty?.payment_terms || '30 days').trim(),
+            customer_type: String(perfInput.customer_type || 'Direct Customer').trim(),
+            installation_required: String(perfInput.installation_required || '').trim(),
+            gst_concession: String(perfInput.gst_concession || '').trim(),
+            margin_sheet_attached: String(perfInput.margin_sheet_attached || '').trim(),
+            kyc_status: String(perfInput.kyc_status || '').trim(),
+            remarks: String(perfInput.remarks || createdOrder.remarks || '').trim(),
+            updated_by: user._id,
+          },
+          $setOnInsert: { created_by: user._id },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      if (performaDoc) {
+        createdOrder.order_performa = performaDoc._id;
+        await createdOrder.save();
+      }
+    } catch (_perfErr) {
+      // Non-blocking
+    }
+  }
+
+  // Create initial OrderApproval snapshot so order appears in OPMS Admin Approval queue
+  if (OrderApproval) {
+    try {
+      const approvalItems = (createdOrder.order_items || []).map((line) => ({
+        order_item_id: line._id,
+        product: line.product,
+        ordered_quantity: Number(line.ordered_quantity || 1),
+        ordered_unit_price: Number(line.unit_price || 0),
+        ordered_total_amount: Number(line.total_amount || 0),
+        approved_quantity: Number(line.ordered_quantity || 1),
+        approved_unit_price: Number(line.unit_price || 0),
+        approved_total_amount: Number(line.total_amount || 0),
+        applied_rate_type: line.applied_rate_type || 'SR',
+        pricing_reference: line.pricing_reference || undefined,
+        manual_price_override: Boolean(line.manual_price_override),
+        rate_mapped: Boolean(line.pricing_reference),
+        discount_percent: Number(line.discount_percent || 0),
+        discount_amount: Number(line.discount_amount || 0),
+        gst_percent: Number(line.gst_percent || 0),
+        free_quantity: Number(line.free_quantity || 0),
+        remarks: line.remarks || '',
+      }));
+      const allMapped = approvalItems.every((it) => it.rate_mapped);
+      const approvalNo = `APR-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
+      const approvalDoc = await OrderApproval.create({
+        approval_no: approvalNo,
+        order: createdOrder._id,
+        revision_number: 1,
+        ordered_total_amount: grandTotal,
+        approved_total_amount: grandTotal,
+        rejected_total_amount: 0,
+        is_sales_submited: true,
+        sales_submitted_by: user._id,
+        sales_submitted_at: new Date(),
+        submitted_by_role: 'sales',
+        is_admin_approved: false,
+        rates_reviewed: allMapped,
+        all_rates_mapped: allMapped,
+        approval_notes: createdOrder.remarks || `Converted from Quotation #${quotation.quotation_no}`,
+        approval_items: approvalItems,
+        reviewed_by: user._id,
+        reviewed_at: new Date(),
+        created_by: user._id,
+      });
+      createdOrder.last_admin_approval = approvalDoc._id;
+      await createdOrder.save();
+    } catch (_aprErr) {
+      // Non-blocking
+    }
+  }
 
   await activityService.create({
     actor: user._id,
@@ -2691,6 +2825,77 @@ async function compareVersions(id, fromVersion, toVersion, user) {
   };
 }
 
+/**
+ * List orders for a party (used by PreviousPartyItemsModal during quotation conversion).
+ */
+async function listPartyOrders(query = {}) {
+  const { Order } = getModels();
+  const filter = { deletedAt: null };
+  if (query.party && mongoose.Types.ObjectId.isValid(query.party)) {
+    filter.party = query.party;
+  }
+  const orders = await Order.find(filter)
+    .sort({ order_date: -1, createdAt: -1 })
+    .limit(100)
+    .lean();
+  return orders;
+}
+
+/**
+ * Update OrderPerforma for a newly converted order (e.g. after uploading PO / Cost Sheet / KYC attachments).
+ */
+async function saveConvertedOrderPerforma(orderId, data = {}, user) {
+  const { Order, OrderPerforma } = getModels();
+  if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+    throw new ApiError(400, 'Invalid order ID');
+  }
+  const order = await Order.findOne({ _id: orderId, deletedAt: null });
+  if (!order) throw new ApiError(404, 'Order not found');
+
+  const updateFields = {};
+  if (data.sales_person !== undefined) updateFields.sales_person = String(data.sales_person || '').trim();
+  if (data.freight_charges !== undefined) updateFields.freight_charges = String(data.freight_charges || '').trim();
+  if (data.orc !== undefined) updateFields.orc = String(data.orc || '').trim();
+  if (data.transport !== undefined) updateFields.transport = String(data.transport || '').trim();
+  if (data.dispatch_date !== undefined) {
+    updateFields.dispatch_date = data.dispatch_date ? new Date(data.dispatch_date) : null;
+  }
+  if (data.ship_to_address !== undefined) updateFields.ship_to_address = String(data.ship_to_address || '').trim();
+  if (data.payment_terms !== undefined) updateFields.payment_terms = String(data.payment_terms || '').trim();
+  if (data.customer_type !== undefined) updateFields.customer_type = String(data.customer_type || '').trim();
+  if (data.installation_required !== undefined) updateFields.installation_required = String(data.installation_required || '').trim();
+  if (data.gst_concession !== undefined) updateFields.gst_concession = String(data.gst_concession || '').trim();
+  if (data.margin_sheet_attached !== undefined) updateFields.margin_sheet_attached = String(data.margin_sheet_attached || '').trim();
+  if (data.kyc_status !== undefined) updateFields.kyc_status = String(data.kyc_status || '').trim();
+  if (data.remarks !== undefined) updateFields.remarks = String(data.remarks || '').trim();
+  if (data.po_attachment) updateFields.po_attachment = data.po_attachment;
+  if (data.cost_sheet_attachment) updateFields.cost_sheet_attachment = data.cost_sheet_attachment;
+  if (data.aadhaar_attachment) updateFields.aadhaar_attachment = data.aadhaar_attachment;
+  if (data.pan_attachment) updateFields.pan_attachment = data.pan_attachment;
+  if (data.gst_attachment) updateFields.gst_attachment = data.gst_attachment;
+
+  updateFields.order = order._id;
+  updateFields.order_no = order.order_no;
+  updateFields.company_id = order.company_id || null;
+  if (user?._id) updateFields.updated_by = user._id;
+
+  const doc = await OrderPerforma.findOneAndUpdate(
+    { order: order._id, deletedAt: null },
+    {
+      $set: updateFields,
+      $setOnInsert: user?._id ? { created_by: user._id } : {},
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  if (doc && String(order.order_performa || '') !== String(doc._id)) {
+    order.order_performa = doc._id;
+    await order.save();
+  }
+
+  return doc;
+}
+
 module.exports = {
   create,
   listAll,
@@ -2702,6 +2907,8 @@ module.exports = {
   update,
   remove,
   convert,
+  listPartyOrders,
+  saveConvertedOrderPerforma,
   markProformaIssued,
   saveProformaDetails,
   extendValidity,

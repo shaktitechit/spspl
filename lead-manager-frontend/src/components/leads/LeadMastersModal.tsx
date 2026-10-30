@@ -20,18 +20,20 @@ import { toast } from "@/lib/toast";
 import { mutationRejectedMessage } from "@/lib/mutationMessages";
 
 type Props = {
-  open: boolean;
+  open?: boolean;
+  isOpen?: boolean;
   onClose: () => void;
   onSuccess?: () => void;
 };
 
-export function LeadMastersModal({ open, onClose, onSuccess }: Props) {
+export function LeadMastersModal({ open, isOpen, onClose, onSuccess }: Props) {
+  const resolvedOpen = Boolean(open ?? isOpen);
   const [activeTab, setActiveTab] = useState<"sources" | "lost_reasons">("sources");
   const [newSourceName, setNewSourceName] = useState<string>("");
   const [newReasonName, setNewReasonName] = useState<string>("");
 
-  const { data: sources } = useListLeadSourcesQuery(undefined, { skip: !open });
-  const { data: lostReasons } = useListLeadLostReasonsQuery(undefined, { skip: !open });
+  const { data: sources } = useListLeadSourcesQuery(undefined, { skip: !resolvedOpen });
+  const { data: lostReasons } = useListLeadLostReasonsQuery(undefined, { skip: !resolvedOpen });
 
   const [createSource, { isLoading: creatingSource }] = useCreateLeadSourceMutation();
   const [deleteSource] = useDeleteLeadSourceMutation();
@@ -39,7 +41,7 @@ export function LeadMastersModal({ open, onClose, onSuccess }: Props) {
   const [createReason, { isLoading: creatingReason }] = useCreateLeadLostReasonMutation();
   const [deleteReason] = useDeleteLeadLostReasonMutation();
 
-  if (!open) return null;
+  if (!resolvedOpen) return null;
 
   const handleAddSource = async (e: React.FormEvent) => {
     e.preventDefault();

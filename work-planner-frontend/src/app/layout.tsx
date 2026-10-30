@@ -4,9 +4,7 @@ import { StoreProvider } from "@/store/store-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: process.env.NEXT_PUBLIC_COMPANY_NAME
-    ? `Work Planner Portal - ${process.env.NEXT_PUBLIC_COMPANY_NAME}`
-    : "Work Planner Portal",
+  title: `Work Planner - ${process.env.NEXT_PUBLIC_COMPANY_NAME}`,
   description: "Work planning, field visit logs, and expense claim management portal",
 };
 

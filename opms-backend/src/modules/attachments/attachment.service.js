@@ -100,9 +100,18 @@ async function create(body, user) {
 }
 
 async function list({ entity_type, entity_id, category } = {}) {
-  const q = {};
+  const q = { deletedAt: null };
   if (entity_type) q.entity_type = entity_type;
-  if (entity_id) q.entity_id = entity_id;
+  if (entity_id) {
+    const { default: mongoose } = await import('mongoose');
+    if (mongoose.Types.ObjectId.isValid(entity_id)) {
+      q.entity_id = {
+        $in: [new mongoose.Types.ObjectId(entity_id), String(entity_id)],
+      };
+    } else {
+      q.entity_id = entity_id;
+    }
+  }
   if (category) q.category = category;
   const rows = await getModels().Attachment.find(q)
     .populate('uploaded_by', 'name username department')

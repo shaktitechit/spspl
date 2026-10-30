@@ -37,7 +37,7 @@ function registerModels() {
         state: { type: String, trim: true },
         deletedAt: { type: Date, default: null, index: true },
       },
-      { timestamps: true }
+      { timestamps: true, strict: false }
     );
     partySchema.plugin(softDeletePlugin);
     mongoose.model('Party', partySchema);
@@ -54,12 +54,13 @@ function registerModels() {
         storage_path: { type: String },
         url: { type: String },
         entity_type: { type: String, default: 'lead', index: true },
-        entity_id: { type: String, index: true },
+        entity_id: { type: mongoose.Schema.Types.Mixed, required: true, index: true },
+        category: { type: String },
         uploaded_by: { type: Object },
         remarks: { type: String },
         deletedAt: { type: Date, default: null },
       },
-      { timestamps: true }
+      { timestamps: true, strict: false }
     );
     mongoose.model('Attachment', attachmentSchema);
   }
@@ -710,6 +711,7 @@ function registerModels() {
         payment_status: { type: String, default: 'unpaid', index: true },
         billing_status: { type: String, default: 'unbilled', index: true },
         order_items: { type: [orderItemSchema], default: [] },
+        order_performa: { type: mongoose.Schema.Types.ObjectId, ref: 'OrderPerforma' },
         remarks: String,
         internal_notes: String,
         created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
@@ -720,6 +722,75 @@ function registerModels() {
     );
     orderSchema.plugin(softDeletePlugin);
     mongoose.model('Order', orderSchema);
+  }
+
+  // OrderPerforma schema
+  if (!mongoose.models.OrderPerforma) {
+    const orderPerformaSchema = new mongoose.Schema(
+      {
+        order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: true, unique: true, index: true },
+        order_no: { type: String, required: true, index: true },
+        company_id: { type: mongoose.Schema.Types.ObjectId, ref: 'CompanyInfo', index: true },
+        sales_person: { type: String, default: '', trim: true },
+        freight_charges: { type: String, default: '', trim: true },
+        orc: { type: String, default: '', trim: true },
+        transport: { type: String, default: '', trim: true },
+        dispatch_date: { type: Date, default: null },
+        ship_to_address: { type: String, default: '', trim: true },
+        payment_terms: { type: String, default: '', trim: true },
+        customer_type: { type: String, default: '', trim: true },
+        installation_required: { type: String, default: '', trim: true },
+        gst_concession: { type: String, default: '', trim: true },
+        margin_sheet_attached: { type: String, default: '', trim: true },
+        kyc_status: { type: String, default: '', trim: true },
+        remarks: { type: String, default: '', trim: true },
+        po_attachment: { type: mongoose.Schema.Types.ObjectId, ref: 'Attachment' },
+        cost_sheet_attachment: { type: mongoose.Schema.Types.ObjectId, ref: 'Attachment' },
+        aadhaar_attachment: { type: mongoose.Schema.Types.ObjectId, ref: 'Attachment' },
+        pan_attachment: { type: mongoose.Schema.Types.ObjectId, ref: 'Attachment' },
+        gst_attachment: { type: mongoose.Schema.Types.ObjectId, ref: 'Attachment' },
+        created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        deletedAt: { type: Date, default: null, index: true },
+      },
+      { timestamps: true, strict: false }
+    );
+    orderPerformaSchema.index({ order: 1, deletedAt: 1 });
+    orderPerformaSchema.plugin(softDeletePlugin);
+    mongoose.model('OrderPerforma', orderPerformaSchema);
+  }
+
+  // OrderApproval schema
+  if (!mongoose.models.OrderApproval) {
+    const orderApprovalSchema = new mongoose.Schema(
+      {
+        approval_no: { type: String, unique: true, sparse: true, index: true },
+        order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: true, index: true },
+        revision_number: { type: Number, default: 1, index: true },
+        ordered_total_amount: { type: Number },
+        approved_total_amount: { type: Number, default: 0 },
+        rejected_total_amount: { type: Number, default: 0 },
+        is_sales_submited: { type: Boolean, default: false },
+        sales_submitted_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        sales_submitted_at: Date,
+        submitted_by_role: { type: String, enum: ['sales', 'coordinator', 'admin'] },
+        is_admin_approved: { type: Boolean, default: false },
+        is_finance_approved: { type: Boolean, default: false },
+        is_account_approved: { type: Boolean, default: false },
+        rates_reviewed: { type: Boolean, default: false },
+        all_rates_mapped: { type: Boolean, default: false },
+        is_due_sheet_uploaded: { type: Boolean, default: false, index: true },
+        approval_notes: String,
+        approval_items: { type: Array, default: [] },
+        reviewed_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        reviewed_at: Date,
+        created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        deletedAt: { type: Date, default: null, index: true },
+      },
+      { timestamps: true, strict: false }
+    );
+    orderApprovalSchema.plugin(softDeletePlugin);
+    mongoose.model('OrderApproval', orderApprovalSchema);
   }
 
   // LeadReportingEdge schema — who reports to whom in lead_manager portal
@@ -777,6 +848,8 @@ function registerModels() {
     TermsText: mongoose.model('TermsText'),
     Product: mongoose.model('Product'),
     Order: mongoose.model('Order'),
+    OrderPerforma: mongoose.model('OrderPerforma'),
+    OrderApproval: mongoose.model('OrderApproval'),
     LeadReportingEdge: mongoose.model('LeadReportingEdge'),
   };
 

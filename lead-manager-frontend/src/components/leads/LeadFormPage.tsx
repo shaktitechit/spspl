@@ -69,6 +69,12 @@ import {
   type PartyItem,
 } from "@/components/leads/PartySearchAutocomplete";
 import { syncPartyMaster } from "@/utils/syncPartyMaster";
+import { PartyDetailModal } from "@/components/portal/shared/parties/modals/PartyDetailModal";
+import { ProductDetailModal } from "@/components/portal/shared/products/modals/ProductDetailModal";
+import PartyCountryDetailModal from "@/components/portal/shared/parties/modals/PartyCountryDetailModal";
+import PartyStateDetailModal from "@/components/portal/shared/parties/modals/PartyStateDetailModal";
+import PartyCityDetailModal from "@/components/portal/shared/parties/modals/PartyCityDetailModal";
+import { LeadMastersModal } from "@/components/leads/LeadMastersModal";
 
 type Props = {
   mode: "create" | "edit";
@@ -116,6 +122,7 @@ interface ProductAutocompleteProps {
   placeholder?: string;
   className?: string;
   showPrice?: boolean;
+  onQuickAdd?: (searchName: string) => void;
 }
 
 function ProductAutocomplete({
@@ -125,6 +132,7 @@ function ProductAutocomplete({
   placeholder = "Search catalog product...",
   className = "w-full rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white",
   showPrice = false,
+  onQuickAdd,
 }: ProductAutocompleteProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -204,42 +212,74 @@ function ProductAutocomplete({
       {isOpen && (
         <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl dark:border-white/10 dark:bg-slate-900">
           {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
-              No matching products in catalog
-            </div>
-          ) : (
-            filtered.map((p) => {
-              const id = String(p._id);
-              const name = getFieldText(p.product_name);
-              const skuStr = getFieldText(p.sku);
-              const brandStr = getFieldText(p.brand);
-              const sku = skuStr ? ` (${skuStr})` : "";
-              const brand = brandStr ? ` • ${brandStr}` : "";
-              const price = showPrice && p.base_price ? ` • ₹${p.base_price}` : "";
-              return (
+            <div className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400 space-y-2">
+              <p>No matching products in catalog</p>
+              {onQuickAdd && (
                 <button
-                  key={id}
                   type="button"
                   onClick={() => {
-                    onChange(id, p);
+                    const nameToUse = search.trim();
                     setIsOpen(false);
+                    onQuickAdd(nameToUse);
                   }}
-                  className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-600 transition hover:bg-blue-100 dark:bg-blue-950/50 dark:text-blue-400 dark:hover:bg-blue-900/50 cursor-pointer"
                 >
-                  <div className="font-semibold text-slate-800 dark:text-slate-200">
-                    {name}
-                    <span className="font-normal text-slate-500 dark:text-slate-400">
-                      {sku}
-                      {brand}
-                      {price}
-                    </span>
-                  </div>
-                  {String(selectedId) === id && (
-                    <Check className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                  )}
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Quick Add Product {search.trim() ? `"${search.trim()}"` : ""}</span>
                 </button>
-              );
-            })
+              )}
+            </div>
+          ) : (
+            <>
+              {filtered.map((p) => {
+                const id = String(p._id);
+                const name = getFieldText(p.product_name);
+                const skuStr = getFieldText(p.sku);
+                const brandStr = getFieldText(p.brand);
+                const sku = skuStr ? ` (${skuStr})` : "";
+                const brand = brandStr ? ` • ${brandStr}` : "";
+                const price = showPrice && p.base_price ? ` • ₹${p.base_price}` : "";
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      onChange(id, p);
+                      setIsOpen(false);
+                    }}
+                    className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                  >
+                    <div className="font-semibold text-slate-800 dark:text-slate-200">
+                      {name}
+                      <span className="font-normal text-slate-500 dark:text-slate-400">
+                        {sku}
+                        {brand}
+                        {price}
+                      </span>
+                    </div>
+                    {String(selectedId) === id && (
+                      <Check className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                    )}
+                  </button>
+                );
+              })}
+              {onQuickAdd && (
+                <div className="border-t border-slate-100 p-1.5 dark:border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nameToUse = search.trim();
+                      setIsOpen(false);
+                      onQuickAdd(nameToUse);
+                    }}
+                    className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold text-blue-600 transition hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40 cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Quick Add Product {search.trim() ? `"${search.trim()}"` : ""}</span>
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -288,11 +328,35 @@ export function LeadFormPage({
   );
 
   const { data: sourcesData } = useListLeadSourcesQuery();
-  const { data: usersData } = useListUsersQuery();;
+  const { data: usersData } = useListUsersQuery();
   const { data: productsData } = useListProductsQuery({ limit: "100" });
   const { data: partiesData } = useListPartiesQuery({ limit: "500" });
-  const parties = useMemo(() => pickParties(partiesData), [partiesData]);
+  const [locallyAddedParties, setLocallyAddedParties] = useState<PartyItem[]>([]);
+  const [locallyAddedProducts, setLocallyAddedProducts] = useState<CatalogProduct[]>([]);
+
+  const parties = useMemo(() => {
+    const rawList = pickParties(partiesData);
+    const merged = [...locallyAddedParties, ...rawList];
+    const seen = new Set<string>();
+    return merged.filter((p) => {
+      const id = String(p._id ?? p.id ?? "");
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [partiesData, locallyAddedParties]);
   const [selectedPartyId, setSelectedPartyId] = useState<string>("");
+
+  // Quick Add Modal States
+  const [quickPartyModalOpen, setQuickPartyModalOpen] = useState(false);
+  const [quickPartyInitialName, setQuickPartyInitialName] = useState("");
+  const [quickProductModalOpen, setQuickProductModalOpen] = useState(false);
+  const [quickProductInitialName, setQuickProductInitialName] = useState("");
+  const [quickProductTargetRowIdx, setQuickProductTargetRowIdx] = useState<number | null>(null);
+  const [countryModalOpen, setCountryModalOpen] = useState(false);
+  const [stateModalOpen, setStateModalOpen] = useState(false);
+  const [cityModalOpen, setCityModalOpen] = useState(false);
+  const [leadMastersModalOpen, setLeadMastersModalOpen] = useState(false);
 
   const selectedParty = useMemo(() => {
     if (!selectedPartyId) return null;
@@ -522,8 +586,8 @@ export function LeadFormPage({
           typeof existingLead.created_by === "object" && existingLead.created_by !== null
             ? existingLead.created_by._id
             : typeof existingLead.created_by === "string"
-            ? existingLead.created_by
-            : "";
+              ? existingLead.created_by
+              : "";
         setCreatedBy(existingCreator || String(authUser?._id || authUser?.id || ""));
       }
 
@@ -666,17 +730,91 @@ export function LeadFormPage({
   );
 
   const catalogProducts: CatalogProduct[] = useMemo(() => {
-    if (Array.isArray(productsData)) return productsData as CatalogProduct[];
-    if (productsData && typeof productsData === "object") {
+    let rawList: CatalogProduct[] = [];
+    if (Array.isArray(productsData)) rawList = productsData as CatalogProduct[];
+    else if (productsData && typeof productsData === "object") {
       if ("items" in productsData && Array.isArray((productsData as { items: unknown }).items)) {
-        return (productsData as { items: CatalogProduct[] }).items;
-      }
-      if ("data" in productsData && Array.isArray((productsData as { data: unknown }).data)) {
-        return (productsData as { data: CatalogProduct[] }).data;
+        rawList = (productsData as { items: CatalogProduct[] }).items;
+      } else if ("data" in productsData && Array.isArray((productsData as { data: unknown }).data)) {
+        rawList = (productsData as { data: CatalogProduct[] }).data;
       }
     }
-    return [];
-  }, [productsData]);
+    const merged = [...locallyAddedProducts, ...rawList];
+    const seen = new Set<string>();
+    return merged.filter((p) => {
+      const id = String(p._id ?? "");
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [productsData, locallyAddedProducts]);
+
+  // Quick Add Handlers
+  const openQuickPartyModal = (initialName = "") => {
+    setQuickPartyInitialName(initialName);
+    setQuickPartyModalOpen(true);
+  };
+
+  const handlePartyCreated = (created: Record<string, unknown>) => {
+    const newParty =
+      created && typeof created === "object" && "data" in created && created.data && typeof created.data === "object"
+        ? (created.data as Record<string, unknown>)
+        : created;
+    const pId = String(newParty._id ?? newParty.id ?? "");
+    if (!pId) return;
+
+    const partyItem = newParty as unknown as PartyItem;
+    setLocallyAddedParties((prev) => [partyItem, ...prev]);
+    handlePartySelect(partyItem);
+  };
+
+  const openQuickProductModal = (targetRowIdx: number | null = null, initialName = "") => {
+    setQuickProductTargetRowIdx(targetRowIdx);
+    setQuickProductInitialName(initialName);
+    setQuickProductModalOpen(true);
+  };
+
+  const handleProductCreated = (created: Record<string, unknown>) => {
+    const newProd =
+      created && typeof created === "object" && "data" in created && created.data && typeof created.data === "object"
+        ? (created.data as Record<string, unknown>)
+        : created;
+    const pId = String(newProd._id ?? newProd.id ?? "");
+    if (!pId) return;
+
+    const prodItem: CatalogProduct = {
+      _id: pId,
+      product_name: newProd.product_name,
+      sku: newProd.sku,
+      brand: newProd.brand,
+      base_price: typeof newProd.base_price === "number" ? newProd.base_price : Number(newProd.base_price || 0),
+      unit: newProd.unit,
+      product_group: newProd.product_group,
+    };
+
+    setLocallyAddedProducts((prev) => [prodItem, ...prev]);
+
+    if (quickProductTargetRowIdx !== null) {
+      handleProductSelect(quickProductTargetRowIdx, pId, prodItem);
+    } else {
+      handleQuickAddProduct(pId, prodItem);
+    }
+    setQuickProductTargetRowIdx(null);
+  };
+
+  const handleAddBlankProductRow = () => {
+    setProducts((prev) => [
+      ...prev,
+      {
+        product: undefined,
+        product_name: "",
+        quantity: 1,
+        target_price: 0,
+        unit: "pcs",
+        remarks: "",
+      },
+    ]);
+  };
 
   // Product Row Management
   const handleQuickAddProduct = (productId: string, productObj?: CatalogProduct) => {
@@ -1051,15 +1189,15 @@ export function LeadFormPage({
                 {isCopyMode
                   ? `Copy Lead (from #${existingLead?.lead_no || ""})`
                   : mode === "create"
-                  ? "Create New Lead"
-                  : `Edit Lead #${existingLead?.lead_no}`}
+                    ? "Create New Lead"
+                    : `Edit Lead #${existingLead?.lead_no}`}
               </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {isCopyMode
                   ? `Pre-filled from Lead #${existingLead?.lead_no || ""}. Review details and click create.`
                   : mode === "create"
-                  ? "Capture sales lead details, requirements, and assign owner"
-                  : "Update lead contact info, requirements and pipeline properties"}
+                    ? "Capture sales lead details, requirements, and assign owner"
+                    : "Update lead contact info, requirements and pipeline properties"}
               </p>
             </div>
           </div>
@@ -1176,25 +1314,37 @@ export function LeadFormPage({
           </div>
 
           <div className="mt-4 mb-4 rounded-xl border border-blue-200 bg-blue-50/40 p-3.5 dark:border-blue-900/40 dark:bg-blue-950/20 space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="text-xs font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
                 <Search className="h-3.5 w-3.5 text-blue-600" />
                 Search Party Master (Autofill Lead &amp; Contact)
               </label>
-              {selectedParty && (
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => handlePartySelect(null)}
-                  className="text-[11px] font-bold text-rose-600 hover:underline dark:text-rose-400 cursor-pointer"
+                  onClick={() => openQuickPartyModal(companyName || "")}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                  title="Quick add a new party to Party Master"
                 >
-                  Clear / Unlink Party
+                  <Plus className="h-3 w-3" />
+                  <span>Quick Add Party</span>
                 </button>
-              )}
+                {selectedParty && (
+                  <button
+                    type="button"
+                    onClick={() => handlePartySelect(null)}
+                    className="text-[11px] font-bold text-rose-600 hover:underline dark:text-rose-400 cursor-pointer"
+                  >
+                    Clear / Unlink Party
+                  </button>
+                )}
+              </div>
             </div>
             <PartySearchAutocomplete
               parties={filteredParties}
               selectedPartyId={selectedPartyId}
               onSelect={handlePartySelect}
+              onQuickAdd={openQuickPartyModal}
             />
             {selectedParty && (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white/80 p-2 text-xs dark:bg-slate-900/80 border border-blue-100 dark:border-white/5">
@@ -1502,9 +1652,20 @@ export function LeadFormPage({
 
             {/* Country */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Country <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Country <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setCountryModalOpen(true)}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                  title="Quick add a new country"
+                >
+                  <Plus className="h-3 w-3" />
+                  <span>Add Country</span>
+                </button>
+              </div>
               <select
                 value={countryId}
                 onChange={(e) => {
@@ -1531,9 +1692,21 @@ export function LeadFormPage({
 
             {/* State */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                State <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  State <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setStateModalOpen(true)}
+                  disabled={!countryId}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-40 disabled:pointer-events-none dark:text-blue-400 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                  title={countryId ? "Quick add a new state" : "Select a country first"}
+                >
+                  <Plus className="h-3 w-3" />
+                  <span>Add State</span>
+                </button>
+              </div>
               <select
                 value={stateId}
                 onChange={(e) => {
@@ -1551,8 +1724,8 @@ export function LeadFormPage({
                   {!countryId
                     ? "Select country first"
                     : isStatesLoading
-                    ? "Loading states..."
-                    : "Select State"}
+                      ? "Loading states..."
+                      : "Select State"}
                 </option>
                 {statesData.map((s) => (
                   <option key={s._id || s.id} value={s._id || s.id}>
@@ -1567,9 +1740,21 @@ export function LeadFormPage({
 
             {/* City */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                City / District <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  City / District <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setCityModalOpen(true)}
+                  disabled={!stateId}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-40 disabled:pointer-events-none dark:text-blue-400 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                  title={stateId ? "Quick add a new city" : "Select a state first"}
+                >
+                  <Plus className="h-3 w-3" />
+                  <span>Add City</span>
+                </button>
+              </div>
               <select
                 value={cityId}
                 onChange={(e) => {
@@ -1585,8 +1770,8 @@ export function LeadFormPage({
                   {!stateId
                     ? "Select state first"
                     : isCitiesLoading
-                    ? "Loading cities..."
-                    : "Select City"}
+                      ? "Loading cities..."
+                      : "Select City"}
                 </option>
                 {citiesData.map((ci) => (
                   <option key={ci._id || ci.id} value={ci._id || ci.id}>
@@ -1617,11 +1802,33 @@ export function LeadFormPage({
 
         {/* Section 3: Product Requirements */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-900">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-white/10">
-            <Package className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-              3. Products & Requirements
-            </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-white/10">
+            <div className="flex items-center gap-2">
+              <Package className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                3. Products & Requirements
+              </h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => openQuickProductModal(null, "")}
+                className="inline-flex items-center gap-1 rounded-xl border border-blue-200 bg-blue-50/60 px-2.5 py-1 text-xs font-semibold text-blue-600 transition hover:bg-blue-100/70 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-400 cursor-pointer"
+                title="Create a new product in Catalog Master and add it to requirements"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Quick Add Product</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleAddBlankProductRow}
+                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 cursor-pointer"
+                title="Add an empty requirement item row"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Add Item Row</span>
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 space-y-4">
@@ -1640,14 +1847,25 @@ export function LeadFormPage({
 
             {/* Quick Search & Add from Catalog Bar */}
             <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3 dark:border-blue-900/30 dark:bg-blue-950/20">
-              <div className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1.5 flex items-center gap-1.5">
-                <Search className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                Quick Search & Add Product from Catalog
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="text-xs font-semibold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                  <Search className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                  Quick Search & Add Product from Catalog
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openQuickProductModal(null, "")}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                >
+                  <Plus className="h-3 w-3" />
+                  <span>Quick Add Product</span>
+                </button>
               </div>
               <ProductAutocomplete
                 products={catalogProducts}
                 selectedId=""
                 onChange={(id, p) => handleQuickAddProduct(id, p)}
+                onQuickAdd={(searchName) => openQuickProductModal(null, searchName)}
                 showPrice={isAdmin}
                 placeholder="Type product name, SKU, or brand to add directly..."
                 className="w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
@@ -1686,6 +1904,7 @@ export function LeadFormPage({
                               products={catalogProducts}
                               selectedId={selProdId}
                               onChange={(id, p) => handleProductSelect(idx, id, p)}
+                              onQuickAdd={(searchName) => openQuickProductModal(idx, searchName)}
                               showPrice={isAdmin}
                               placeholder="Search catalog item..."
                               className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
@@ -1813,9 +2032,20 @@ export function LeadFormPage({
 
           <div className={`mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 ${isSales ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Lead Source <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Lead Source <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setLeadMastersModalOpen(true)}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                  title="Manage or add lead sources"
+                >
+                  <Plus className="h-3 w-3" />
+                  <span>Add Source</span>
+                </button>
+              </div>
               <select
                 value={source}
                 onChange={(e) => setSource(e.target.value)}
@@ -1914,11 +2144,10 @@ export function LeadFormPage({
                     return (
                       <label
                         key={u._id}
-                        className={`flex items-center justify-between gap-2.5 rounded-lg p-2.5 text-xs transition cursor-pointer ${
-                          isSelected
+                        className={`flex items-center justify-between gap-2.5 rounded-lg p-2.5 text-xs transition cursor-pointer ${isSelected
                             ? "bg-white dark:bg-slate-700 shadow-xs border border-primary/50 ring-1 ring-primary/20"
                             : "bg-white/70 dark:bg-slate-800/60 hover:bg-white dark:hover:bg-slate-700/70 border border-slate-200/60 dark:border-white/5"
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <input
@@ -2052,6 +2281,95 @@ export function LeadFormPage({
           </button>
         </div>
       </form>
+
+      {/* Quick Add Party Modal */}
+      <PartyDetailModal
+        partyId={null}
+        create={true}
+        open={quickPartyModalOpen}
+        initialName={quickPartyInitialName}
+        onSuccess={handlePartyCreated}
+        onClose={() => {
+          setQuickPartyModalOpen(false);
+          setQuickPartyInitialName("");
+        }}
+      />
+
+      {/* Quick Add Product Modal */}
+      <ProductDetailModal
+        productId={null}
+        create={true}
+        open={quickProductModalOpen}
+        initialName={quickProductInitialName}
+        onSuccess={handleProductCreated}
+        onClose={() => {
+          setQuickProductModalOpen(false);
+          setQuickProductInitialName("");
+          setQuickProductTargetRowIdx(null);
+        }}
+      />
+
+      {/* Quick Add Country Modal */}
+      {countryModalOpen && (
+        <PartyCountryDetailModal
+          create={true}
+          onClose={() => setCountryModalOpen(false)}
+          onSuccess={(createdCountry) => {
+            const cId = createdCountry._id || createdCountry.id || "";
+            if (cId) {
+              setCountryId(cId);
+              setCountry(createdCountry.name);
+              setStateId("");
+              setState("");
+              setCityId("");
+              setCity("");
+            }
+          }}
+        />
+      )}
+
+      {/* Quick Add State Modal */}
+      {stateModalOpen && (
+        <PartyStateDetailModal
+          create={true}
+          defaultCountryId={countryId}
+          defaultCountryName={country}
+          onClose={() => setStateModalOpen(false)}
+          onSuccess={(createdState) => {
+            const sId = createdState._id || createdState.id || "";
+            if (sId) {
+              setStateId(sId);
+              setState(createdState.name);
+              setCityId("");
+              setCity("");
+            }
+          }}
+        />
+      )}
+
+      {/* Quick Add City Modal */}
+      {cityModalOpen && (
+        <PartyCityDetailModal
+          create={true}
+          defaultCountryId={countryId}
+          defaultStateId={stateId}
+          defaultStateName={state}
+          onClose={() => setCityModalOpen(false)}
+          onSuccess={(createdCity) => {
+            const ciId = createdCity._id || createdCity.id || "";
+            if (ciId) {
+              setCityId(ciId);
+              setCity(createdCity.name);
+            }
+          }}
+        />
+      )}
+
+      {/* Quick Add Lead Source / Stage Masters Modal */}
+      <LeadMastersModal
+        isOpen={leadMastersModalOpen}
+        onClose={() => setLeadMastersModalOpen(false)}
+      />
     </div>
   );
 }

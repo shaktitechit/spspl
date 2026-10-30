@@ -55,7 +55,6 @@ import {
   useApproveLeadQuotationMutation,
   useRejectLeadQuotationMutation,
   useUpdateLeadQuotationMutation,
-  useMarkQuotationProformaIssuedMutation,
   useGetCompanyInfoQuery,
   useListTermsAndConditionsQuery,
   type LeadQuotationRecord,
@@ -71,7 +70,6 @@ import { FollowUpChatPanel } from "@/components/shared/followups/FollowUpChatPan
 import { DetailWorkspaceSkeleton } from "@/components/shared/Skeletons";
 import { CustomerRejectQuotationModal } from "./CustomerRejectQuotationModal";
 import { ConvertQuotationModal } from "./ConvertQuotationModal";
-import { GenerateProformaModal } from "./GenerateProformaModal";
 import { ExtendQuotationValidityModal } from "./ExtendQuotationValidityModal";
 import { QuotationVersionDiffModal } from "./QuotationVersionDiffModal";
 import { buildQuotationPdf } from "./buildQuotationPdf";
@@ -144,7 +142,6 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
   const [approveQuotation, { isLoading: isApproving }] = useApproveLeadQuotationMutation();
   const [rejectQuotation, { isLoading: isRejecting }] = useRejectLeadQuotationMutation();
   const [updateQuotation, { isLoading: isUpdating }] = useUpdateLeadQuotationMutation();
-  const [markProformaIssued] = useMarkQuotationProformaIssuedMutation();
   const { data: companyData } = useGetCompanyInfoQuery();
 
   // Dialog & Modal States
@@ -155,10 +152,8 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showCustomerRejectModal, setShowCustomerRejectModal] = useState(false);
   const [showConvertModal, setShowConvertModal] = useState(false);
-  const [showProformaModal, setShowProformaModal] = useState(false);
   const [showExtendValidityModal, setShowExtendValidityModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
-  const [downloadingProforma, setDownloadingProforma] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   // Active Tab state
@@ -275,29 +270,6 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
       is_historical_snapshot: true,
     };
   }, [quotation, isViewingArchive, selectedRevisionSnapshot]);
-
-  const handleDownloadProforma = async () => {
-    if (!quotation) return;
-    try {
-      setDownloadingProforma(true);
-      const pdf = await buildQuotationPdf({
-        quotation,
-        company: companyData as any,
-        portalLabel: "Lead Manager",
-        downloadedBy: authUser?.name,
-        documentType: "proforma",
-      });
-      const fileName = `${(quotation.ref_no || quotation.quotation_no || "Quotation").replace(/\//g, "-")}_Proforma_Invoice.pdf`;
-      pdf.save(fileName);
-      await markProformaIssued(quotation._id).unwrap();
-      toast.success("Proforma Invoice downloaded and recorded successfully");
-    } catch (err: any) {
-      console.error("Proforma generation failed", err);
-      toast.error("Failed to generate Proforma Invoice");
-    } finally {
-      setDownloadingProforma(false);
-    }
-  };
 
   const handleDownloadPdf = async () => {
     if (!displayedQuotation || !canViewPdf) return;
@@ -998,28 +970,15 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
                 </>
               )}
 
-              {/* Convert to Order & Proforma Actions */}
-              {quotation.status === "accepted" && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setShowProformaModal(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-teal-300 bg-teal-50 px-3.5 py-2 text-xs font-bold text-teal-800 shadow-xs hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/60 dark:text-teal-200 cursor-pointer transition-all"
-                  >
-                    <FileText className="h-4 w-4 text-teal-600" />
-                    {quotation.proforma_issued_at ? "Proforma Invoice" : "Generate Proforma"}
-                  </button>
-
-                  {canConvertQuotation(authUser) && (
-                    <button
-                      type="button"
-                      onClick={() => setShowConvertModal(true)}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:opacity-95 cursor-pointer transition-all"
-                    >
-                      <ShoppingCart className="h-4 w-4" /> Convert to Order
-                    </button>
-                  )}
-                </>
+              {/* Convert to Order Action */}
+              {quotation.status === "accepted" && canConvertQuotation(authUser) && (
+                <button
+                  type="button"
+                  onClick={() => setShowConvertModal(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:opacity-95 cursor-pointer transition-all"
+                >
+                  <ShoppingCart className="h-4 w-4" /> Convert to Order
+                </button>
               )}
 
               {/* Extend Validity Button */}
@@ -1201,7 +1160,7 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
       {/* Visual Lifecycle Stepper */}
       <QuotationLifecycleStepper quotation={quotation} />
 
-      {/* Accepted Status: Proforma & Order Conversion Card */}
+      {/* Accepted Status: Order Conversion Card */}
       {quotation.status === "accepted" && (
         <div className="rounded-2xl border border-teal-200 bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50/80 p-5 text-teal-950 dark:border-teal-900/50 dark:bg-gradient-to-r dark:from-teal-950/40 dark:via-emerald-950/40 dark:to-teal-950/30 dark:text-teal-100 shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -1217,28 +1176,13 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
                   </span>
                 </h4>
                 <p className="mt-0.5 text-xs text-teal-800 dark:text-teal-300">
-                  {quotation.proforma_issued_at
-                    ? `Proforma Invoice #${quotation.proforma_details?.proforma_no || "Issued"} on ${new Date(quotation.proforma_issued_at).toLocaleDateString("en-IN", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })} • View, edit commercial dispatch parameters, or proceed to Convert to Order.`
-                    : "Client has accepted this commercial proposal. You can generate a dedicated Proforma Invoice with Order Details for advance payment/PO release, or proceed to Convert to Order."}
+                  Client has accepted this commercial proposal. You can now proceed to Convert to Order.
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5">
-              <button
-                type="button"
-                onClick={() => setShowProformaModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-teal-300 bg-white px-3.5 py-2 text-xs font-bold text-teal-800 shadow-xs hover:bg-teal-50 dark:border-teal-800 dark:bg-slate-900 dark:text-teal-200 cursor-pointer transition-all"
-              >
-                <FileText className="h-4 w-4 text-teal-600" />
-                {quotation.proforma_issued_at ? "View / Edit Proforma" : "Generate Proforma Invoice"}
-              </button>
-
-              {canConvertQuotation(authUser) && (
+            {canConvertQuotation(authUser) && (
+              <div className="flex flex-wrap items-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => setShowConvertModal(true)}
@@ -1246,8 +1190,8 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
                 >
                   <ShoppingCart className="h-4 w-4" /> Convert to Order
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2341,14 +2285,6 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
           setShowCustomerRejectModal(false);
           refetch();
         }}
-      />
-
-      {/* Generate / Preview Dedicated Proforma Invoice Modal */}
-      <GenerateProformaModal
-        quotation={quotation}
-        open={showProformaModal}
-        onClose={() => setShowProformaModal(false)}
-        onSuccess={() => refetch()}
       />
 
       {/* Convert Quotation to Confirmed Order Modal */}

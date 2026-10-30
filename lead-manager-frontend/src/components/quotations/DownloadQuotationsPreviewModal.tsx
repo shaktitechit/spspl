@@ -132,7 +132,7 @@ export function DownloadQuotationsPreviewModal({
         raw_grand_total: q.grand_total || 0,
         status_label: (q.status || "draft").toUpperCase().replace(/_/g, " "),
         valid_until: q.valid_until ? formatDateDisplay(q.valid_until) : "—",
-        customer_po_number: q.customer_po_number || q.proforma_details?.customer_po_number || "—",
+        customer_po_number: q.customer_po_number || "—",
         payment_terms: q.payment_terms || "—",
       };
     });
@@ -415,18 +415,16 @@ export function DownloadQuotationsPreviewModal({
                       key={col.key}
                       type="button"
                       onClick={() => handleToggleColumn(col.key)}
-                      className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition text-left cursor-pointer border ${
-                        isChecked
-                          ? "border-emerald-500/40 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-500/30 font-bold"
-                          : "border-slate-200 bg-white text-slate-500 hover:bg-slate-100 dark:border-white/5 dark:bg-slate-800 dark:text-slate-400"
-                      }`}
+                      className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition text-left cursor-pointer border ${isChecked
+                        ? "border-emerald-500/40 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-500/30 font-bold"
+                        : "border-slate-200 bg-white text-slate-500 hover:bg-slate-100 dark:border-white/5 dark:bg-slate-800 dark:text-slate-400"
+                        }`}
                     >
                       <div
-                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-md border text-[10px] ${
-                          isChecked
-                            ? "border-emerald-600 bg-emerald-600 text-white"
-                            : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700"
-                        }`}
+                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-md border text-[10px] ${isChecked
+                          ? "border-emerald-600 bg-emerald-600 text-white"
+                          : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700"
+                          }`}
                       >
                         {isChecked && <Check className="h-3 w-3" />}
                       </div>

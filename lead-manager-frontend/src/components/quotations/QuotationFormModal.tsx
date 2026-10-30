@@ -61,6 +61,8 @@ import {
 } from "@/components/leads/leadUtils";
 import { useLeadManagerTeamScope } from "@/hooks/useLeadManagerTeamScope";
 import { isAdmin, isManager } from "@/utils/authStorage";
+import { PartyDetailModal } from "@/components/portal/shared/parties/modals/PartyDetailModal";
+import { ProductDetailModal } from "@/components/portal/shared/products/modals/ProductDetailModal";
 
 type Props = {
   lead?: LeadRecord | null;
@@ -152,10 +154,12 @@ function PartySearchAutocomplete({
   parties,
   selectedPartyId,
   onSelect,
+  onQuickAdd,
 }: {
   parties: PartyItem[];
   selectedPartyId: string;
   onSelect: (party: PartyItem | null) => void;
+  onQuickAdd?: (searchName: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -253,68 +257,102 @@ function PartySearchAutocomplete({
             <span className="text-[9px] text-slate-400 lowercase">click to select & autofill</span>
           </div>
           {filteredParties.length === 0 ? (
-            <div className="px-4 py-3 text-center text-xs text-slate-500 dark:text-slate-400">
-              No matching parties found for &quot;{search}&quot;
-            </div>
-          ) : (
-            filteredParties.map((p) => {
-              const id = String(p._id ?? p.id ?? "");
-              const isSelected = id === selectedPartyId;
-              const location = [p.billing_address?.city || p.district, p.billing_address?.state || p.state]
-                .filter(Boolean)
-                .join(", ");
-              return (
+            <div className="px-4 py-3 text-center text-xs text-slate-500 dark:text-slate-400 space-y-2">
+              <div>No matching parties found for &quot;{search}&quot;</div>
+              {onQuickAdd && (
                 <button
-                  key={id}
                   type="button"
                   onClick={() => {
-                    onSelect(p);
+                    const nameToUse = search.trim();
                     setIsOpen(false);
                     setSearch("");
+                    onQuickAdd(nameToUse);
                   }}
-                  className={`flex w-full flex-col px-3 py-2 text-left text-xs transition border-b border-slate-50 dark:border-white/5 last:border-0 hover:bg-primary/10 cursor-pointer ${
-                    isSelected
-                      ? "bg-primary/15 font-medium text-primary"
-                      : "text-slate-800 dark:text-slate-200"
-                  }`}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-primary-hover transition cursor-pointer"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 truncate">
-                      <span className="font-bold text-slate-900 dark:text-white truncate">
-                        {p.party_name}
-                      </span>
-                      {p.party_code && (
-                        <span className="rounded bg-slate-100 px-1.5 py-0.2 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          {p.party_code}
-                        </span>
-                      )}
-                      {p.party_type && (
-                        <span className="rounded-full bg-slate-100 px-1.5 py-0.2 text-[10px] font-semibold text-slate-600 capitalize dark:bg-slate-800 dark:text-slate-300">
-                          {p.party_type}
-                        </span>
-                      )}
-                      {p.sra === true && (
-                        <span className="rounded-full bg-emerald-100 px-1.5 py-0.2 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                          SRA
-                        </span>
-                      )}
-                    </div>
-                    {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
-                  </div>
-
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                    {(p.contact_person || (p.contacts && p.contacts[0]?.name)) && (
-                      <span>👤 {p.contact_person || p.contacts?.[0]?.name}</span>
-                    )}
-                    {(p.mobile || p.phone || (p.contacts && p.contacts[0]?.phone)) && (
-                      <span>📞 {p.mobile || p.phone || p.contacts?.[0]?.phone}</span>
-                    )}
-                    {location && <span>📍 {location}</span>}
-                    {p.gst_no && <span className="font-mono text-[10px]">GST: {p.gst_no}</span>}
-                  </div>
+                  <Plus className="h-3.5 w-3.5" />
+                  + Quick Add Party {search.trim() ? `"${search.trim()}"` : ""}
                 </button>
-              );
-            })
+              )}
+            </div>
+          ) : (
+            <>
+              {filteredParties.map((p) => {
+                const id = String(p._id ?? p.id ?? "");
+                const isSelected = id === selectedPartyId;
+                const location = [p.billing_address?.city || p.district, p.billing_address?.state || p.state]
+                  .filter(Boolean)
+                  .join(", ");
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      onSelect(p);
+                      setIsOpen(false);
+                      setSearch("");
+                    }}
+                    className={`flex w-full flex-col px-3 py-2 text-left text-xs transition border-b border-slate-50 dark:border-white/5 last:border-0 hover:bg-primary/10 cursor-pointer ${
+                      isSelected
+                        ? "bg-primary/15 font-medium text-primary"
+                        : "text-slate-800 dark:text-slate-200"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span className="font-bold text-slate-900 dark:text-white truncate">
+                          {p.party_name}
+                        </span>
+                        {p.party_code && (
+                          <span className="rounded bg-slate-100 px-1.5 py-0.2 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                            {p.party_code}
+                          </span>
+                        )}
+                        {p.party_type && (
+                          <span className="rounded-full bg-slate-100 px-1.5 py-0.2 text-[10px] font-semibold text-slate-600 capitalize dark:bg-slate-800 dark:text-slate-300">
+                            {p.party_type}
+                          </span>
+                        )}
+                        {p.sra === true && (
+                          <span className="rounded-full bg-emerald-100 px-1.5 py-0.2 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                            SRA
+                          </span>
+                        )}
+                      </div>
+                      {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                    </div>
+
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                      {(p.contact_person || (p.contacts && p.contacts[0]?.name)) && (
+                        <span>👤 {p.contact_person || p.contacts?.[0]?.name}</span>
+                      )}
+                      {(p.mobile || p.phone || (p.contacts && p.contacts[0]?.phone)) && (
+                        <span>📞 {p.mobile || p.phone || p.contacts?.[0]?.phone}</span>
+                      )}
+                      {location && <span>📍 {location}</span>}
+                      {p.gst_no && <span className="font-mono text-[10px]">GST: {p.gst_no}</span>}
+                    </div>
+                  </button>
+                );
+              })}
+              {onQuickAdd && (
+                <div className="border-t border-slate-100 dark:border-white/10 p-1.5 bg-slate-50/60 dark:bg-slate-800/50">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nameToUse = search.trim();
+                      setIsOpen(false);
+                      setSearch("");
+                      onQuickAdd(nameToUse);
+                    }}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/20 transition cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    + Quick Add New Party {search.trim() ? `"${search.trim()}"` : ""}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -328,9 +366,11 @@ function PartySearchAutocomplete({
 function QuickProductSearchAndAdd({
   products,
   onAddProduct,
+  onQuickAdd,
 }: {
   products: CatalogProduct[];
   onAddProduct: (product: CatalogProduct) => void;
+  onQuickAdd?: (searchName: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -428,59 +468,93 @@ function QuickProductSearchAndAdd({
           </div>
 
           {filteredProducts.length === 0 ? (
-            <div className="px-4 py-3 text-center text-xs text-slate-500 dark:text-slate-400">
-              No products found matching &quot;{search}&quot;
+            <div className="px-4 py-3 text-center text-xs text-slate-500 dark:text-slate-400 space-y-2">
+              <div>No products found matching &quot;{search}&quot;</div>
+              {onQuickAdd && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nameToUse = search.trim();
+                    setIsOpen(false);
+                    setSearch("");
+                    onQuickAdd(nameToUse);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-primary-hover transition cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  + Quick Add Product &quot;{search.trim()}&quot;
+                </button>
+              )}
             </div>
           ) : (
-            filteredProducts.map((p) => {
-              const price = p.base_price ?? p.minimum_sale_rate ?? p.mrp ?? 0;
-              const prodName = getFieldText(p.product_name);
-              const skuStr = getFieldText(p.sku);
-              const brandStr = getFieldText(p.brand);
-              const hsnStr = getFieldText(p.hsn_code);
-              const unitStr = getFieldText(p.unit);
-              const groupStr = getFieldText(p.product_group);
-              return (
-                <button
-                  key={p._id}
-                  type="button"
-                  onClick={() => handleSelect(p)}
-                  className="flex w-full items-center justify-between px-3 py-2 text-left text-xs transition border-b border-slate-50 dark:border-white/5 last:border-0 hover:bg-blue-50/70 dark:hover:bg-blue-950/40 cursor-pointer"
-                >
-                  <div className="min-w-0 flex-1 pr-3">
-                    <div className="flex items-center gap-1.5 truncate">
-                      <span className="font-bold text-slate-900 dark:text-white truncate">
-                        {prodName}
-                      </span>
-                      {skuStr && (
-                        <span className="rounded bg-slate-100 px-1.5 py-0.2 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          {skuStr}
+            <>
+              {filteredProducts.map((p) => {
+                const price = p.base_price ?? p.minimum_sale_rate ?? p.mrp ?? 0;
+                const prodName = getFieldText(p.product_name);
+                const skuStr = getFieldText(p.sku);
+                const brandStr = getFieldText(p.brand);
+                const hsnStr = getFieldText(p.hsn_code);
+                const unitStr = getFieldText(p.unit);
+                const groupStr = getFieldText(p.product_group);
+                return (
+                  <button
+                    key={p._id}
+                    type="button"
+                    onClick={() => handleSelect(p)}
+                    className="flex w-full items-center justify-between px-3 py-2 text-left text-xs transition border-b border-slate-50 dark:border-white/5 last:border-0 hover:bg-blue-50/70 dark:hover:bg-blue-950/40 cursor-pointer"
+                  >
+                    <div className="min-w-0 flex-1 pr-3">
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span className="font-bold text-slate-900 dark:text-white truncate">
+                          {prodName}
                         </span>
-                      )}
-                      {brandStr && (
-                        <span className="rounded-full bg-blue-50 px-1.5 py-0.2 text-[10px] font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                          {brandStr}
-                        </span>
-                      )}
+                        {skuStr && (
+                          <span className="rounded bg-slate-100 px-1.5 py-0.2 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                            {skuStr}
+                          </span>
+                        )}
+                        {brandStr && (
+                          <span className="rounded-full bg-blue-50 px-1.5 py-0.2 text-[10px] font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                            {brandStr}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                        {hsnStr && <span>HSN: {hsnStr}</span>}
+                        {unitStr && <span>Unit: {unitStr}</span>}
+                        {groupStr && <span>Group: {groupStr}</span>}
+                      </div>
                     </div>
-                    <div className="mt-0.5 flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
-                      {hsnStr && <span>HSN: {hsnStr}</span>}
-                      {unitStr && <span>Unit: {unitStr}</span>}
-                      {groupStr && <span>Group: {groupStr}</span>}
-                    </div>
-                  </div>
 
-                  <div className="shrink-0 text-right">
-                    <div className="font-bold text-blue-600 dark:text-blue-400">
-                      ₹{price.toLocaleString("en-IN")}
+                    <div className="shrink-0 text-right">
+                      <div className="font-bold text-blue-600 dark:text-blue-400">
+                        ₹{price.toLocaleString("en-IN")}
+                      </div>
+                      <div className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                        <Plus className="h-3 w-3" /> Add to Quote
+                      </div>
                     </div>
-                    <div className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                      <Plus className="h-3 w-3" /> Add to Quote
-                    </div>
-                  </div>
-                </button>
-              );
-            })
+                  </button>
+                );
+              })}
+              {onQuickAdd && (
+                <div className="border-t border-slate-100 dark:border-white/10 p-1.5 bg-slate-50/60 dark:bg-slate-800/50">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nameToUse = search.trim();
+                      setIsOpen(false);
+                      setSearch("");
+                      onQuickAdd(nameToUse);
+                    }}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/20 transition cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    + Quick Add New Product {search.trim() ? `"${search.trim()}"` : ""}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -495,10 +569,12 @@ function ProductRowAutocomplete({
   products,
   selectedId,
   onSelect,
+  onQuickAdd,
 }: {
   products: CatalogProduct[];
   selectedId?: string;
   onSelect: (productId: string) => void;
+  onQuickAdd?: (searchName: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -587,36 +663,72 @@ function ProductRowAutocomplete({
             <span className="text-[9px] text-slate-400">scroll or type to search</span>
           </div>
           {filteredProducts.length === 0 ? (
-            <div className="px-3 py-2 text-[11px] text-slate-400">No catalog products found</div>
-          ) : (
-            filteredProducts.map((p) => {
-              const isSelected = p._id === selectedId;
-              const price = p.base_price ?? p.minimum_sale_rate ?? p.mrp ?? 0;
-              const prodName = getFieldText(p.product_name);
-              const skuStr = getFieldText(p.sku);
-              return (
+            <div className="px-3 py-2.5 text-center text-[11px] text-slate-400 space-y-1.5">
+              <div>No catalog products found</div>
+              {onQuickAdd && (
                 <button
-                  key={p._id}
                   type="button"
                   onClick={() => {
-                    onSelect(p._id);
-                    setSearch("");
+                    const nameToUse = search.trim();
                     setIsOpen(false);
+                    setSearch("");
+                    onQuickAdd(nameToUse);
                   }}
-                  className={`flex w-full items-center justify-between px-2.5 py-1.5 text-left text-[11px] transition hover:bg-blue-50/70 dark:hover:bg-blue-950/40 cursor-pointer ${
-                    isSelected ? "bg-blue-50 text-blue-700 font-bold dark:bg-blue-950 dark:text-blue-300" : "text-slate-700 dark:text-slate-200"
-                  }`}
+                  className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-[11px] font-bold text-white hover:bg-primary-hover transition cursor-pointer"
                 >
-                  <span className="truncate pr-2">
-                    {prodName}
-                    {skuStr && <span className="text-[10px] text-slate-400 ml-1 font-mono">({skuStr})</span>}
-                  </span>
-                  <span className="shrink-0 font-semibold text-slate-600 dark:text-slate-300">
-                    ₹{price.toLocaleString("en-IN")}
-                  </span>
+                  <Plus className="h-3 w-3" />
+                  + Quick Add Product {search.trim() ? `"${search.trim()}"` : ""}
                 </button>
-              );
-            })
+              )}
+            </div>
+          ) : (
+            <>
+              {filteredProducts.map((p) => {
+                const isSelected = p._id === selectedId;
+                const price = p.base_price ?? p.minimum_sale_rate ?? p.mrp ?? 0;
+                const prodName = getFieldText(p.product_name);
+                const skuStr = getFieldText(p.sku);
+                return (
+                  <button
+                    key={p._id}
+                    type="button"
+                    onClick={() => {
+                      onSelect(p._id);
+                      setSearch("");
+                      setIsOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between px-2.5 py-1.5 text-left text-[11px] transition hover:bg-blue-50/70 dark:hover:bg-blue-950/40 cursor-pointer ${
+                      isSelected ? "bg-blue-50 text-blue-700 font-bold dark:bg-blue-950 dark:text-blue-300" : "text-slate-700 dark:text-slate-200"
+                    }`}
+                  >
+                    <span className="truncate pr-2">
+                      {prodName}
+                      {skuStr && <span className="text-[10px] text-slate-400 ml-1 font-mono">({skuStr})</span>}
+                    </span>
+                    <span className="shrink-0 font-semibold text-slate-600 dark:text-slate-300">
+                      ₹{price.toLocaleString("en-IN")}
+                    </span>
+                  </button>
+                );
+              })}
+              {onQuickAdd && (
+                <div className="border-t border-slate-100 dark:border-white/10 p-1 bg-slate-50/60 dark:bg-slate-800/50">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nameToUse = search.trim();
+                      setIsOpen(false);
+                      setSearch("");
+                      onQuickAdd(nameToUse);
+                    }}
+                    className="flex w-full items-center justify-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary hover:bg-primary/20 transition cursor-pointer"
+                  >
+                    <Plus className="h-3 w-3" />
+                    + Quick Add New Product {search.trim() ? `"${search.trim()}"` : ""}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -655,15 +767,50 @@ export function QuotationFormModal({
   const { filterByTeam, withSelfInList } = useLeadManagerTeamScope();
 
   const { data: productsData } = useListProductsQuery({ limit: "500" });
-  const products = (
-    Array.isArray(productsData)
-      ? productsData
-      : (productsData as { items?: unknown[] })?.items || []
-  ) as CatalogProduct[];
+  const [locallyAddedProducts, setLocallyAddedProducts] = useState<CatalogProduct[]>([]);
+  const products = useMemo(() => {
+    const raw = (
+      Array.isArray(productsData)
+        ? productsData
+        : (productsData as { items?: unknown[] })?.items || []
+    ) as CatalogProduct[];
+    if (locallyAddedProducts.length === 0) return raw;
+    const seen = new Set<string>();
+    const combined: CatalogProduct[] = [];
+    for (const p of [...locallyAddedProducts, ...raw]) {
+      const id = String(p._id ?? "");
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        combined.push(p);
+      }
+    }
+    return combined;
+  }, [productsData, locallyAddedProducts]);
 
   const { data: partiesData } = useListPartiesQuery({ limit: "500" }, { skip: !open });
-  const parties = useMemo(() => pickParties(partiesData), [partiesData]);
+  const [locallyAddedParties, setLocallyAddedParties] = useState<PartyItem[]>([]);
+  const parties = useMemo(() => {
+    const raw = pickParties(partiesData);
+    if (locallyAddedParties.length === 0) return raw;
+    const seen = new Set<string>();
+    const combined: PartyItem[] = [];
+    for (const p of [...locallyAddedParties, ...raw]) {
+      const id = String(p._id ?? p.id ?? "");
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        combined.push(p);
+      }
+    }
+    return combined;
+  }, [partiesData, locallyAddedParties]);
   const [selectedPartyId, setSelectedPartyId] = useState<string>("");
+
+  // Quick Add Party & Product modal states
+  const [quickPartyModalOpen, setQuickPartyModalOpen] = useState(false);
+  const [quickPartyInitialName, setQuickPartyInitialName] = useState("");
+  const [quickProductModalOpen, setQuickProductModalOpen] = useState(false);
+  const [quickProductInitialName, setQuickProductInitialName] = useState("");
+  const [quickProductTargetRowIdx, setQuickProductTargetRowIdx] = useState<number | null>(null);
 
   const selectedParty = useMemo(() => {
     if (!selectedPartyId) return null;
@@ -1363,14 +1510,14 @@ export function QuotationFormModal({
   }, [items, gstEnabled]);
 
   // Product Selection handler
-  const handleSelectProduct = (index: number, productId: string) => {
+  const handleSelectProduct = (index: number, productId: string, productObj?: CatalogProduct) => {
     if (!productId) {
       setItems((prev) =>
         prev.map((it, idx) => (idx === index ? { ...it, product: undefined } : it))
       );
       return;
     }
-    const found = products.find((p) => p._id === productId);
+    const found = productObj || products.find((p) => p._id === productId);
     if (!found) return;
 
     const prodName = getFieldText(found.product_name) || "Catalog Item";
@@ -1391,6 +1538,39 @@ export function QuotationFormModal({
         };
       })
     );
+  };
+
+  const openQuickPartyModal = (searchName = "") => {
+    setQuickPartyInitialName(searchName);
+    setQuickPartyModalOpen(true);
+  };
+
+  const handlePartyCreated = (newParty: Record<string, unknown>) => {
+    const partyItem = newParty as unknown as PartyItem;
+    setLocallyAddedParties((prev) => [partyItem, ...prev]);
+    handlePartySelect(partyItem);
+    setQuickPartyModalOpen(false);
+  };
+
+  const openQuickProductModal = (searchName = "", targetRowIdx: number | null = null) => {
+    setQuickProductInitialName(searchName);
+    setQuickProductTargetRowIdx(targetRowIdx);
+    setQuickProductModalOpen(true);
+  };
+
+  const handleProductCreated = (newProd: Record<string, unknown>) => {
+    const prodItem = newProd as unknown as CatalogProduct;
+    const pId = String(prodItem._id ?? (newProd as { id?: string }).id ?? "");
+    const normalizedProd: CatalogProduct = { ...prodItem, _id: pId };
+    setLocallyAddedProducts((prev) => [normalizedProd, ...prev]);
+
+    if (quickProductTargetRowIdx !== null) {
+      handleSelectProduct(quickProductTargetRowIdx, pId, normalizedProd);
+    } else {
+      handleQuickAddProduct(normalizedProd);
+    }
+    setQuickProductModalOpen(false);
+    setQuickProductTargetRowIdx(null);
   };
 
   const handleQuickAddProduct = (p: CatalogProduct) => {
@@ -1975,26 +2155,37 @@ export function QuotationFormModal({
 
               {/* Party Master Search & Autofill Panel */}
               <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/40 p-3 dark:border-blue-900/40 dark:bg-blue-950/20 space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <label className="text-xs font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
                     <Search className="h-3.5 w-3.5 text-blue-600" />
                     Search Party Master (Autofill Customer Details)
                   </label>
-                  {selectedParty && (
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => handlePartySelect(null)}
-                      className="text-[11px] font-bold text-rose-600 hover:underline dark:text-rose-400 cursor-pointer"
+                      onClick={() => openQuickPartyModal(customerName)}
+                      className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs hover:bg-primary-hover transition cursor-pointer"
                     >
-                      Clear / Unlink Party
+                      <Plus className="h-3 w-3" />
+                      + Quick Add Party
                     </button>
-                  )}
+                    {selectedParty && (
+                      <button
+                        type="button"
+                        onClick={() => handlePartySelect(null)}
+                        className="text-[11px] font-bold text-rose-600 hover:underline dark:text-rose-400 cursor-pointer"
+                      >
+                        Clear / Unlink Party
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <PartySearchAutocomplete
                   parties={parties}
                   selectedPartyId={selectedPartyId}
                   onSelect={handlePartySelect}
+                  onQuickAdd={openQuickPartyModal}
                 />
 
                 {/* Selected Party Summary & Multiple Contacts Switcher */}
@@ -2251,6 +2442,15 @@ export function QuotationFormModal({
                   </label>
                   <button
                     type="button"
+                    onClick={() => openQuickProductModal("", null)}
+                    className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-xs font-bold text-white shadow-2xs hover:bg-primary-hover transition cursor-pointer"
+                    title="Create a new product in Product Master and add to quotation"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    + Quick Add Product
+                  </button>
+                  <button
+                    type="button"
                     onClick={handleAddItem}
                     className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 cursor-pointer"
                     title="Add empty row for custom non-catalog item"
@@ -2263,13 +2463,24 @@ export function QuotationFormModal({
 
               {/* Quick Search & Add from Catalog */}
               <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/40 p-3 dark:border-blue-900/40 dark:bg-blue-950/20">
-                <div className="text-xs font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300 mb-1.5 flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-                  Quick Search &amp; Add Products from Catalog
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                  <div className="text-xs font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+                    Quick Search &amp; Add Products from Catalog
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openQuickProductModal("", null)}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                  >
+                    <Plus className="h-3 w-3" />
+                    New Catalog Product
+                  </button>
                 </div>
                 <QuickProductSearchAndAdd
                   products={products}
                   onAddProduct={handleQuickAddProduct}
+                  onQuickAdd={(name) => openQuickProductModal(name, null)}
                 />
               </div>
 
@@ -2298,6 +2509,7 @@ export function QuotationFormModal({
                             products={products}
                             selectedId={it.product}
                             onSelect={(pId) => handleSelectProduct(idx, pId)}
+                            onQuickAdd={(name) => openQuickProductModal(name, idx)}
                           />
 
                           <input
@@ -3180,6 +3392,33 @@ export function QuotationFormModal({
           </div>
         </div>
       )}
+
+      {/* Quick Add Party Modal */}
+      <PartyDetailModal
+        partyId={null}
+        create={true}
+        open={quickPartyModalOpen}
+        initialName={quickPartyInitialName}
+        onSuccess={handlePartyCreated}
+        onClose={() => {
+          setQuickPartyModalOpen(false);
+          setQuickPartyInitialName("");
+        }}
+      />
+
+      {/* Quick Add Product Modal */}
+      <ProductDetailModal
+        productId={null}
+        create={true}
+        open={quickProductModalOpen}
+        initialName={quickProductInitialName}
+        onSuccess={handleProductCreated}
+        onClose={() => {
+          setQuickProductModalOpen(false);
+          setQuickProductInitialName("");
+          setQuickProductTargetRowIdx(null);
+        }}
+      />
     </div>
   );
 }

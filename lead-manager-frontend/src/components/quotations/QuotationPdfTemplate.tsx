@@ -18,7 +18,6 @@ type Props = {
   quotation: LeadQuotationRecord;
   portalLabel?: string;
   downloadedBy?: string;
-  documentType?: "quotation" | "proforma";
   watermark?: string;
 };
 
@@ -65,7 +64,6 @@ export default function QuotationPdfTemplate({
   quotation,
   portalLabel = "Lead Manager",
   downloadedBy,
-  documentType = "quotation",
   watermark,
 }: Props) {
   const { data: companyData } = useGetCompanyInfoQuery();
@@ -517,7 +515,7 @@ export default function QuotationPdfTemplate({
             <div style={{ flex: "0 0 145px", width: "145px", minWidth: "145px", flexShrink: 0, textAlign: "right" }}>
               <div style={{ display: "inline-block", background: "#eff6ff", border: "1px solid #bfdbfe", padding: "5px 10px", borderRadius: "5px" }}>
                 <div style={{ fontSize: "9px", fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", letterSpacing: "0.03em" }}>
-                  {documentType === "proforma" ? "PROFORMA INVOICE" : "QUOTATION"}
+                  QUOTATION
                 </div>
                 <div style={{ fontSize: "8.5px", fontWeight: 700, color: "#2563eb", marginTop: "1px" }}>
                   {quotation.quotation_no || "DRAFT"}
@@ -552,12 +550,12 @@ export default function QuotationPdfTemplate({
                 lineHeight: "16px",
               }}
             >
-              {documentType === "proforma" ? "PROFORMA INVOICE" : "QUOTATION"}
+              QUOTATION
             </span>
           </div>
           <div style={{ textAlign: "right", fontSize: "8.5px", color: "#334155", lineHeight: "13px" }}>
             <div>
-              <strong>{documentType === "proforma" ? "PI Ref. No. :" : "Ref. No. :"}</strong>{" "}
+              <strong>Ref. No. :</strong>{" "}
               <span style={{ fontWeight: 700, color: "#1e40af" }}>
                 {quotation.ref_no || quotation.quotation_no || ""}
                 {quotation.version && quotation.version > 1 ? ` (Rev v${quotation.version})` : ""}

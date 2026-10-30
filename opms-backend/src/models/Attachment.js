@@ -46,7 +46,7 @@ const attachmentSchema = new mongoose.Schema(
     },
 
     entity_id: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.Mixed,
       required: true,
       index: true,
     },

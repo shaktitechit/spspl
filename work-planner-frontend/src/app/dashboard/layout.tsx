@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import type { UserSession } from "@/types/workPlanner";
 import { logoutAndRedirect, readSessionFromStorage } from "@/utils/authStorage";
@@ -12,6 +12,7 @@ import { MobileBottomNav } from "@/components/shell/MobileBottomNav";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [session, setSession] = useState<UserSession | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [companyInfo, setCompanyInfo] = useState<any>(null);
@@ -50,9 +51,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
 
       // Dynamic browser title
-      const companyName = info.trade_name || info.legal_name;
-      if (companyName && typeof document !== "undefined") {
-        document.title = `${companyName} - Work Planner`;
+      const companyName = (
+        info.trade_name ||
+        info.legal_name ||
+        process.env.NEXT_PUBLIC_COMPANY_NAME ||
+        ""
+      ).trim();
+      if (typeof document !== "undefined") {
+        document.title = companyName
+          ? `Work Planner - ${companyName}`
+          : "Work Planner";
       }
     },
     [setThemeColor, setCustomPrimary],
@@ -92,6 +100,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       fetchCompanyInfo();
     }
   }, [session, fetchCompanyInfo]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const companyName = (
+      companyInfo?.trade_name ||
+      companyInfo?.legal_name ||
+      process.env.NEXT_PUBLIC_COMPANY_NAME ||
+      ""
+    ).trim();
+    document.title = companyName
+      ? `Work Planner - ${companyName}`
+      : "Work Planner";
+  }, [pathname, companyInfo]);
 
   const handleLogout = () => {
     void logoutAndRedirect("/");

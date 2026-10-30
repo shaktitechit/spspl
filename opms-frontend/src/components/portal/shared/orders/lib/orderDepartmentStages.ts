@@ -45,7 +45,7 @@ import {
   isDueSheetStageCleared,
   isDueSheetUploaded,
   isFinanceCleared,
-} from "../../orders/list/orderWorkflowTabs";
+} from "../list/orderWorkflowTabs";
 import { hasSubmittedDispatch } from "./orderLifecycleActions";
 import { deriveOrderWorkflowStatus } from "./orderLifecycle";
 
@@ -306,13 +306,13 @@ export function fulfillmentLinesFromSnapshot(
       const financeApproved = num(line.approved ?? line.financeApproved);
       const accountCleared = num(
         line.accountCleared ??
-          line.account_cleared ??
-          (accountApprovalStatus !== "pending" ? financeApproved : 0),
+        line.account_cleared ??
+        (accountApprovalStatus !== "pending" ? financeApproved : 0),
       );
       const pendingAccount = num(
         line.pendingAccount ??
-          line.pending_account ??
-          Math.max(0, financeApproved - accountCleared),
+        line.pending_account ??
+        Math.max(0, financeApproved - accountCleared),
       );
       const returned =
         num(line.returned ?? line.returned_quantity) ||
@@ -535,11 +535,11 @@ export function computeDepartmentStageBoxes(
       ? { key: "draft", label: "Draft", tone: "neutral" }
       : { key: "sales", label: "With sales", tone: "warning" }
     : {
-        key: "captured",
-        label: "Order captured",
-        detail: `${totals.ordered} qty ordered`,
-        tone: "success",
-      };
+      key: "captured",
+      label: "Order captured",
+      detail: `${totals.ordered} qty ordered`,
+      tone: "success",
+    };
 
   // Sequential: admin → due sheet → finance → account → dispatch → delivery.
   let salesApprovalStatus: OrderStatusDimension;
@@ -549,11 +549,11 @@ export function computeDepartmentStageBoxes(
     salesApprovalStatus =
       totals.pendingAdmin > 0 && totals.salesApproved > 0
         ? {
-            key: "partial",
-            label: "Partial",
-            detail: `${totals.pendingAdmin} qty pending`,
-            tone: "warning",
-          }
+          key: "partial",
+          label: "Partial",
+          detail: `${totals.pendingAdmin} qty pending`,
+          tone: "warning",
+        }
         : { ...PENDING, detail: "Admin approval required" };
   } else {
     salesApprovalStatus = {
@@ -591,11 +591,11 @@ export function computeDepartmentStageBoxes(
     financeStatus =
       totals.pendingFinance > 0 && totals.approved > 0
         ? {
-            key: "partial",
-            label: "Partial",
-            detail: `${totals.pendingFinance} qty pending`,
-            tone: "warning",
-          }
+          key: "partial",
+          label: "Partial",
+          detail: `${totals.pendingFinance} qty pending`,
+          tone: "warning",
+        }
         : { ...PENDING, detail: "Finance approval required" };
   } else {
     financeStatus = {
@@ -615,11 +615,11 @@ export function computeDepartmentStageBoxes(
     accountStatusDim =
       totals.pendingAccount > 0 && totals.accountCleared > 0
         ? {
-            key: "partial",
-            label: "Partial",
-            detail: `${totals.pendingAccount} qty pending`,
-            tone: "warning",
-          }
+          key: "partial",
+          label: "Partial",
+          detail: `${totals.pendingAccount} qty pending`,
+          tone: "warning",
+        }
         : { ...PENDING, detail: "Account approval required" };
   } else {
     accountStatusDim = {

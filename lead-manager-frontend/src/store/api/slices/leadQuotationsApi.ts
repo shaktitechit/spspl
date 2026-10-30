@@ -222,13 +222,11 @@ export type LeadQuotationRecord = {
   is_historical_snapshot?: boolean;
   revision_history?: QuotationRevisionSnapshot[];
   lost_reason?: string;
-  proforma_issued_at?: string;
   customer_po_number?: string;
   customer_po_date?: string;
   advance_amount?: number;
   payment_mode?: string;
   payment_reference?: string;
-  proforma_details?: LeadQuotationProformaDetails;
   conversion?: {
     converted_at?: string;
     converted_by?: string | { _id: string; name?: string; email?: string; department?: string };
@@ -260,29 +258,6 @@ export type LeadQuotationRecord = {
   };
   createdAt: string;
   updatedAt: string;
-};
-
-export type LeadQuotationProformaDetails = {
-  proforma_no?: string;
-  invoice_date?: string;
-  customer_po_number?: string;
-  customer_po_date?: string;
-  sales_person?: string;
-  orc?: string;
-  dispatch_date?: string;
-  freight_charges?: string;
-  payment_terms?: string;
-  transport?: string;
-  ship_to_address?: string;
-  customer_type?: string;
-  installation_required?: string;
-  gst_concession?: string;
-  margin_sheet_attached?: string;
-  kyc_status?: string;
-  remarks?: string;
-  message?: string;
-  generated_at?: string;
-  generated_by?: string | { _id: string; name?: string; email?: string; department?: string };
 };
 
 export type LeadQuotationFollowUp = {
@@ -412,7 +387,12 @@ export type ConvertQuotationPayload = {
   payment_mode?: string;
   payment_reference?: string;
   billing_address?: {
+    label?: string;
+    recipient_name?: string;
+    phone?: string;
+    gst_no?: string;
     address_line_1?: string;
+    address_line_2?: string;
     city?: string;
     state?: string;
     pincode?: string;
@@ -420,9 +400,14 @@ export type ConvertQuotationPayload = {
     country_id?: string;
     state_id?: string;
     city_id?: string;
-  };
+  } | null;
   shipping_address?: {
+    label?: string;
+    recipient_name?: string;
+    phone?: string;
+    gst_no?: string;
     address_line_1?: string;
+    address_line_2?: string;
     city?: string;
     state?: string;
     pincode?: string;
@@ -430,11 +415,13 @@ export type ConvertQuotationPayload = {
     country_id?: string;
     state_id?: string;
     city_id?: string;
-  };
+  } | null;
+  save_shipping_to_party?: boolean;
   party_data?: Record<string, any>;
   order_data?: {
     order_date?: string;
     delivery_date?: string;
+    expected_delivery_date?: string;
     customer_po_number?: string;
     customer_po_date?: string;
     advance_amount?: number;
@@ -449,15 +436,33 @@ export type ConvertQuotationPayload = {
     productId?: string;
     product_name?: string;
     sku?: string;
+    brand?: string;
+    manufacturer?: string;
+    product_group?: string;
+    product_subgroup?: string;
     unit?: string;
-    quantity: number;
+    quantity?: number;
+    ordered_quantity?: number;
+    free_quantity?: number;
     unit_price: number;
-    applied_rate_type?: "SR" | "SRA" | "CR";
+    applied_rate_type?: "SR" | "SRA" | "CR" | "MANUAL";
+    pricing_reference?: string;
+    pricing_validity_start?: string;
+    pricing_validity_end?: string;
+    manual_price_override?: boolean;
+    approval_required?: boolean;
+    approval_reason?: string;
     discount_percent?: number;
     discount_amount?: number;
     gst_percent?: number;
     remarks?: string;
   }>;
+  performa?: Record<string, any>;
+  email_options?: {
+    send_email?: boolean;
+    send_to_party?: boolean;
+    recipients?: string[];
+  };
   notes?: string;
 };
 
@@ -843,40 +848,6 @@ export const leadQuotationsApi = medicaApi.injectEndpoints({
       ],
     }),
 
-    markQuotationProformaIssued: build.mutation<LeadQuotationRecord, string>({
-      query: (quotationId) => ({
-        url: `/quotations/${quotationId}/proforma-issued`,
-        method: "POST",
-      }),
-      transformResponse: (raw: ApiEnvelope<LeadQuotationRecord>) =>
-        unwrapEnvelope(raw) as LeadQuotationRecord,
-      invalidatesTags: (_res, _err, id) => [
-        { type: "LeadQuotation", id },
-        { type: "Quotation", id },
-        { type: "Quotation", id: "LIST" },
-        "Activity",
-      ],
-    }),
-
-    saveQuotationProforma: build.mutation<
-      LeadQuotationRecord,
-      { quotationId: string; body: LeadQuotationProformaDetails }
-    >({
-      query: ({ quotationId, body }) => ({
-        url: `/quotations/${quotationId}/proforma`,
-        method: "POST",
-        body,
-      }),
-      transformResponse: (raw: ApiEnvelope<LeadQuotationRecord>) =>
-        unwrapEnvelope(raw) as LeadQuotationRecord,
-      invalidatesTags: (_res, _err, { quotationId }) => [
-        { type: "LeadQuotation", id: quotationId },
-        { type: "Quotation", id: quotationId },
-        { type: "Quotation", id: "LIST" },
-        "Activity",
-      ],
-    }),
-
     // Quotation Analytics & Reports Endpoints
     getQuotationReportSummary: build.query<QuotationReportSummary, QuotationReportQueryParams | void>({
       query: (params) => ({
@@ -929,6 +900,29 @@ export const leadQuotationsApi = medicaApi.injectEndpoints({
       }),
       transformResponse: (raw: ApiEnvelope<QuotationConversionFunnel>) => unwrapEnvelope(raw),
       providesTags: [{ type: "Quotation" as const, id: "REPORTS_FUNNEL" }],
+    }),
+
+    listOrders: build.query<unknown, Record<string, string | undefined> | void>({
+      query: (params) => ({
+        url: "/quotations/party-orders",
+        method: "GET",
+        params: params ?? {},
+      }),
+      transformResponse: (raw: ApiEnvelope<unknown>) => unwrapEnvelope(raw),
+      providesTags: ["Orders"],
+    }),
+
+    updateOrderPerforma: build.mutation<
+      unknown,
+      { orderId: string; data: Record<string, any> }
+    >({
+      query: ({ orderId, data }) => ({
+        url: `/quotations/orders/${orderId}/performa`,
+        method: "PUT",
+        body: data,
+      }),
+      transformResponse: (raw: ApiEnvelope<unknown>) => unwrapEnvelope(raw),
+      invalidatesTags: ["Orders"],
     }),
   }),
 });
@@ -1048,8 +1042,6 @@ export const {
   useRejectLeadQuotationMutation,
   useExtendQuotationValidityMutation,
   useConvertQuotationMutation,
-  useMarkQuotationProformaIssuedMutation,
-  useSaveQuotationProformaMutation,
   useDeleteLeadQuotationMutation,
   useListQuotationFollowUpsQuery,
   useScheduleQuotationFollowUpMutation,
@@ -1066,5 +1058,7 @@ export const {
   useGetQuotationReportMonthlyTrendsQuery,
   useGetQuotationReportProductBreakdownQuery,
   useGetQuotationReportFunnelQuery,
+  useListOrdersQuery,
+  useUpdateOrderPerformaMutation,
 } = leadQuotationsApi;
 

@@ -141,10 +141,6 @@ export default function AdminOverview() {
       duration: 8_000,
     });
 
-    if (typeof document !== "undefined") {
-      document.title = `(${count}) Admin Dashboard`;
-    }
-
     // OS notification banner + system notification sound (every 5 minutes)
     await showLocalNotification({
       title,
@@ -181,9 +177,6 @@ export default function AdminOverview() {
   // Depend only on hasPendingAdmin — including refetchOrders was clearing the timer.
   useEffect(() => {
     if (!hasPendingAdmin) {
-      if (typeof document !== "undefined" && document.title.startsWith("(")) {
-        document.title = "Admin Dashboard";
-      }
       return;
     }
 
@@ -203,9 +196,6 @@ export default function AdminOverview() {
       cancelled = true;
       window.clearTimeout(first);
       window.clearInterval(id);
-      if (typeof document !== "undefined" && document.title.startsWith("(")) {
-        document.title = "Admin Dashboard";
-      }
     };
   }, [hasPendingAdmin]);
 

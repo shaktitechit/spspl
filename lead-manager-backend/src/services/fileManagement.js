@@ -145,6 +145,11 @@ async function uploadMulterFile(file, resourceType = 'attachment', resourceId = 
   const meta = await waitUntilFileAccessible(fileId);
   const viewUrl = await getViewPresignedUrl(fileId);
 
+  const resolvedEntityId =
+    resourceId && mongoose.Types.ObjectId.isValid(resourceId)
+      ? new mongoose.Types.ObjectId(resourceId)
+      : resourceId;
+
   const { Attachment } = getModels();
   const attachmentData = {
     filename: fileId,
@@ -155,6 +160,8 @@ async function uploadMulterFile(file, resourceType = 'attachment', resourceId = 
     storage_path: meta.objectKey || fileId,
     // Direct file-manager presigned view URL (refreshed on read via filename/fileId).
     url: viewUrl,
+    entity_type: resourceType || 'lead',
+    entity_id: resolvedEntityId,
   };
 
   const attachment = await Attachment.create(attachmentData);
