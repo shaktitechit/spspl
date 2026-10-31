@@ -226,7 +226,7 @@ export type WorkPlanTourAdvanceRecord = {
   updatedAt?: string;
 };
 
-export type SettlementMode = "advance_deduction" | "direct_payment" | "split";
+export type SettlementMode = "advance_deduction" | "direct_payment" | "split" | "payment_entry";
 
 export type SettlementClaimItem = {
   expense: string | WorkPlanExpenseRecord;
@@ -242,6 +242,12 @@ export type SettlementAdvanceItem = {
   advance_number?: string;
 };
 
+export type SettlementPaymentEntryItem = {
+  payment_entry: string | any;
+  deducted_amount: number;
+  payment_number?: string;
+};
+
 export type WorkPlanExpenseSettlementRecord = {
   _id?: string;
   id?: string;
@@ -250,9 +256,13 @@ export type WorkPlanExpenseSettlementRecord = {
   settlement_date: string;
   claims: SettlementClaimItem[];
   advances: SettlementAdvanceItem[];
+  payment_entries?: SettlementPaymentEntryItem[];
   total_claim_amount: number;
   advance_deduction_amount: number;
+  payment_entry_deduction_amount?: number;
   direct_payment_amount: number;
+  remaining_balance?: number;
+  settled_amount?: number;
   settlement_mode: SettlementMode;
   payment_method?: string;
   transaction_reference?: string;
@@ -274,22 +284,28 @@ export type ExecutiveBalanceItem = {
   unsettled_approved_claims_count: number;
   total_settled_claims_amount: number;
   total_settled_claims_count: number;
+  total_payment_entries?: number;
+  payment_entries_count?: number;
   net_position: number;
   position_status: "due_to_employee" | "due_to_company" | "balanced";
 };
 
 export type PassbookLedgerEntry = {
   id: string;
-  entry_type: "advance_disbursement" | "advance_refund" | "expense_approved" | "settlement_voucher";
+  settlement_id?: string;
+  entry_type: "advance_disbursement" | "advance_refund" | "expense_approved" | "settlement_voucher" | "payment_entry";
   date: string;
   reference: string;
   title: string;
   amount: number;
   advance_deduction_amount?: number;
+  payment_entry_deduction_amount?: number;
   direct_payment_amount?: number;
   impact_advance_balance: number;
+  impact_payment_entry?: number;
   impact_claim_receivable: number;
   running_advance_balance: number;
+  running_payment_entry?: number;
   running_claim_receivable: number;
   running_net_position: number;
   payment_method?: string;
@@ -303,8 +319,14 @@ export type PassbookLedgerEntry = {
 export type ExecutivePassbookData = {
   sales_user: { _id: string; name: string; email: string; department?: string; phone?: string };
   current_advance_balance: number;
+  current_payment_entry?: number;
+  total_payment_entries?: number;
   current_claim_receivable: number;
   current_net_position: number;
+  opening_advance_balance?: number;
+  opening_payment_entry?: number;
+  opening_claim_receivable?: number;
+  opening_net_position?: number;
   entries: PassbookLedgerEntry[];
 };
 
@@ -609,6 +631,7 @@ export type DayEndDraftResponse = {
   plan_id: string;
   plan_date: string;
   from: string;
+  from_name?: string;
   from_email: string;
   to: string;
   cc: string[];
@@ -620,10 +643,12 @@ export type DayEndDraftResponse = {
     email: string;
     department?: string;
   }>;
+  attachments?: WorkPlanDayEndAttachment[];
 };
 
 export type DayEndPayload = {
   from_email?: string;
+  from_name?: string;
   to_email: string;
   cc_emails?: string[];
   subject: string;

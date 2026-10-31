@@ -769,19 +769,19 @@ export function WorkPlanDetailPage({ planId }: WorkPlanDetailPageProps) {
 
                   {latestRemark?.status && (
                     <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${
                         isResolved
                           ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
                           : latestRemark.status === "responded"
                           ? "bg-sky-500/15 border-sky-500/30 text-sky-600 dark:text-sky-400"
-                          : "bg-amber-500/15 border-amber-500/30 text-amber-600 dark:text-amber-400"
+                          : "bg-amber-500/15 border-amber-500/30 text-amber-600 dark:text-amber-400 animate-pulse"
                       }`}
                     >
                       {isResolved
-                        ? "✅ Resolved"
+                        ? "✅ Resolved & Closed"
                         : latestRemark.status === "responded"
-                        ? "💬 Responded"
-                        : "⏳ Awaiting Reply"}
+                        ? "💬 Under Review"
+                        : "⏳ Action Required"}
                     </span>
                   )}
                 </div>
@@ -1169,14 +1169,14 @@ export function WorkPlanDetailPage({ planId }: WorkPlanDetailPageProps) {
                                         ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
                                         : vLatestRemark.status === "responded"
                                         ? "bg-sky-500/15 border-sky-500/30 text-sky-600 dark:text-sky-400"
-                                        : "bg-amber-500/15 border-amber-500/30 text-amber-600 dark:text-amber-400"
+                                        : "bg-amber-500/15 border-amber-500/30 text-amber-600 dark:text-amber-400 animate-pulse"
                                     }`}
                                   >
                                     {isResolved
-                                      ? "✅ Resolved"
+                                      ? "✅ Resolved & Closed"
                                       : vLatestRemark.status === "responded"
-                                      ? "💬 Responded"
-                                      : "⏳ Awaiting Reply"}
+                                      ? "💬 Under Review"
+                                      : "⏳ Action Required"}
                                   </span>
                                 )}
                               </div>
@@ -1579,14 +1579,14 @@ export function WorkPlanDetailPage({ planId }: WorkPlanDetailPageProps) {
                                       ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
                                       : wLatestRemark.status === "responded"
                                       ? "bg-sky-500/15 border-sky-500/30 text-sky-600 dark:text-sky-400"
-                                      : "bg-amber-500/15 border-amber-500/30 text-amber-600 dark:text-amber-400"
+                                      : "bg-amber-500/15 border-amber-500/30 text-amber-600 dark:text-amber-400 animate-pulse"
                                   }`}
                                 >
                                   {isResolved
-                                    ? "✅ Resolved"
+                                    ? "✅ Resolved & Closed"
                                     : wLatestRemark.status === "responded"
-                                    ? "💬 Responded"
-                                    : "⏳ Awaiting Reply"}
+                                    ? "💬 Under Review"
+                                    : "⏳ Action Required"}
                                 </span>
                               )}
                             </div>

@@ -129,6 +129,16 @@ async function createSettlement(req, res) {
   }
 }
 
+async function getActivePaymentEntries(req, res) {
+  try {
+    const targetUserId = req.params.userId || req.query.sales_user || req.query.user_id;
+    const data = await settlementService.getActivePaymentEntries(targetUserId);
+    return handleSuccess(res, { data, total: data.length });
+  } catch (err) {
+    return handleError(res, err, 'Failed to fetch active payment entries');
+  }
+}
+
 // 4. Balances & Passbook
 async function getExecutiveBalances(req, res) {
   try {
@@ -205,6 +215,7 @@ module.exports = {
   listSettlements,
   getSettlement,
   createSettlement,
+  getActivePaymentEntries,
   getExecutiveBalances,
   getExecutivePassbook,
   uploadExpenseFile,

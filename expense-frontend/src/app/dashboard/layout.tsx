@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import type { UserSession } from "@/types/workPlanner";
-import { logoutAndRedirect, readSessionFromStorage } from "@/utils/authStorage";
+import { hasExpensePortalAccess, logoutAndRedirect, readSessionFromStorage } from "@/utils/authStorage";
 import { useTheme } from "@/hooks/useTheme";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
@@ -88,8 +88,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     const s = readSessionFromStorage();
-    if (!s?.token) {
-      router.push("/");
+    if (!s?.token || !hasExpensePortalAccess(s.user)) {
+      void logoutAndRedirect("/");
     } else {
       setSession(s);
     }

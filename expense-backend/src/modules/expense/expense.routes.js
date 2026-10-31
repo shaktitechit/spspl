@@ -51,10 +51,16 @@ router.patch('/advances/:id/disburse', requireExpenseFinance, controller.disburs
 router.post('/advances/:id/refund', requireExpenseFinance, controller.refundAdvance);
 router.patch('/advances/:id/refund', requireExpenseFinance, controller.refundAdvance);
 
-// 5. Settlements Management (Finance only executes)
+// 5. Settlements & Direct Payment Entries (Finance and Admin execution authority)
 router.get('/settlements', controller.listSettlements);
+router.get('/settlements/active-payments', controller.getActivePaymentEntries);
+router.get('/settlements/active-payments/:userId', controller.getActivePaymentEntries);
+router.get('/payments/active', controller.getActivePaymentEntries);
+router.get('/payments/active/:userId', controller.getActivePaymentEntries);
 router.get('/settlements/:id', controller.getSettlement);
-router.post('/settlements', requireExpenseFinance, controller.createSettlement);
+router.post('/settlements', requireExpenseRole('finance', 'admin'), controller.createSettlement);
+router.post('/settlements/entry', requireExpenseRole('finance', 'admin'), controller.recordPaymentEntry);
+router.post('/payments/entry', requireExpenseRole('finance', 'admin'), controller.recordPaymentEntry);
 
 // 6. Ledgers, Balances & Passbook (Accessible by both Admin and Finance, primary for Finance)
 router.get('/balances', controller.getExecutiveBalances);
@@ -74,6 +80,12 @@ router.post('/claims/bulk-approve', requireExpenseAdmin, controller.bulkApproveE
 router.post('/claims/:id/reject', requireExpenseAdmin, controller.rejectExpense);
 router.patch('/claims/:id/reject', requireExpenseAdmin, controller.rejectExpense);
 
+// Authority Remarks / Directives on claims
+router.post('/claims/:id/authority-remarks', requireExpenseRole('admin', 'finance'), controller.addExpenseAuthorityRemark);
+router.post('/claims/:id/remarks', requireExpenseRole('admin', 'finance'), controller.addExpenseAuthorityRemark);
+router.patch('/claims/:id/remarks/status', requireExpenseRole('admin', 'finance'), controller.updateExpenseRemarkStatus);
+router.post('/claims/:id/remarks/status', requireExpenseRole('admin', 'finance'), controller.updateExpenseRemarkStatus);
+
 // Direct root aliases for claims
 router.get('/', controller.listExpenses);
 router.get('/:id', controller.getExpenseById);
@@ -82,6 +94,10 @@ router.post('/:id/approve', requireExpenseAdmin, controller.approveExpense);
 router.patch('/:id/approve', requireExpenseAdmin, controller.approveExpense);
 router.post('/:id/reject', requireExpenseAdmin, controller.rejectExpense);
 router.patch('/:id/reject', requireExpenseAdmin, controller.rejectExpense);
+router.post('/:id/authority-remarks', requireExpenseRole('admin', 'finance'), controller.addExpenseAuthorityRemark);
+router.post('/:id/remarks', requireExpenseRole('admin', 'finance'), controller.addExpenseAuthorityRemark);
+router.patch('/:id/remarks/status', requireExpenseRole('admin', 'finance'), controller.updateExpenseRemarkStatus);
+router.post('/:id/remarks/status', requireExpenseRole('admin', 'finance'), controller.updateExpenseRemarkStatus);
 
 module.exports = router;
 

@@ -89,14 +89,25 @@ export function ExpenseAttachmentList({
       )}
       <div className={compact ? "flex flex-wrap items-center gap-1.5" : "space-y-1.5"}>
         {mergedList.map((att: any, idx: number) => {
-          const fileName = att.original_name || att.filename || att.name || `Attachment #${idx + 1}`;
-          const fileId = att._id || att.attachment_id || att.file_id || att.id;
-        const fileUrl =
-          att.url ||
-          (fileId ? `/api/work-planner/attachments/${fileId}/preview` : "#");
-        const mime = att.mime_type || att.mime || "";
+          const fileName =
+            typeof att === "string"
+              ? `Attachment #${idx + 1}`
+              : att.original_name || att.filename || att.name || `Attachment #${idx + 1}`;
+          const fileId =
+            typeof att === "string"
+              ? att
+              : att._id || att.attachment_id || att.file_id || att.id;
+          const fileUrl =
+            typeof att?.url === "string"
+              ? att.url
+              : (att?.url && typeof att.url.url === "string")
+              ? att.url.url
+              : fileId
+              ? `/api/work-planner/attachments/${fileId}/preview`
+              : "#";
+          const mime = typeof att === "object" ? att.mime_type || att.mime || "" : "";
 
-        const docObj = { name: fileName, url: fileUrl, mime };
+          const docObj = { name: fileName, url: fileUrl, mime };
 
         if (compact) {
           return (

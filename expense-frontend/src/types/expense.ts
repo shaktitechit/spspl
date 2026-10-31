@@ -188,6 +188,12 @@ export interface SettlementAdvanceItem {
   advance_number?: string;
 }
 
+export interface SettlementPaymentEntryItem {
+  payment_entry: string | ExpenseSettlementRecord | any;
+  deducted_amount: number;
+  payment_number?: string;
+}
+
 export interface ExpenseSettlementRecord {
   _id: string;
   id?: string;
@@ -196,10 +202,14 @@ export interface ExpenseSettlementRecord {
   settlement_date: string;
   claims: SettlementClaimItem[];
   advances: SettlementAdvanceItem[];
+  payment_entries?: SettlementPaymentEntryItem[];
   total_claim_amount: number;
   advance_deduction_amount: number;
+  payment_entry_deduction_amount?: number;
   direct_payment_amount: number;
-  settlement_mode: "advance_deduction" | "direct_payment" | "split";
+  remaining_balance?: number;
+  settled_amount?: number;
+  settlement_mode: "advance_deduction" | "direct_payment" | "split" | "payment_entry" | string;
   payment_method: string;
   transaction_reference?: string;
   bank_name?: string;

@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   DollarSign,
+  BookOpen,
   FileText,
   FolderKanban,
   LayoutGrid,
@@ -310,7 +311,7 @@ export function Sidebar({
             )}
           </Link>
 
-          {/* Expense Claims */}
+          {/* My Passbook */}
           <Link
             href="/dashboard/expenses"
             onClick={() => setMobileNavOpen(false)}
@@ -319,10 +320,10 @@ export function Sidebar({
                 ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
                 : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
             }`}
-            title="Expense Claims"
+            title="My Passbook"
           >
-            <DollarSign className={`h-4 w-4 shrink-0 ${isExpensesActive ? "text-primary" : ""}`} />
-            {!desktopCollapsed && <span>Expense Claims</span>}
+            <BookOpen className={`h-4 w-4 shrink-0 ${isExpensesActive ? "text-primary" : ""}`} />
+            {!desktopCollapsed && <span>My Passbook</span>}
           </Link>
 
           {/* My Team (Manager / Coordinator) */}

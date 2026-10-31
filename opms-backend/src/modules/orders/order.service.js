@@ -958,7 +958,7 @@ async function list(query = {}, user) {
   if (isListView) {
     findQuery = findQuery
       .select(LIST_VIEW_SELECT)
-      .populate('party', 'name code sra sra_from_date legal_name trade_name')
+      .populate('party', 'name code sra sra_from_date legal_name trade_name party_name contact_person mobile email gst_no')
       .populate('assigned_sales_user', 'name username email department');
   }
 
@@ -1024,7 +1024,7 @@ async function getById(id, user) {
   const row = await getModels().Order.findOne(q)
     .populate('created_by', 'name username email department')
     .populate('assigned_sales_user', 'name username email department')
-    .populate('party', 'name code sra sra_from_date legal_name trade_name billing_address shipping_address')
+    .populate('party', 'name code sra sra_from_date legal_name trade_name party_name contact_person mobile email gst_no billing_address shipping_address')
     .lean();
   if (!row) throw new ApiError(404, 'Order not found');
   const plain = applyDerivedPriorityToOrder(toPlain(row));

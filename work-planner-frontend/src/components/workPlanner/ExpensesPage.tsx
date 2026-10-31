@@ -1,553 +1,743 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
 import {
-  FileSpreadsheet,
-  FileCheck,
-  Receipt,
-  Wallet,
-  Scale,
-  Users,
-  ShieldCheck,
-  Building2,
   BookOpen,
+  Wallet,
+  Receipt,
+  FileCheck,
+  RotateCcw,
+  CreditCard,
+  Printer,
+  Search,
+  Calendar,
+  RefreshCw,
+  Scale,
+  Eye,
+  Info,
+  User,
+  Plus,
 } from "lucide-react";
-import {
-  useGetMyTeamQuery,
-  useGetExpenseKpisQuery,
-  useApproveExpenseMutation,
-  useRejectExpenseMutation,
-  useApproveTourAdvanceMutation,
-  useRejectTourAdvanceMutation,
-} from "@/store/api/workPlannerApiSlice";
-import { useGetUsersQuery } from "@/store/api/authApiSlice";
-import { readSessionFromStorage, hasWorkPlannerPortalAccess } from "@/utils/authStorage";
-import { getExpensePermissions } from "./expense/expensePermissions";
-import { useFilePreview, FilePreviewModal } from "./FilePreviewModal";
-import { DownloadExpensesModal } from "./DownloadExpensesModal";
-import { DownloadWorkPlansModal } from "./DownloadWorkPlansModal";
-import { RejectExpenseModal } from "./RejectExpenseModal";
-import { SeniorRemarksModal } from "./SeniorRemarksModal";
-import { DirectiveThreadModal } from "./DirectiveThreadModal";
-
-import { ExpenseKpiSummary } from "./expense/ExpenseKpiSummary";
-import { ExpenseClaimsTab } from "./expense/ExpenseClaimsTab";
-import { ExpenseAdvancesTab } from "./expense/ExpenseAdvancesTab";
-import { ExpenseSettlementsTab } from "./expense/ExpenseSettlementsTab";
-import { ExpenseBalancesTab } from "./expense/ExpenseBalancesTab";
-import { AdvanceFormModal } from "./expense/AdvanceFormModal";
-import { ApproveAdvanceModal } from "./expense/ApproveAdvanceModal";
-import { RejectAdvanceModal } from "./expense/RejectAdvanceModal";
-import { AdvanceDisburseModal } from "./expense/AdvanceDisburseModal";
-import { AdvanceRefundModal } from "./expense/AdvanceRefundModal";
-import { ApproveExpenseModal } from "./expense/ApproveExpenseModal";
-import { SettleExpenseModal } from "./expense/SettleExpenseModal";
-import { ExecutiveLedgerDrawer } from "./expense/ExecutiveLedgerDrawer";
+import { useGetExecutivePassbookQuery } from "@/store/api/workPlannerApiSlice";
+import { readSessionFromStorage } from "@/utils/authStorage";
+import { formatCurrency, formatPlanDate } from "./workPlanUtils";
+import { ExpenseAttachmentList } from "./expense/ExpenseAttachmentList";
+import { FilePreviewModal, useFilePreview } from "./FilePreviewModal";
 import { SettlementVoucherModal } from "./expense/SettlementVoucherModal";
-
-import type {
-  SeniorRemarkFeedItem,
-  WorkPlanExpenseRecord,
-  WorkPlanTourAdvanceRecord,
-} from "@/types/workPlanner";
-import { toast } from "sonner";
-
-type ExpenseTab = "claims" | "advances" | "settlements" | "balances";
-type OwnershipScope = "mine" | "team";
+import { RequestAdvanceModal } from "./expense/RequestAdvanceModal";
+import type { PassbookLedgerEntry } from "@/types/workPlanner";
+import { calculateDateRange } from "./DashboardDateFilter";
 
 export function ExpensesPage() {
-  const searchParams = useSearchParams();
   const session = readSessionFromStorage();
   const currentUser = session?.user;
   const sessionToken = session?.token;
+  const userId = currentUser?._id || "";
 
-  const perms = useMemo(() => getExpensePermissions(currentUser), [currentUser]);
+  // Filter States - Default to current month
+  const defaultRange = useMemo(() => calculateDateRange("current_month"), []);
+  const [fromDate, setFromDate] = useState<string>(defaultRange.from);
+  const [toDate, setToDate] = useState<string>(defaultRange.to);
+  const [typeFilter, setTypeFilter] = useState<"all" | "advance" | "payment" | "expense" | "settlement">("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Tab state (defaults to 'claims' or searchParam 'tab')
-  const initialTab = (searchParams?.get("tab") as ExpenseTab) || "claims";
-  const [activeTab, setActiveTab] = useState<ExpenseTab>(
-    ["claims", "advances", "settlements", "balances"].includes(initialTab) ? initialTab : "claims"
+  const isCurrentMonthActive = Boolean(
+    fromDate &&
+      toDate &&
+      fromDate === defaultRange.from &&
+      toDate === defaultRange.to
   );
 
-  // Scope: Executives only have 'mine'. Elevated users can toggle 'mine' vs 'team'.
-  const [ownershipScope, setOwnershipScope] = useState<OwnershipScope>(
-    perms.isElevated ? "team" : "mine"
-  );
-
-  // Common Filters
-  const [selectedExecutive, setSelectedExecutive] = useState<string>("all");
-  const [dateFrom, setDateFrom] = useState<string>("");
-  const [dateTo, setDateTo] = useState<string>("");
-
-  // Modals state
-  const [downloadOpen, setDownloadOpen] = useState<boolean>(false);
-  const [workPlanReportOpen, setWorkPlanReportOpen] = useState<boolean>(false);
-  const [approveExpenseTarget, setApproveExpenseTarget] = useState<{
-    planId: string;
-    expense: WorkPlanExpenseRecord;
-  } | null>(null);
-  const [rejectTarget, setRejectTarget] = useState<{ planId: string; expenseId: string } | null>(null);
-  const [seniorRemarksTarget, setSeniorRemarksTarget] = useState<{
-    planId: string;
-    expenseId: string;
-    title: string;
-    currentStatus: string;
-    assigneeName: string;
-    remarks: string;
-    history: any[];
-  } | null>(null);
-  const [selectedThreadItem, setSelectedThreadItem] = useState<SeniorRemarkFeedItem | null>(null);
-  const [threadModalOpen, setThreadModalOpen] = useState<boolean>(false);
-
-  // New Expense Workflow Modals
-  const [advanceFormOpen, setAdvanceFormOpen] = useState<boolean>(false);
-  const [advanceFormMode, setAdvanceFormMode] = useState<"request" | "direct_issue">("request");
-  const [advancePreselectedUserId, setAdvancePreselectedUserId] = useState<string>("");
-  const [approveAdvanceTarget, setApproveAdvanceTarget] = useState<WorkPlanTourAdvanceRecord | null>(null);
-  const [rejectAdvanceTarget, setRejectAdvanceTarget] = useState<WorkPlanTourAdvanceRecord | null>(null);
-  const [disburseTarget, setDisburseTarget] = useState<WorkPlanTourAdvanceRecord | null>(null);
-  const [refundTarget, setRefundTarget] = useState<WorkPlanTourAdvanceRecord | null>(null);
-  const [settleUserTarget, setSettleUserTarget] = useState<{ _id: string; name: string; email?: string } | null>(null);
+  // Modals State
+  const [requestAdvanceOpen, setRequestAdvanceOpen] = useState<boolean>(false);
   const [selectedVoucherId, setSelectedVoucherId] = useState<string | null>(null);
-  const [ledgerTarget, setLedgerTarget] = useState<{ userId: string; userName: string } | null>(null);
 
   // File Preview Hook
-  const { previewDoc, previewBlobUrl, previewLoading, openPreview, closePreview, downloadFile } =
-    useFilePreview(sessionToken);
+  const {
+    previewDoc,
+    previewBlobUrl,
+    previewLoading,
+    openPreview,
+    closePreview,
+    downloadFile,
+  } = useFilePreview(sessionToken);
 
-  const [approveExpenseMut, { isLoading: isApprovingExpense }] = useApproveExpenseMutation();
-  const [rejectExpenseMut, { isLoading: isRejectingExpense }] = useRejectExpenseMutation();
-  const [approveTourAdvanceMut, { isLoading: isApprovingAdvance }] = useApproveTourAdvanceMutation();
-  const [rejectTourAdvanceMut, { isLoading: isRejectingAdvance }] = useRejectTourAdvanceMutation();
+  // Query Passbook for the logged-in user
+  const {
+    data: passbookData,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useGetExecutivePassbookQuery(
+    {
+      userId,
+      from_date: fromDate || undefined,
+      to_date: toDate || undefined,
+    },
+    { skip: !userId }
+  );
 
-  // Load team users for filters & modals
-  const { data: usersData } = useGetUsersQuery(undefined, { skip: !perms.isAdmin });
-  const { data: myTeamData } = useGetMyTeamQuery(undefined, { skip: perms.isAdmin || !perms.isElevated });
+  const rawEntries: PassbookLedgerEntry[] = passbookData?.entries || [];
 
-  const executiveOptions = useMemo(() => {
-    const map = new Map<string, { id: string; name: string }>();
+  // Counts by category
+  const counts = useMemo(() => {
+    let advances = 0;
+    let payments = 0;
+    let expenses = 0;
+    let settlements = 0;
 
-    function addExec(id: string, name: string) {
-      if (!id || id === "undefined" || id === "null") return;
-      if (!map.has(id)) map.set(id, { id, name: name || "Unknown User" });
+    for (const e of rawEntries) {
+      if (e.entry_type === "advance_disbursement" || e.entry_type === "advance_refund") {
+        advances++;
+      } else if (e.entry_type === "payment_entry") {
+        payments++;
+      } else if (e.entry_type === "expense_approved") {
+        expenses++;
+      } else if (e.entry_type === "settlement_voucher") {
+        settlements++;
+      }
     }
 
-    if (perms.isAdmin && usersData && Array.isArray(usersData)) {
-      usersData.filter(hasWorkPlannerPortalAccess).forEach((u: any) => {
-        addExec(String(u._id || u.id), u.name || u.email || "Unknown User");
+    return {
+      all: rawEntries.length,
+      advances,
+      payments,
+      expenses,
+      settlements,
+    };
+  }, [rawEntries]);
+
+  // Filtered entries by type and search query, sorted latest-to-oldest
+  const filteredEntries = useMemo(() => {
+    let list = rawEntries;
+
+    if (typeFilter === "advance") {
+      list = list.filter(
+        (e) => e.entry_type === "advance_disbursement" || e.entry_type === "advance_refund"
+      );
+    } else if (typeFilter === "payment") {
+      list = list.filter((e) => e.entry_type === "payment_entry");
+    } else if (typeFilter === "expense") {
+      list = list.filter((e) => e.entry_type === "expense_approved");
+    } else if (typeFilter === "settlement") {
+      list = list.filter((e) => e.entry_type === "settlement_voucher");
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter((e) => {
+        const ref = (e.reference || "").toLowerCase();
+        const title = (e.title || "").toLowerCase();
+        const details = (e.details || "").toLowerCase();
+        const method = (e.payment_method || "").toLowerCase();
+        const txRef = (e.transaction_reference || "").toLowerCase();
+        return (
+          ref.includes(q) ||
+          title.includes(q) ||
+          details.includes(q) ||
+          method.includes(q) ||
+          txRef.includes(q)
+        );
       });
-    } else if (myTeamData?.members && Array.isArray(myTeamData.members)) {
-      myTeamData.members.forEach((m: any) => {
-        addExec(String(m._id || m.id), m.name || m.email || "Unknown User");
+    }
+
+    // Sort latest-to-oldest by date
+    return [...list].sort((a, b) => {
+      const tA = new Date(a.date).getTime() || 0;
+      const tB = new Date(b.date).getTime() || 0;
+      return tB - tA;
+    });
+  }, [rawEntries, typeFilter, searchQuery]);
+
+  // Group filtered entries by date for section headers
+  const groupedByDate = useMemo(() => {
+    const groups: { dateKey: string; dateLabel: string; entries: typeof filteredEntries }[] = [];
+    const map = new Map<string, typeof filteredEntries>();
+
+    for (const entry of filteredEntries) {
+      const dateKey = entry.date ? entry.date.slice(0, 10) : "unknown";
+      if (!map.has(dateKey)) {
+        map.set(dateKey, []);
+      }
+      map.get(dateKey)!.push(entry);
+    }
+
+    for (const [dateKey, entries] of map) {
+      groups.push({
+        dateKey,
+        dateLabel: dateKey !== "unknown" ? formatPlanDate(dateKey) : "Unknown Date",
+        entries,
       });
     }
 
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [perms.isAdmin, perms.isElevated, usersData, myTeamData]);
+    return groups;
+  }, [filteredEntries]);
 
-  // Fetch KPI Summary
-  const { data: kpiData, isLoading: kpiLoading, refetch: refetchKpis } = useGetExpenseKpisQuery({
-    scope: perms.isElevated ? ownershipScope : "mine",
-    user_id: selectedExecutive !== "all" ? selectedExecutive : undefined,
-    from_date: dateFrom || undefined,
-    to_date: dateTo || undefined,
-  });
-
-  async function handleApproveExpenseConfirm() {
-    if (!approveExpenseTarget) return;
-    try {
-      const expId = approveExpenseTarget.expense._id || approveExpenseTarget.expense.id || "";
-      await approveExpenseMut({
-        planId: approveExpenseTarget.planId,
-        expenseId: expId,
-      }).unwrap();
-      toast.success("Expense claim approved successfully");
-      setApproveExpenseTarget(null);
-      refetchKpis();
-    } catch (err: any) {
-      const msg = err?.data?.message || err?.message || "Failed to approve expense";
-      toast.error(msg);
+  function handlePrint() {
+    if (typeof window !== "undefined") {
+      window.print();
     }
   }
 
-  async function handleRejectExpenseConfirm(reason: string) {
-    if (!rejectTarget) return;
-    try {
-      await rejectExpenseMut({
-        planId: rejectTarget.planId,
-        expenseId: rejectTarget.expenseId,
-        rejection_reason: reason,
-      }).unwrap();
-      toast.success("Expense claim rejected");
-      setRejectTarget(null);
-      refetchKpis();
-    } catch (err: any) {
-      const msg = err?.data?.message || err?.message || "Failed to reject expense";
-      toast.error(msg);
-    }
-  }
+  const currentUserName = currentUser?.name || passbookData?.sales_user?.name || "Executive";
+  const currentUserEmail = currentUser?.email || passbookData?.sales_user?.email || "";
+  const currentDepartment = currentUser?.department || passbookData?.sales_user?.department || "Operations";
 
-  async function handleApproveAdvanceConfirm() {
-    if (!approveAdvanceTarget) return;
-    try {
-      const advId = approveAdvanceTarget._id || approveAdvanceTarget.id || "";
-      await approveTourAdvanceMut({ advanceId: advId }).unwrap();
-      toast.success(`Tour advance ${approveAdvanceTarget.advance_number} approved`);
-      setApproveAdvanceTarget(null);
-      refetchKpis();
-    } catch (err: any) {
-      const msg = err?.data?.message || err?.message || "Failed to approve advance";
-      toast.error(msg);
-    }
-  }
-
-  async function handleRejectAdvanceConfirm(reason: string) {
-    if (!rejectAdvanceTarget) return;
-    try {
-      const advId = rejectAdvanceTarget._id || rejectAdvanceTarget.id || "";
-      await rejectTourAdvanceMut({ advanceId: advId, rejection_reason: reason }).unwrap();
-      toast.success(`Tour advance ${rejectAdvanceTarget.advance_number} rejected`);
-      setRejectAdvanceTarget(null);
-      refetchKpis();
-    } catch (err: any) {
-      const msg = err?.data?.message || err?.message || "Failed to reject advance";
-      toast.error(msg);
-    }
-  }
+  const netPosition = passbookData?.current_net_position || 0;
 
   return (
-    <div className="space-y-4 font-sans w-full max-w-full">
-      {/* Top Header */}
+    <div className="space-y-4 font-sans w-full max-w-full pb-8">
+      {/* Top Header Card */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-2xl border border-border shadow-2xs">
-        <div>
-          <h1 className="text-lg sm:text-xl font-bold text-foreground">
-            Expense & Tour Advance Management
-          </h1>
-          <p className="text-[11px] sm:text-xs text-muted">
-            {perms.isElevated
-              ? ownershipScope === "mine"
-                ? "Your own field expenses and tour advances — track submissions and reimbursements"
-                : "Team financial management — claims verification, advances, settlements & ledger audit"
-              : "Track tour advances, submit field visit claims, and check your live balance passbook"}
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="rounded-2xl bg-purple-500/10 p-3 text-purple-600 dark:text-purple-400 shrink-0">
+            <BookOpen className="h-6 w-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg sm:text-xl font-bold text-foreground">
+                My Passbook & Ledger
+              </h1>
+              <span className="rounded-lg bg-surface-muted px-2 py-0.5 text-xs font-semibold text-muted">
+                {currentUserName}
+              </span>
+              <span className="rounded-lg bg-purple-500/10 px-2 py-0.5 text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase">
+                {currentDepartment}
+              </span>
+            </div>
+            <p className="text-[11px] sm:text-xs text-muted mt-0.5">
+              Live personal financial dossier, field claim reimbursements, tour advances & running ledger
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-0.5 sm:flex-wrap">
-          {/* Quick passbook button for executive / self */}
+        {/* Action Toolbar */}
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isLoading || isFetching}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface-muted active:scale-95 transition shrink-0 cursor-pointer"
+            title="Refresh Ledger"
+          >
+            <RefreshCw className={`h-4 w-4 text-muted ${isFetching ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface-muted active:scale-95 transition shrink-0 cursor-pointer"
+            title="Print Passbook"
+          >
+            <Printer className="h-4 w-4 text-muted" />
+            <span className="hidden sm:inline">Print</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setRequestAdvanceOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-purple-700 active:scale-95 transition shadow-2xs shrink-0 cursor-pointer"
+            title="Request Tour Advance Funds"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Request Advance</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Financial Dossier KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* 1. Advance in Hand */}
+        <div className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+              Advance in Hand
+            </span>
+            <div className="rounded-lg bg-purple-500/10 p-1.5 text-purple-600 dark:text-purple-400">
+              <Wallet className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <div className="text-xl sm:text-2xl font-extrabold text-foreground">
+              {isLoading ? "…" : formatCurrency(passbookData?.current_advance_balance || 0)}
+            </div>
+            <div className="flex items-center justify-between mt-0.5">
+              <p className="text-[11px] text-muted">Active tour advances</p>
+              <button
+                type="button"
+                onClick={() => setRequestAdvanceOpen(true)}
+                className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+              >
+                + Request
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Direct Treasury Payments */}
+        <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+              Direct Payments
+            </span>
+            <div className="rounded-lg bg-indigo-500/10 p-1.5 text-indigo-600 dark:text-indigo-400">
+              <CreditCard className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <div className="text-xl sm:text-2xl font-extrabold text-foreground">
+              {isLoading
+                ? "…"
+                : formatCurrency(
+                    passbookData?.current_payment_entry ??
+                      passbookData?.total_payment_entries ??
+                      0
+                  )}
+            </div>
+            <p className="text-[11px] text-muted mt-0.5">Unadjusted treasury payouts</p>
+          </div>
+        </div>
+
+        {/* 3. Unsettled Approved Claims */}
+        <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-sky-700 dark:text-sky-300">
+              Approved Claims
+            </span>
+            <div className="rounded-lg bg-sky-500/10 p-1.5 text-sky-600 dark:text-sky-400">
+              <Receipt className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <div className="text-xl sm:text-2xl font-extrabold text-foreground">
+              {isLoading ? "…" : formatCurrency(passbookData?.current_claim_receivable || 0)}
+            </div>
+            <p className="text-[11px] text-muted mt-0.5">Verified claim receivables</p>
+          </div>
+        </div>
+
+        {/* 4. Net Position */}
+        <div
+          className={`rounded-2xl border p-4 flex flex-col justify-between ${
+            netPosition > 0
+              ? "border-emerald-500/20 bg-emerald-500/5"
+              : netPosition < 0
+              ? "border-rose-500/20 bg-rose-500/5"
+              : "border-border bg-card"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
+              Net Balance Position
+            </span>
+            <div className="rounded-lg bg-surface-muted p-1.5 text-muted">
+              <Scale className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <div
+              className={`text-xl sm:text-2xl font-extrabold ${
+                netPosition > 0
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : netPosition < 0
+                  ? "text-rose-600 dark:text-rose-400"
+                  : "text-foreground"
+              }`}
+            >
+              {isLoading ? "…" : formatCurrency(Math.abs(netPosition))}
+            </div>
+            <span
+              className={`inline-block text-[10px] font-bold uppercase rounded px-1.5 py-0.5 mt-1 ${
+                netPosition > 0
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  : netPosition < 0
+                  ? "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                  : "bg-surface-muted text-muted"
+              }`}
+            >
+              {netPosition > 0
+                ? "Due to You (Reimbursement Pending)"
+                : netPosition < 0
+                ? "Due to Company (Return / Deduct)"
+                : "Balanced / Fully Settled"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter & Search Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-card p-3 rounded-2xl border border-border shadow-2xs">
+        {/* Search Input */}
+        <div className="relative flex-1 min-w-0 max-w-md">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search reference #, notes, category, UTR..."
+            className="w-full rounded-xl border border-border bg-surface-muted pl-9 pr-3 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+          />
+        </div>
+
+        {/* Category Tabs */}
+        <div className="flex items-center gap-1 rounded-xl border border-border bg-surface-muted/50 p-1 overflow-x-auto scrollbar-none">
+          <button
+            type="button"
+            onClick={() => setTypeFilter("all")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
+              typeFilter === "all"
+                ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            All ({counts.all})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTypeFilter("advance")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
+              typeFilter === "advance"
+                ? "bg-purple-600 text-white shadow-xs font-bold"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            Advances ({counts.advances})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTypeFilter("payment")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
+              typeFilter === "payment"
+                ? "bg-indigo-600 text-white shadow-xs font-bold"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            Payments ({counts.payments})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTypeFilter("expense")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
+              typeFilter === "expense"
+                ? "bg-sky-600 text-white shadow-xs font-bold"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            Claims ({counts.expenses})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTypeFilter("settlement")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
+              typeFilter === "settlement"
+                ? "bg-emerald-600 text-white shadow-xs font-bold"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            Settlements ({counts.settlements})
+          </button>
+        </div>
+
+        {/* Date Filters */}
+        <div className="flex items-center gap-1.5 text-xs">
+          <Calendar className="h-4 w-4 text-muted shrink-0" />
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="rounded-lg border border-border bg-surface-muted px-2 py-1 text-xs text-foreground outline-none focus:border-primary"
+            title="From Date"
+          />
+          <span className="text-muted text-[11px]">to</span>
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className="rounded-lg border border-border bg-surface-muted px-2 py-1 text-xs text-foreground outline-none focus:border-primary"
+            title="To Date"
+          />
           <button
             type="button"
             onClick={() => {
-              if (currentUser?._id) {
-                setLedgerTarget({ userId: currentUser._id, userName: currentUser.name || "My Passbook" });
-              }
+              const range = calculateDateRange("current_month");
+              setFromDate(range.from);
+              setToDate(range.to);
             }}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-xs font-semibold text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 active:scale-95 transition shrink-0 cursor-pointer"
+            className={`rounded-lg border px-2 py-1 text-[11px] font-semibold transition cursor-pointer whitespace-nowrap ${
+              isCurrentMonthActive
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-border bg-surface-muted text-muted hover:text-foreground hover:bg-card"
+            }`}
+            title="Filter to current month"
           >
-            <BookOpen className="h-4 w-4" />
-            <span>My Passbook</span>
+            This Month
           </button>
-
-          <button
-            type="button"
-            onClick={() => setDownloadOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface-muted active:scale-95 transition shrink-0 cursor-pointer"
-          >
-            <FileSpreadsheet className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-            <span>Expense Report</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setWorkPlanReportOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface-muted active:scale-95 transition shrink-0 cursor-pointer"
-          >
-            <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            <span>Work Plan Report</span>
-          </button>
+          {(fromDate || toDate || searchQuery || typeFilter !== "all") && (
+            <button
+              type="button"
+              onClick={() => {
+                setFromDate("");
+                setToDate("");
+                setSearchQuery("");
+                setTypeFilter("all");
+              }}
+              className="rounded-lg px-2 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
+            >
+              Reset
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Scope Switcher (for Coordinator, Manager, Admin) */}
-      {perms.isElevated && (
-        <div className="flex items-center gap-1 rounded-xl border border-border bg-card p-1 overflow-x-auto scrollbar-none">
-          <button
-            type="button"
-            onClick={() => setOwnershipScope("team")}
-            className={`rounded-lg px-4 py-1.5 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
-              ownershipScope === "team"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "text-muted hover:bg-surface-muted hover:text-foreground"
-            }`}
-          >
-            {perms.isAdmin ? "All / Global View" : "Team View"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setOwnershipScope("mine")}
-            className={`rounded-lg px-4 py-1.5 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
-              ownershipScope === "mine"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "text-muted hover:bg-surface-muted hover:text-foreground"
-            }`}
-          >
-            My View (Personal)
-          </button>
-        </div>
-      )}
+      {/* Chronological Ledger Timeline */}
+      <div className="space-y-3">
+        {isLoading ? (
+          <div className="rounded-2xl border border-border bg-card p-12 text-center text-xs text-muted">
+            <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
+            <span>Loading passbook transactions & running balances…</span>
+          </div>
+        ) : rawEntries.length === 0 ? (
+          <div className="p-12 text-center space-y-3 bg-card rounded-2xl border border-dashed border-border">
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-600 dark:text-purple-400">
+              <BookOpen className="h-7 w-7" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-foreground">No Passbook Transactions Found</h3>
+              <p className="text-xs text-muted mt-1 max-w-md mx-auto">
+                You do not have any tour advance disbursements, approved expense claims, direct payments, or settlement vouchers recorded yet.
+              </p>
+            </div>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setRequestAdvanceOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-2 text-xs font-semibold text-white hover:bg-purple-700 active:scale-95 transition shadow-2xs cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Request Tour Advance</span>
+              </button>
+            </div>
+          </div>
+        ) : filteredEntries.length === 0 ? (
+          <div className="p-12 text-center text-xs text-muted bg-card rounded-2xl border border-border">
+            No passbook transactions match the selected filters or date range.
+          </div>
+        ) : (
+          groupedByDate.map((group) => (
+            <div key={group.dateKey} className="space-y-2">
+              {/* Date Section Header */}
+              <div className="flex items-center gap-3 px-1 pt-2">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-primary" />
+                  <span className="text-xs sm:text-sm font-bold text-foreground">{group.dateLabel}</span>
+                </div>
+                <span className="rounded-md bg-surface-muted px-2 py-0.5 text-[10px] font-semibold text-muted">
+                  {group.entries.length} {group.entries.length === 1 ? "entry" : "entries"}
+                </span>
+                <div className="flex-1 border-t border-border/50" />
+                <span className="text-[10px] font-semibold text-muted">
+                  {formatCurrency(group.entries.reduce((sum, e) => sum + e.amount, 0))}
+                </span>
+              </div>
 
-      {/* KPI Cards Summary */}
-      <ExpenseKpiSummary kpis={kpiData} loading={kpiLoading} />
+              {/* Entries within this date */}
+              {group.entries.map((entry) => {
+            const isAdvanceDisburse = entry.entry_type === "advance_disbursement";
+            const isAdvanceRefund = entry.entry_type === "advance_refund";
+            const isExpenseApproved = entry.entry_type === "expense_approved";
+            const isPaymentEntry = entry.entry_type === "payment_entry";
+            const isSettlement = entry.entry_type === "settlement_voucher";
 
-      {/* Primary Navigation Tabs */}
-      <div className="flex items-center gap-1.5 rounded-2xl border border-border bg-card p-1.5 overflow-x-auto scrollbar-none">
-        <button
-          type="button"
-          onClick={() => setActiveTab("claims")}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold whitespace-nowrap active:scale-95 transition cursor-pointer ${
-            activeTab === "claims"
-              ? "bg-primary text-primary-foreground shadow-xs"
-              : "text-muted hover:bg-surface-muted hover:text-foreground"
-          }`}
-        >
-          <Receipt className="h-4 w-4" />
-          <span>Expense Claims</span>
-        </button>
+            // Extract voucher ID for inspection
+            const voucherId = entry.settlement_id || entry.id.replace(/^(SETTLE|PAY-ENTRY)-/, "");
 
-        <button
-          type="button"
-          onClick={() => setActiveTab("advances")}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold whitespace-nowrap active:scale-95 transition cursor-pointer ${
-            activeTab === "advances"
-              ? "bg-primary text-primary-foreground shadow-xs"
-              : "text-muted hover:bg-surface-muted hover:text-foreground"
-          }`}
-        >
-          <Wallet className="h-4 w-4" />
-          <span>Tour Advances</span>
-        </button>
+            return (
+              <div
+                key={entry.id}
+                className="rounded-2xl border border-border bg-card p-4 shadow-2xs hover:shadow-xs transition space-y-3"
+              >
+                {/* Header: Type icon, title, date, reference, amount */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`rounded-xl p-2.5 shrink-0 ${
+                        isAdvanceDisburse
+                          ? "bg-purple-500/10 text-purple-600 dark:text-purple-400"
+                          : isAdvanceRefund
+                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                          : isExpenseApproved
+                          ? "bg-sky-500/10 text-sky-600 dark:text-sky-400"
+                          : isPaymentEntry
+                          ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+                          : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                      }`}
+                    >
+                      {isAdvanceDisburse ? (
+                        <Wallet className="h-5 w-5" />
+                      ) : isAdvanceRefund ? (
+                        <RotateCcw className="h-5 w-5" />
+                      ) : isExpenseApproved ? (
+                        <Receipt className="h-5 w-5" />
+                      ) : isPaymentEntry ? (
+                        <CreditCard className="h-5 w-5" />
+                      ) : (
+                        <FileCheck className="h-5 w-5" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs sm:text-sm font-bold text-foreground">
+                          {entry.title}
+                        </span>
+                        {isPaymentEntry && (
+                          <span className="rounded-md bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase">
+                            Treasury Payment
+                          </span>
+                        )}
+                        {isSettlement && (
+                          <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">
+                            Settlement Voucher
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-muted flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        <span>{formatPlanDate(entry.date)}</span>
+                        <span>•</span>
+                        <span className="font-mono text-foreground font-semibold">
+                          {entry.reference}
+                        </span>
+                        {entry.actor_name && (
+                          <>
+                            <span>•</span>
+                            <span>by {entry.actor_name}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab("settlements")}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold whitespace-nowrap active:scale-95 transition cursor-pointer ${
-            activeTab === "settlements"
-              ? "bg-primary text-primary-foreground shadow-xs"
-              : "text-muted hover:bg-surface-muted hover:text-foreground"
-          }`}
-        >
-          <FileCheck className="h-4 w-4" />
-          <span>Settlements History</span>
-        </button>
+                  {/* Right: Amount & Actions */}
+                  <div className="text-right shrink-0">
+                    <div className="text-sm sm:text-base font-extrabold text-foreground">
+                      {formatCurrency(entry.amount)}
+                    </div>
+                    {isSettlement && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedVoucherId(voucherId)}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline mt-1 cursor-pointer"
+                      >
+                        <Eye className="h-3 w-3" />
+                        <span>View Breakdown</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-        {perms.isElevated && (
-          <button
-            type="button"
-            onClick={() => setActiveTab("balances")}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold whitespace-nowrap active:scale-95 transition cursor-pointer ${
-              activeTab === "balances"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "text-muted hover:bg-surface-muted hover:text-foreground"
-            }`}
-          >
-            <Scale className="h-4 w-4" />
-            <span>Executive Balances & Settle</span>
-          </button>
+                {/* Details & Payment Metadata */}
+                <div className="rounded-xl bg-surface-muted/50 p-3 text-xs space-y-2">
+                  {entry.details && (
+                    <p className="text-muted leading-relaxed">{entry.details}</p>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted">
+                    {entry.payment_method && (
+                      <div>
+                        Mode: <span className="font-semibold text-foreground uppercase">{entry.payment_method}</span>
+                      </div>
+                    )}
+                    {entry.transaction_reference && (
+                      <div>
+                        Ref / UTR: <span className="font-mono font-semibold text-foreground">{entry.transaction_reference}</span>
+                      </div>
+                    )}
+                    {entry.advance_deduction_amount !== undefined && entry.advance_deduction_amount > 0 && (
+                      <div>
+                        Advance Offset: <span className="font-bold text-purple-600 dark:text-purple-400">{formatCurrency(entry.advance_deduction_amount)}</span>
+                      </div>
+                    )}
+                    {entry.payment_entry_deduction_amount !== undefined && entry.payment_entry_deduction_amount > 0 && (
+                      <div>
+                        Payment Offset: <span className="font-bold text-indigo-600 dark:text-indigo-400">{formatCurrency(entry.payment_entry_deduction_amount)}</span>
+                      </div>
+                    )}
+                    {entry.direct_payment_amount !== undefined && entry.direct_payment_amount > 0 && isSettlement && (
+                      <div>
+                        Direct Payout: <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(entry.direct_payment_amount)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Attachments if any */}
+                  {((entry.attachment_details && entry.attachment_details.length > 0) ||
+                    (entry.attachments && entry.attachments.length > 0)) && (
+                    <div className="pt-2 border-t border-border/40">
+                      <ExpenseAttachmentList
+                        attachments={entry.attachment_details || []}
+                        attachmentIds={entry.attachments || []}
+                        onPreview={openPreview}
+                        onDownload={downloadFile}
+                      />
+                    </div>
+                  )}
+
+                  {/* Running Balances Strip */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/50 text-[11px]">
+                    <div className="flex items-center gap-3 text-muted">
+                      <span>
+                        Advance Bal: <strong className="text-purple-600 dark:text-purple-400">{formatCurrency(entry.running_advance_balance)}</strong>
+                      </span>
+                      {entry.running_payment_entry !== undefined && entry.running_payment_entry > 0 && (
+                        <span>
+                          Payment Bal: <strong className="text-indigo-600 dark:text-indigo-400">{formatCurrency(entry.running_payment_entry)}</strong>
+                        </span>
+                      )}
+                      <span>
+                        Claims Rec: <strong className="text-sky-600 dark:text-sky-400">{formatCurrency(entry.running_claim_receivable)}</strong>
+                      </span>
+                    </div>
+
+                    <div className="font-semibold text-foreground flex items-center gap-1">
+                      <span className="text-muted text-[10px] uppercase font-bold">Running Net:</span>
+                      <span
+                        className={`font-bold ${
+                          entry.running_net_position > 0
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : entry.running_net_position < 0
+                            ? "text-rose-600 dark:text-rose-400"
+                            : "text-foreground"
+                        }`}
+                      >
+                        {formatCurrency(Math.abs(entry.running_net_position))}
+                        {entry.running_net_position < 0
+                          ? " (Due Co.)"
+                          : entry.running_net_position > 0
+                          ? " (Due Empl)"
+                          : " (Balanced)"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+            </div>
+          ))
         )}
       </div>
 
-      {/* Tab Panels */}
-      {activeTab === "claims" && (
-        <ExpenseClaimsTab
-          currentUser={currentUser}
-          ownershipScope={perms.isElevated ? ownershipScope : "mine"}
-          selectedExecutive={selectedExecutive}
-          setSelectedExecutive={setSelectedExecutive}
-          executiveOptions={executiveOptions}
-          dateFrom={dateFrom}
-          setDateFrom={setDateFrom}
-          dateTo={dateTo}
-          setDateTo={setDateTo}
-          onOpenPreview={openPreview}
-          onOpenSeniorRemarks={setSeniorRemarksTarget}
-          onOpenThread={(item) => {
-            setSelectedThreadItem(item);
-            setThreadModalOpen(true);
-          }}
-          onOpenApproveModal={(target) => setApproveExpenseTarget(target)}
-          onOpenRejectModal={setRejectTarget}
-          onOpenSettleModal={(user) => setSettleUserTarget(user)}
-          sessionToken={sessionToken}
-        />
-      )}
-
-      {activeTab === "advances" && (
-        <ExpenseAdvancesTab
-          currentUser={currentUser}
-          ownershipScope={perms.isElevated ? ownershipScope : "mine"}
-          selectedExecutive={selectedExecutive}
-          setSelectedExecutive={setSelectedExecutive}
-          executiveOptions={executiveOptions}
-          dateFrom={dateFrom}
-          setDateFrom={setDateFrom}
-          dateTo={dateTo}
-          setDateTo={setDateTo}
-          isElevated={perms.isElevated}
-          onRequestAdvance={() => {
-            setAdvancePreselectedUserId("");
-            setAdvanceFormMode("request");
-            setAdvanceFormOpen(true);
-          }}
-          onIssueDirectAdvance={() => {
-            setAdvancePreselectedUserId("");
-            setAdvanceFormMode("direct_issue");
-            setAdvanceFormOpen(true);
-          }}
-          onApproveAdvance={(adv) => setApproveAdvanceTarget(adv)}
-          onRejectAdvance={(adv) => setRejectAdvanceTarget(adv)}
-          onDisburseAdvance={(adv) => setDisburseTarget(adv)}
-          onRefundAdvance={(adv) => setRefundTarget(adv)}
-          sessionToken={sessionToken}
-          onOpenPreview={openPreview}
-        />
-      )}
-
-      {activeTab === "settlements" && (
-        <ExpenseSettlementsTab
-          currentUser={currentUser}
-          ownershipScope={perms.isElevated ? ownershipScope : "mine"}
-          selectedExecutive={selectedExecutive}
-          setSelectedExecutive={setSelectedExecutive}
-          executiveOptions={executiveOptions}
-          dateFrom={dateFrom}
-          setDateFrom={setDateFrom}
-          dateTo={dateTo}
-          setDateTo={setDateTo}
-          onViewVoucher={(id) => setSelectedVoucherId(id)}
-        />
-      )}
-
-      {activeTab === "balances" && perms.isElevated && (
-        <ExpenseBalancesTab
-          currentUser={currentUser}
-          ownershipScope={ownershipScope}
-          selectedExecutive={selectedExecutive}
-          setSelectedExecutive={setSelectedExecutive}
-          executiveOptions={executiveOptions}
-          onOpenLedger={(userId, userName) => setLedgerTarget({ userId, userName })}
-          onOpenSettleModal={(user) => setSettleUserTarget(user)}
-          onIssueAdvance={(user) => {
-            setAdvancePreselectedUserId(user._id);
-            setAdvanceFormMode("direct_issue");
-            setAdvanceFormOpen(true);
-          }}
-        />
-      )}
-
       {/* Modals */}
-      <AdvanceFormModal
-        open={advanceFormOpen}
-        onClose={() => {
-          setAdvanceFormOpen(false);
-          setAdvancePreselectedUserId("");
-        }}
-        onSuccess={() => refetchKpis()}
-        sessionToken={sessionToken}
-        isElevated={perms.isElevated}
-        isAdmin={perms.isAdmin}
-        executiveOptions={executiveOptions}
-        initialMode={advanceFormMode}
-        preselectedUserId={advancePreselectedUserId}
-        currentUserId={String(currentUser?._id || "")}
-        currentUserName={currentUser?.name || ""}
-      />
-
-      <ApproveAdvanceModal
-        advance={approveAdvanceTarget}
-        open={Boolean(approveAdvanceTarget)}
-        isLoading={isApprovingAdvance}
-        onClose={() => setApproveAdvanceTarget(null)}
-        onConfirm={handleApproveAdvanceConfirm}
-      />
-
-      <RejectAdvanceModal
-        advance={rejectAdvanceTarget}
-        open={Boolean(rejectAdvanceTarget)}
-        isLoading={isRejectingAdvance}
-        onClose={() => setRejectAdvanceTarget(null)}
-        onConfirm={handleRejectAdvanceConfirm}
-      />
-
-      <AdvanceDisburseModal
-        advance={disburseTarget}
-        open={Boolean(disburseTarget)}
-        onClose={() => setDisburseTarget(null)}
-        onSuccess={() => refetchKpis()}
-        sessionToken={sessionToken}
-      />
-
-      <AdvanceRefundModal
-        advance={refundTarget}
-        open={Boolean(refundTarget)}
-        onClose={() => setRefundTarget(null)}
-        onSuccess={() => refetchKpis()}
-        sessionToken={sessionToken}
-      />
-
-      <ApproveExpenseModal
-        expense={approveExpenseTarget}
-        open={Boolean(approveExpenseTarget)}
-        isLoading={isApprovingExpense}
-        onClose={() => setApproveExpenseTarget(null)}
-        onConfirm={handleApproveExpenseConfirm}
-      />
-
-      <RejectExpenseModal
-        open={Boolean(rejectTarget)}
-        isRejecting={isRejectingExpense}
-        onClose={() => setRejectTarget(null)}
-        onConfirm={handleRejectExpenseConfirm}
-      />
-
-      <SettleExpenseModal
-        salesUser={settleUserTarget}
-        open={Boolean(settleUserTarget)}
-        onClose={() => setSettleUserTarget(null)}
-        onSuccess={() => refetchKpis()}
-        sessionToken={sessionToken}
-      />
-
       <SettlementVoucherModal
         settlementId={selectedVoucherId}
         open={Boolean(selectedVoucherId)}
         onClose={() => setSelectedVoucherId(null)}
         sessionToken={sessionToken}
       />
-
-      <ExecutiveLedgerDrawer
-        userId={ledgerTarget?.userId || null}
-        userName={ledgerTarget?.userName}
-        open={Boolean(ledgerTarget)}
-        onClose={() => setLedgerTarget(null)}
-        executiveOptions={perms.isElevated ? executiveOptions : []}
-        onSelectUser={(id, name) => setLedgerTarget({ userId: id, userName: name })}
-        sessionToken={sessionToken}
-      />
-
-      {downloadOpen && (
-        <DownloadExpensesModal
-          open={downloadOpen}
-          expenses={[]}
-          onClose={() => setDownloadOpen(false)}
-        />
-      )}
-
-      {workPlanReportOpen && (
-        <DownloadWorkPlansModal
-          open={workPlanReportOpen}
-          onClose={() => setWorkPlanReportOpen(false)}
-        />
-      )}
 
       <FilePreviewModal
         doc={previewDoc}
@@ -557,33 +747,15 @@ export function ExpensesPage() {
         onDownload={downloadFile}
       />
 
-      {seniorRemarksTarget && (
-        <SeniorRemarksModal
-          open={Boolean(seniorRemarksTarget)}
-          itemType="expense"
-          title={seniorRemarksTarget.title}
-          planId={seniorRemarksTarget.planId}
-          itemId={seniorRemarksTarget.expenseId}
-          currentStatus={seniorRemarksTarget.currentStatus}
-          assigneeName={seniorRemarksTarget.assigneeName}
-          initialRemarks={seniorRemarksTarget.remarks}
-          authorityRemarksHistory={seniorRemarksTarget.history}
-          onClose={() => setSeniorRemarksTarget(null)}
-          onSuccess={() => refetchKpis()}
-        />
-      )}
-
-      {threadModalOpen && (
-        <DirectiveThreadModal
-          open={threadModalOpen}
-          item={selectedThreadItem}
-          onClose={() => {
-            setThreadModalOpen(false);
-            setSelectedThreadItem(null);
-          }}
-          onSuccess={() => refetchKpis()}
-        />
-      )}
+      <RequestAdvanceModal
+        open={requestAdvanceOpen}
+        onClose={() => setRequestAdvanceOpen(false)}
+        onSuccess={() => refetch()}
+        sessionToken={sessionToken}
+        currentUserId={userId}
+        currentUserName={currentUserName}
+        currentDepartment={currentDepartment}
+      />
     </div>
   );
 }

@@ -159,7 +159,7 @@ export function Sidebar({
                 }`}
               >
                 <ShieldCheck className="h-3 w-3" />
-                <span>Admin View</span>
+                <span>Admin Module</span>
               </button>
               <button
                 type="button"
@@ -171,7 +171,7 @@ export function Sidebar({
                 }`}
               >
                 <Landmark className="h-3 w-3" />
-                <span>Finance View</span>
+                <span>Finance Module</span>
               </button>
             </div>
           )}
@@ -194,27 +194,28 @@ export function Sidebar({
             {!desktopCollapsed && <span>Dashboard Overview</span>}
           </Link>
 
-          {/* ================= ADMIN VIEW NAVIGATION ================= */}
+          {/* ================= ADMIN MODULE NAVIGATION ================= */}
           {isCurrentAdminMode ? (
             <>
               {!desktopCollapsed && (
-                <div className="pt-3 pb-1 px-3 text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                  Operations &amp; Claims
+                <div className="pt-3 pb-1 px-3 text-[10px] font-extrabold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  <span>Claims Management</span>
                 </div>
               )}
 
-              {/* Expense Claims */}
+              {/* Expense Claims Approval */}
               <Link
                 href="/dashboard/claims"
                 onClick={() => setMobileNavOpen(false)}
                 className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
                   isClaimsActive
-                    ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
+                    ? "bg-emerald-600/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 font-bold shadow-xs"
                     : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
                 }`}
                 title="Expense Claims Approval"
               >
-                <Receipt className={`h-4 w-4 shrink-0 ${isClaimsActive ? "text-primary" : ""}`} />
+                <Receipt className={`h-4 w-4 shrink-0 ${isClaimsActive ? "text-emerald-600 dark:text-emerald-400" : ""}`} />
                 {!desktopCollapsed && (
                   <div className="flex items-center justify-between flex-1 min-w-0">
                     <span className="truncate">Claims Approval</span>
@@ -227,18 +228,25 @@ export function Sidebar({
                 )}
               </Link>
 
+              {!desktopCollapsed && (
+                <div className="pt-3 pb-1 px-3 text-[10px] font-extrabold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  <span>Advance Sanctions</span>
+                </div>
+              )}
+
               {/* Tour Advances */}
               <Link
                 href="/dashboard/advances"
                 onClick={() => setMobileNavOpen(false)}
                 className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
                   isAdvancesActive
-                    ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
+                    ? "bg-emerald-600/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 font-bold shadow-xs"
                     : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
                 }`}
-                title="Tour Advances"
+                title="Tour Advances Sanctioning"
               >
-                <Wallet className={`h-4 w-4 shrink-0 ${isAdvancesActive ? "text-primary" : ""}`} />
+                <Wallet className={`h-4 w-4 shrink-0 ${isAdvancesActive ? "text-emerald-600 dark:text-emerald-400" : ""}`} />
                 {!desktopCollapsed && (
                   <div className="flex items-center justify-between flex-1 min-w-0">
                     <span className="truncate">Tour Advances</span>
@@ -252,44 +260,31 @@ export function Sidebar({
               </Link>
 
               {!desktopCollapsed && (
-                <div className="pt-3 pb-1 px-3 text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                  Field Organization
+                <div className="pt-3 pb-1 px-3 text-[10px] font-extrabold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  <span>Employee Oversight</span>
                 </div>
               )}
 
-              {/* Work Planner Users Directory */}
-              <Link
-                href="/dashboard/users"
-                onClick={() => setMobileNavOpen(false)}
-                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
-                  isUsersActive
-                    ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
-                    : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
-                }`}
-                title="Work Planner Portal Users"
-              >
-                <Users className={`h-4 w-4 shrink-0 ${isUsersActive ? "text-primary" : ""}`} />
-                {!desktopCollapsed && <span>Work Planner Users</span>}
-              </Link>
-
-              {/* Staff Running Ledgers */}
+              {/* Staff Running Balances */}
               <Link
                 href="/dashboard/ledgers"
                 onClick={() => setMobileNavOpen(false)}
                 className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
                   isLedgersActive
-                    ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
+                    ? "bg-emerald-600/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 font-bold shadow-xs"
                     : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
                 }`}
                 title="Staff Running Balances"
               >
-                <Scale className={`h-4 w-4 shrink-0 ${isLedgersActive ? "text-primary" : ""}`} />
+                <Scale className={`h-4 w-4 shrink-0 ${isLedgersActive ? "text-emerald-600 dark:text-emerald-400" : ""}`} />
                 {!desktopCollapsed && <span>Staff Running Balances</span>}
               </Link>
 
               {!desktopCollapsed && (
-                <div className="pt-3 pb-1 px-3 text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                  Policy Governance
+                <div className="pt-3 pb-1 px-3 text-[10px] font-extrabold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  <span>Policy Governance</span>
                 </div>
               )}
 
@@ -299,21 +294,22 @@ export function Sidebar({
                 onClick={() => setMobileNavOpen(false)}
                 className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
                   isSettingsActive
-                    ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
+                    ? "bg-emerald-600/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 font-bold shadow-xs"
                     : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
                 }`}
                 title="Expense Policy & Allowance Settings"
               >
-                <Settings className={`h-4 w-4 shrink-0 ${isSettingsActive ? "text-primary" : ""}`} />
+                <Settings className={`h-4 w-4 shrink-0 ${isSettingsActive ? "text-emerald-600 dark:text-emerald-400" : ""}`} />
                 {!desktopCollapsed && <span>Policy Settings</span>}
               </Link>
             </>
           ) : (
-            /* ================= FINANCE VIEW NAVIGATION ================= */
+            /* ================= FINANCE MODULE NAVIGATION ================= */
             <>
               {!desktopCollapsed && (
-                <div className="pt-3 pb-1 px-3 text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                  Treasury &amp; Ledgers
+                <div className="pt-3 pb-1 px-3 text-[10px] font-extrabold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                  <span>Treasury &amp; Ledgers</span>
                 </div>
               )}
 
@@ -332,20 +328,12 @@ export function Sidebar({
                 {!desktopCollapsed && <span>User Passbooks &amp; Ledgers</span>}
               </Link>
 
-              {/* Settlements & Payments */}
-              <Link
-                href="/dashboard/settlements"
-                onClick={() => setMobileNavOpen(false)}
-                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
-                  isSettlementsActive
-                    ? "bg-indigo-600/15 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 font-bold shadow-xs"
-                    : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
-                }`}
-                title="Payments & Final Settlements"
-              >
-                <CreditCard className={`h-4 w-4 shrink-0 ${isSettlementsActive ? "text-indigo-600 dark:text-indigo-400" : ""}`} />
-                {!desktopCollapsed && <span>Payments &amp; Settlements</span>}
-              </Link>
+              {!desktopCollapsed && (
+                <div className="pt-3 pb-1 px-3 text-[10px] font-extrabold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                  <span>Disbursements &amp; Payouts</span>
+                </div>
+              )}
 
               {/* Advance Disbursements */}
               <Link
@@ -371,9 +359,25 @@ export function Sidebar({
                 )}
               </Link>
 
+              {/* Settlements & Payments */}
+              <Link
+                href="/dashboard/settlements"
+                onClick={() => setMobileNavOpen(false)}
+                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
+                  isSettlementsActive
+                    ? "bg-indigo-600/15 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 font-bold shadow-xs"
+                    : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
+                }`}
+                title="Payments & Final Settlements"
+              >
+                <CreditCard className={`h-4 w-4 shrink-0 ${isSettlementsActive ? "text-indigo-600 dark:text-indigo-400" : ""}`} />
+                {!desktopCollapsed && <span>Payments &amp; Settlements</span>}
+              </Link>
+
               {!desktopCollapsed && (
-                <div className="pt-3 pb-1 px-3 text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                  Audited Claims Queue
+                <div className="pt-3 pb-1 px-3 text-[10px] font-extrabold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                  <span>Audited Claims Queue</span>
                 </div>
               )}
 
@@ -390,27 +394,6 @@ export function Sidebar({
               >
                 <Receipt className={`h-4 w-4 shrink-0 ${isClaimsActive ? "text-indigo-600 dark:text-indigo-400" : ""}`} />
                 {!desktopCollapsed && <span>Approved Claims Queue</span>}
-              </Link>
-
-              {!desktopCollapsed && (
-                <div className="pt-3 pb-1 px-3 text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
-                  Field Personnel
-                </div>
-              )}
-
-              {/* Work Planner Users Directory */}
-              <Link
-                href="/dashboard/users"
-                onClick={() => setMobileNavOpen(false)}
-                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
-                  isUsersActive
-                    ? "bg-indigo-600/15 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 font-bold shadow-xs"
-                    : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
-                }`}
-                title="Work Planner Portal Users Financials"
-              >
-                <Users className={`h-4 w-4 shrink-0 ${isUsersActive ? "text-indigo-600 dark:text-indigo-400" : ""}`} />
-                {!desktopCollapsed && <span>Work Planner Users</span>}
               </Link>
             </>
           )}

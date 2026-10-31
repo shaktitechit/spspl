@@ -58,7 +58,8 @@ export function resolvePublicAssetUrl(path: string, token?: string | null): stri
   if (
     cleanPath.startsWith("/api/work-planner") ||
     cleanPath.startsWith("/api/projects") ||
-    cleanPath.startsWith("/api/files")
+    cleanPath.startsWith("/api/files") ||
+    cleanPath.startsWith("/api/attachments")
   ) {
     const full = `${wpBase}${cleanPath}`;
     return token && !full.includes("token=") ? `${full}${full.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : full;
@@ -85,12 +86,12 @@ export function withAccessToken(url: string, token?: string | null): string {
 }
 
 /**
- * Append JWT only for `/api/files/...`, `/api/projects/...`, `/api/work-planner/...` proxy URLs.
+ * Append JWT only for `/api/files/...`, `/api/projects/...`, `/api/work-planner/...`, `/api/attachments/...` proxy URLs.
  * Presigned MinIO/file-manager URLs already carry signed query params — do not mutate them if they already contain signatures.
  */
 export function withFileAccessToken(url: string, token?: string | null): string {
   if (!url || url === "#" || !token) return url || "";
-  if (!/\/(?:api\/files|api\/projects|api\/work-planner)\//i.test(url)) return url;
+  if (!/\/(?:api\/files|api\/projects|api\/work-planner|api\/attachments)\//i.test(url)) return url;
   return withAccessToken(url, token);
 }
 

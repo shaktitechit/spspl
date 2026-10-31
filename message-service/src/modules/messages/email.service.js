@@ -15,9 +15,14 @@ const gmailProvider = new GmailProvider();
  * Creates and queues a new outbound email.
  */
 async function sendEmailMessage(data) {
-  const { recipient, to, from, subject, body, templateName, templateParams, orderId, attachments, cc, bcc } = data;
+  const { recipient, to, from, subject, body, templateName, templateParams, orderId, attachments, cc, bcc, emailType, metadata } = data;
 
   const targetRecipient = recipient || to;
+
+  const mergedMetadata = {
+    ...(metadata || {}),
+    ...(emailType ? { emailType } : {}),
+  };
 
   const messageData = {
     recipient: targetRecipient,
@@ -31,6 +36,7 @@ async function sendEmailMessage(data) {
     attachments: attachments || (templateParams && templateParams.attachments) || undefined,
     cc: cc || (templateParams && templateParams.cc) || undefined,
     bcc: bcc || (templateParams && templateParams.bcc) || undefined,
+    metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
   };
 
   return messageService.createAndQueueMessage(messageData);

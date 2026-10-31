@@ -103,6 +103,24 @@ async function rejectExpense(req, res) {
   }
 }
 
+async function addExpenseAuthorityRemark(req, res) {
+  try {
+    const data = await claimService.addExpenseAuthorityRemark(req.params.id, req.body, getActor(req));
+    return handleSuccess(res, { data, message: 'Directive / Remark recorded successfully.' });
+  } catch (err) {
+    return handleError(res, err, 'Failed to add remark to expense claim');
+  }
+}
+
+async function updateExpenseRemarkStatus(req, res) {
+  try {
+    const data = await claimService.updateExpenseRemarkStatus(req.params.id, req.body, getActor(req));
+    return handleSuccess(res, { data, message: 'Objection / Directive status updated successfully.' });
+  } catch (err) {
+    return handleError(res, err, 'Failed to update remark status');
+  }
+}
+
 // 4. Advances
 async function listAdvances(req, res) {
   try {
@@ -196,6 +214,25 @@ async function createSettlement(req, res) {
   }
 }
 
+async function recordPaymentEntry(req, res) {
+  try {
+    const data = await settlementService.recordPaymentEntry(req.body, getActor(req));
+    return handleSuccess(res, { data, message: 'Payment entry recorded successfully.' }, 201);
+  } catch (err) {
+    return handleError(res, err, 'Failed to record payment entry');
+  }
+}
+
+async function getActivePaymentEntries(req, res) {
+  try {
+    const targetUserId = req.params.userId || req.query.userId || req.query.user_id || req.query.sales_user;
+    const data = await settlementService.getActivePaymentEntries(targetUserId);
+    return res.json({ success: true, data });
+  } catch (err) {
+    return handleError(res, err, 'Failed to fetch active payment entries');
+  }
+}
+
 // 6. Balances & Passbook
 async function getExecutiveBalances(req, res) {
   try {
@@ -208,10 +245,11 @@ async function getExecutiveBalances(req, res) {
 
 async function getExecutivePassbook(req, res) {
   try {
+    const candidateId = req.params.userId || req.query.userId || req.query.user_id;
     const requestedUserId =
-      !req.params.userId || req.params.userId === 'me' || req.params.userId === 'null' || req.params.userId === 'undefined'
+      !candidateId || candidateId === 'me' || candidateId === 'null' || candidateId === 'undefined'
         ? req.user?._id
-        : req.params.userId;
+        : candidateId;
     const data = await passbookService.getExecutivePassbook(requestedUserId, req.query);
     return res.json({ success: true, data });
   } catch (err) {
@@ -259,6 +297,8 @@ module.exports = {
   approveExpense,
   bulkApproveExpenses,
   rejectExpense,
+  addExpenseAuthorityRemark,
+  updateExpenseRemarkStatus,
   listAdvances,
   createAdvance,
   approveAdvance,
@@ -269,6 +309,8 @@ module.exports = {
   listSettlements,
   getSettlement,
   createSettlement,
+  recordPaymentEntry,
+  getActivePaymentEntries,
   getExecutiveBalances,
   getExecutivePassbook,
   uploadExpenseFile,

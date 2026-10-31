@@ -104,8 +104,8 @@ export function Topbar({
     }
     if (pathname.startsWith("/dashboard/expenses")) {
       return {
-        title: "Expense Claims",
-        subtitle: "Reimbursements, receipts & travel claims",
+        title: "My Passbook",
+        subtitle: "Personal financial timeline, tour advances, claims & running ledger",
       };
     }
     if (pathname.startsWith("/dashboard/analytics")) {

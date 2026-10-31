@@ -208,25 +208,82 @@ async function createSettlement(body, actor) {
   }
 
   totalAdvanceDeduction = Math.round(totalAdvanceDeduction * 100) / 100;
+
+  // Payment Entry Deductions
+  const paymentEntryDeductions = Array.isArray(body.payment_entry_deductions)
+    ? body.payment_entry_deductions
+    : Array.isArray(body.payment_entries)
+    ? body.payment_entries
+    : [];
+  let totalPaymentEntryDeduction = 0;
+  const verifiedPaymentEntries = [];
+  const paymentEntryUpdates = [];
+
+  for (const item of paymentEntryDeductions) {
+    const payId = item.payment_entry_id || item.payment_entry || item._id;
+    const deductAmt = Math.round(Number(item.amount || item.deducted_amount || 0) * 100) / 100;
+    if (deductAmt <= 0) continue;
+
+    const payDoc = await WorkPlanExpenseSettlement.findOne({
+      _id: payId,
+      sales_user: asObjectId(targetSalesUserId),
+      deletedAt: null,
+    });
+
+    if (!payDoc) {
+      throw new ApiError(404, `Payment entry #${payId} not found for this executive.`);
+    }
+
+    const totalPaid = Number(payDoc.direct_payment_amount || 0);
+    const settledSoFar = Number(payDoc.settled_amount || 0);
+    const availableBal = (payDoc.remaining_balance !== undefined && payDoc.remaining_balance !== null && Number(payDoc.remaining_balance) > 0)
+      ? Number(payDoc.remaining_balance)
+      : Math.max(0, totalPaid - settledSoFar);
+
+    if (deductAmt > availableBal) {
+      throw new ApiError(
+        400,
+        `Deduction amount (₹${deductAmt}) exceeds available balance (₹${availableBal}) for payment entry #${payDoc.settlement_number || payDoc._id}.`
+      );
+    }
+
+    totalPaymentEntryDeduction += deductAmt;
+    verifiedPaymentEntries.push({
+      payment_entry: payDoc._id,
+      deducted_amount: deductAmt,
+      payment_number: payDoc.settlement_number,
+    });
+
+    paymentEntryUpdates.push({
+      doc: payDoc,
+      deductAmt,
+      newRemaining: Math.max(0, Math.round((availableBal - deductAmt) * 100) / 100),
+      newSettled: Math.round((settledSoFar + deductAmt) * 100) / 100,
+    });
+  }
+
+  totalPaymentEntryDeduction = Math.round(totalPaymentEntryDeduction * 100) / 100;
+
   const directPaymentAmount = Math.max(
     0,
     Math.round(Number(body.direct_payment_amount || 0) * 100) / 100
   );
 
-  const settlementSum = Math.round((totalAdvanceDeduction + directPaymentAmount) * 100) / 100;
+  const totalDeductions = Math.round((totalAdvanceDeduction + totalPaymentEntryDeduction) * 100) / 100;
+  const settlementSum = Math.round((totalDeductions + directPaymentAmount) * 100) / 100;
 
   // Validate strict split matching
   if (Math.abs(settlementSum - calculatedTotalClaim) > 0.01) {
     throw new ApiError(
       400,
-      `Settlement total mismatch: Advance Deduction (₹${totalAdvanceDeduction}) + Direct Payment (₹${directPaymentAmount}) = ₹${settlementSum}, but Total Claim Amount is ₹${calculatedTotalClaim}.`
+      `Settlement total mismatch: Advance Deduction (₹${totalAdvanceDeduction}) + Payment Offset (₹${totalPaymentEntryDeduction}) + Direct Payment (₹${directPaymentAmount}) = ₹${settlementSum}, but Total Claim Amount is ₹${calculatedTotalClaim}.`
     );
   }
 
   let settlementMode = 'direct_payment';
-  if (totalAdvanceDeduction > 0 && directPaymentAmount > 0) {
+  if (totalDeductions > 0 && directPaymentAmount > 0) {
     settlementMode = 'split';
-  } else if (totalAdvanceDeduction > 0) {
+  } else if (totalDeductions > 0) {
     settlementMode = 'advance_deduction';
   }
 
@@ -238,8 +295,10 @@ async function createSettlement(body, actor) {
     settlement_date: body.settlement_date ? startOfDay(body.settlement_date) : new Date(),
     claims: verifiedClaims,
     advances: verifiedAdvances,
+    payment_entries: verifiedPaymentEntries,
     total_claim_amount: calculatedTotalClaim,
     advance_deduction_amount: totalAdvanceDeduction,
+    payment_entry_deduction_amount: totalPaymentEntryDeduction,
     direct_payment_amount: directPaymentAmount,
     settlement_mode: settlementMode,
     payment_method: directPaymentAmount > 0 ? normalizePaymentMethod(body.payment_method) : undefined,
@@ -261,6 +320,14 @@ async function createSettlement(body, actor) {
     if (update.newRemaining <= 0) {
       update.doc.status = 'settled';
     }
+    update.doc.updated_by = userId(actor);
+    await update.doc.save();
+  }
+
+  // Apply payment entry updates
+  for (const update of paymentEntryUpdates) {
+    update.doc.remaining_balance = update.newRemaining;
+    update.doc.settled_amount = update.newSettled;
     update.doc.updated_by = userId(actor);
     await update.doc.save();
   }
@@ -289,8 +356,45 @@ async function createSettlement(body, actor) {
   return resultDoc;
 }
 
+/**
+ * Lists active unsettled direct payment entries for an employee that can be adjusted in settlements.
+ */
+async function getActivePaymentEntries(targetUserId) {
+  const { WorkPlanExpenseSettlement } = getModels();
+  if (!targetUserId || targetUserId === 'all') return [];
+
+  const uOid = asObjectId(targetUserId);
+  const matchIds = [targetUserId, uOid, String(targetUserId)].filter(Boolean);
+
+  const payments = await WorkPlanExpenseSettlement.find({
+    sales_user: { $in: matchIds },
+    settlement_mode: 'payment_entry',
+    deletedAt: null,
+  })
+    .sort({ settlement_date: 1, createdAt: 1 })
+    .lean();
+
+  return payments
+    .map((p) => {
+      const plain = toPlain(p);
+      const settled = Number(plain.settled_amount || 0);
+      const total = Number(plain.direct_payment_amount || 0);
+      const remaining = (plain.remaining_balance !== undefined && plain.remaining_balance !== null && Number(plain.remaining_balance) > 0)
+        ? Number(plain.remaining_balance)
+        : Math.max(0, total - settled);
+
+      return {
+        ...plain,
+        settled_amount: settled,
+        remaining_balance: remaining,
+      };
+    })
+    .filter((p) => p.remaining_balance > 0);
+}
+
 module.exports = {
   listSettlements,
   getSettlement,
   createSettlement,
+  getActivePaymentEntries,
 };

@@ -74,6 +74,8 @@ async function sendEmail(
         attachments,
         cc: targetCc,
         from,
+        emailType,
+        metadata: { emailType },
       },
       {
         headers: {
@@ -142,6 +144,8 @@ async function sendTemplateEmail(
         attachments,
         cc: targetCc,
         from,
+        emailType,
+        metadata: { emailType },
       },
       {
         headers: {

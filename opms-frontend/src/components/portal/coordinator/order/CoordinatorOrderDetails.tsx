@@ -1285,6 +1285,7 @@ export default function CoordinatorOrderDetails({ orderId }: { orderId: string }
                 orderId={orderId}
                 detail={detail}
                 refetchOrder={handleRefetch}
+                partyName={custLabel}
               />
             )}
             {activeTab === "cost_sheet" && (
@@ -1399,6 +1400,7 @@ export default function CoordinatorOrderDetails({ orderId }: { orderId: string }
                     orderId={orderId}
                     detail={detail}
                     refetchOrder={handleRefetch}
+                    partyName={custLabel}
                   />
                 )}
                 {activeTab === "cost_sheet" && (

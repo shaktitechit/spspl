@@ -7,8 +7,10 @@ import { toast } from "sonner";
 import { useLoginMutation } from "@/store/api/authApiSlice";
 import {
   applySessionAfterAuth,
+  clearSessionFromStorage,
   hasExpensePortalAccess,
   readSessionFromStorage,
+  revokeRefreshToken,
 } from "@/utils/authStorage";
 import { useTheme } from "@/hooks/useTheme";
 import { resolvePublicAssetUrl } from "@/lib/env";
@@ -26,12 +28,14 @@ export default function LoginPage() {
 
   useEffect(() => {
     const existing = readSessionFromStorage();
-    if (existing?.token) {
+    if (existing?.token && hasExpensePortalAccess(existing?.user)) {
       if (typeof window !== "undefined") {
         window.location.href = "/dashboard";
       } else {
         router.replace("/dashboard");
       }
+    } else {
+      clearSessionFromStorage();
     }
   }, [router]);
 
@@ -99,8 +103,10 @@ export default function LoginPage() {
     try {
       const res = await loginMut({ email, password }).unwrap();
       if (!hasExpensePortalAccess(res.user)) {
+        clearSessionFromStorage();
+        void revokeRefreshToken();
         throw new Error(
-          "Access denied: You do not have permission for the Expense Portal (Admin or Finance role required).",
+          "Access denied: You do not have permission for the Expense Portal. Only expense portal assigned users can log in.",
         );
       }
 

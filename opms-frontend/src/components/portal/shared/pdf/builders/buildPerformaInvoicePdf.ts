@@ -240,8 +240,13 @@ export async function buildPerformaInvoicePdf(
   const ifscCode = company?.ifsc_code || "HDFC0001822";
   const branchName = company?.branch_name || "Majitha Road";
 
-  const pName = input.partyName ? input.partyName.trim() : "Khanna Paper Mills Ltd.";
-  const customerName = pName.startsWith("M/s") ? pName : `M/s. ${pName}`;
+  const pName = input.partyName ? input.partyName.trim() : "";
+  const customerName =
+    pName && pName !== "—"
+      ? pName.startsWith("M/s")
+        ? pName
+        : `M/s. ${pName}`
+      : pName || "—";
   const proformaNo =
     input.proformaNo ||
     (input.orderNo.startsWith("PINV")

@@ -33,6 +33,7 @@ import {
   useUpdateOrderPerformaMutation,
   useCreateAttachmentMutation,
   useDeleteAttachmentMutation,
+  useGetPartyQuery,
 } from "@/store/api";
 import { usePdfCompanyLetterhead } from "@/components/portal/shared/pdf/templates/pdfCompanyLetterhead";
 import {
@@ -57,14 +58,26 @@ interface PerformaTabProps {
   orderId: string;
   detail?: Record<string, unknown>;
   refetchOrder?: () => void;
+  partyName?: string;
 }
 
-function detailPartyId(detail?: Record<string, unknown>): string {
-  if (!detail) return "";
-  const p = detail.party || detail.customer;
-  if (typeof p === "string") return p;
-  if (p && typeof p === "object" && "_id" in p) {
-    return String((p as { _id: unknown })._id ?? "");
+function detailPartyId(detail?: Record<string, unknown>, fallbackOrder?: Record<string, unknown>): string {
+  const o = detail || fallbackOrder;
+  if (!o) return "";
+  const p =
+    o.party ??
+    o.customer ??
+    o.party_id ??
+    o.partyId ??
+    o.customer_id ??
+    o.customerId;
+  if (typeof p === "string" && p.trim()) return p.trim();
+  if (p && typeof p === "object") {
+    if ("_id" in p && p._id) return String(p._id);
+    if ("id" in p && p.id) return String(p.id);
+  }
+  if (fallbackOrder && o !== fallbackOrder) {
+    return detailPartyId(fallbackOrder);
   }
   return "";
 }
@@ -73,6 +86,7 @@ export default function PerformaTab({
   orderId,
   detail,
   refetchOrder,
+  partyName: partyNameProp,
 }: PerformaTabProps) {
   const token = useAppSelector((s) => s.auth.token);
   const user = useAppSelector((s) => s.auth.user);
@@ -80,6 +94,48 @@ export default function PerformaTab({
   const companyQ = useGetCompanyInfoQuery();
   const letterhead = usePdfCompanyLetterhead();
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  const effectivePartyId = useMemo(() => {
+    return detailPartyId(detail, orderQ.data as Record<string, unknown>);
+  }, [detail, orderQ.data]);
+
+  const partyQ = useGetPartyQuery(effectivePartyId, { skip: !effectivePartyId });
+
+  const resolvedParty = useMemo(() => {
+    const order = (orderQ.data as Record<string, unknown>) || detail || {};
+    const embeddedParty =
+      order.party && typeof order.party === "object"
+        ? (order.party as Record<string, unknown>)
+        : order.customer && typeof order.customer === "object"
+          ? (order.customer as Record<string, unknown>)
+          : {};
+    const fetchedParty = (partyQ.data as Record<string, unknown>) || {};
+    return {
+      ...embeddedParty,
+      ...fetchedParty,
+    };
+  }, [orderQ.data, detail, partyQ.data]);
+
+  const resolvedPartyName = useMemo(() => {
+    if (partyNameProp && partyNameProp.trim() && partyNameProp !== "—") {
+      return partyNameProp.trim();
+    }
+    const order = (orderQ.data as Record<string, unknown>) || detail || {};
+    const pName =
+      resolvedParty.party_name ||
+      resolvedParty.name ||
+      resolvedParty.trade_name ||
+      resolvedParty.legal_name ||
+      order.party_name ||
+      (detail as Record<string, unknown>)?.party_name ||
+      order.customer_name ||
+      (detail as Record<string, unknown>)?.customer_name;
+
+    if (pName && typeof pName === "string" && pName.trim()) {
+      return pName.trim();
+    }
+    return "";
+  }, [partyNameProp, resolvedParty, orderQ.data, detail]);
 
   const { data: performa, isLoading, isFetching, refetch } = useGetOrderPerformaQuery(orderId, {
     skip: !orderId,
@@ -150,9 +206,8 @@ export default function PerformaTab({
     try {
       const order = (orderQ.data as Record<string, unknown>) || detail || {};
       const orderNo = String(order.order_no || orderId);
-      const party = (order.party || order.customer || {}) as Record<string, unknown>;
-      const billingAddr = (order.billing_address || party.billing_address || party.address || {}) as Record<string, unknown>;
-      const shippingAddr = (order.shipping_address || {}) as Record<string, unknown>;
+      const billingAddr = (order.billing_address || resolvedParty.billing_address || resolvedParty.address || {}) as Record<string, unknown>;
+      const shippingAddr = (order.shipping_address || resolvedParty.shipping_address || {}) as Record<string, unknown>;
 
       const formatAddr = (addr: Record<string, unknown>): string => {
         return [
@@ -293,12 +348,12 @@ export default function PerformaTab({
         approvedDate: order.approved_at
           ? String(order.approved_at)
           : orderDateStr,
-        partyName: String(party.party_name || party.name || order.customer_name || "Khanna Paper Mills Ltd."),
-        partyCode: party.party_code ? String(party.party_code) : undefined,
-        partyGstin: String(party.gst_no || party.gstin || billingAddr.gst_no || ""),
-        partyPhone: String(party.mobile || party.phone || billingAddr.phone || ""),
-        partyEmail: String(party.email || billingAddr.email || ""),
-        contactPerson: String(party.contact_person || billingAddr.recipient_name || ""),
+        partyName: resolvedPartyName || "—",
+        partyCode: resolvedParty.party_code || resolvedParty.code ? String(resolvedParty.party_code || resolvedParty.code) : undefined,
+        partyGstin: String(resolvedParty.gst_no || resolvedParty.gstin || billingAddr.gst_no || order.gst_no || ""),
+        partyPhone: String(resolvedParty.mobile || resolvedParty.phone || billingAddr.phone || order.party_phone || ""),
+        partyEmail: String(resolvedParty.email || billingAddr.email || order.party_email || ""),
+        contactPerson: String(resolvedParty.contact_person || billingAddr.recipient_name || order.contact_person || ""),
         billingAddress: billAddressStr,
         shippingAddress: shipAddressStr,
         salesPerson: String(performa?.sales_person || order.sales_person || creatorName || "Manish"),
@@ -331,7 +386,18 @@ export default function PerformaTab({
     } finally {
       setIsDownloadingPdf(false);
     }
-  }, [orderQ.data, detail, orderId, performa, companyQ.data, letterhead, creatorName, user]);
+  }, [
+    orderQ.data,
+    detail,
+    orderId,
+    performa,
+    companyQ.data,
+    letterhead,
+    creatorName,
+    user,
+    resolvedParty,
+    resolvedPartyName,
+  ]);
 
   const handleFieldChange = (field: keyof PerformaFormValues, value: string) => {
     setFormValues((prev) => ({ ...prev, [field]: value }));

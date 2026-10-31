@@ -13,14 +13,14 @@ export type PreviewFile = {
 };
 
 export function isPdfPreview(mime: string = "", name: string = ""): boolean {
-  const m = (mime || "").toLowerCase();
-  const n = (name || "").toLowerCase();
+  const m = typeof mime === "string" ? mime.toLowerCase() : "";
+  const n = typeof name === "string" ? name.toLowerCase() : "";
   return m.includes("pdf") || n.endsWith(".pdf") || /\.pdf(\?|$)/i.test(n) || /\.pdf(\?|$)/i.test(m);
 }
 
 export function isImagePreview(mime: string = "", name: string = ""): boolean {
-  const m = (mime || "").toLowerCase();
-  const n = (name || "").toLowerCase();
+  const m = typeof mime === "string" ? mime.toLowerCase() : "";
+  const n = typeof name === "string" ? name.toLowerCase() : "";
   if (isPdfPreview(m, n)) return false;
   if (m.includes("sheet") || m.includes("excel") || m.includes("csv") || /\.(xlsx?|csv)(\?|$)/i.test(n)) return false;
   if (m.includes("word") || /\.(docx?|zip|rar|txt)(\?|$)/i.test(n)) return false;
@@ -56,7 +56,14 @@ export function FilePreviewModal({
 
   if (!doc) return null;
 
-  const rawUrl = doc.url || "";
+  const rawUrl =
+    typeof doc.url === "string"
+      ? doc.url
+      : (doc.url && typeof (doc.url as any).url === "string")
+      ? (doc.url as any).url
+      : typeof (doc as any)?._id === "string"
+      ? `/api/work-planner/attachments/${(doc as any)._id}/preview`
+      : "";
   let externalUrl = rawUrl;
   if (rawUrl && (rawUrl.startsWith("http") || rawUrl.startsWith("/"))) {
     externalUrl = resolvePublicAssetUrl(rawUrl, sessionToken);
@@ -205,15 +212,38 @@ export function useFilePreview(token?: string | null) {
 
   const openPreview = useCallback(
     async (doc: PreviewFile) => {
-      const activeMime = doc.mime || "";
-      setPreviewDoc(doc);
+      if (!doc) return;
+      const rawUrl =
+        typeof doc.url === "string"
+          ? doc.url
+          : (doc.url && typeof (doc.url as any).url === "string")
+          ? (doc.url as any).url
+          : typeof (doc as any)?._id === "string"
+          ? `/api/work-planner/attachments/${(doc as any)._id}/preview`
+          : "";
+
+      const safeDoc: PreviewFile = {
+        ...doc,
+        name: typeof doc.name === "string" ? doc.name : "Document Preview",
+        url: rawUrl,
+        mime: typeof doc.mime === "string" ? doc.mime : "",
+      };
+
+      const activeMime = safeDoc.mime || "";
+      setPreviewDoc(safeDoc);
       setPreviewLoading(true);
       setPreviewBlobUrl(null);
 
       // Data URLs or already created blob URLs don't need fetching
-      if (doc.url?.startsWith("data:") || doc.url?.startsWith("blob:")) {
-        setPreviewBlobUrl(doc.url);
+      if (rawUrl && (rawUrl.startsWith("data:") || rawUrl.startsWith("blob:"))) {
+        setPreviewBlobUrl(rawUrl);
         setPreviewLoading(false);
+        return;
+      }
+
+      if (!rawUrl) {
+        setPreviewLoading(false);
+        toast.error("Document file path or URL is unavailable");
         return;
       }
 
@@ -221,7 +251,7 @@ export function useFilePreview(token?: string | null) {
         token || (typeof window !== "undefined" ? readSessionFromStorage()?.token : null);
 
       try {
-        let fetchUrl = resolvePublicAssetUrl(doc.url, effectiveToken);
+        let fetchUrl = resolvePublicAssetUrl(rawUrl, effectiveToken);
         if (effectiveToken && !fetchUrl.includes("token=")) {
           fetchUrl +=
             (fetchUrl.includes("?") ? "&" : "?") +
@@ -229,7 +259,7 @@ export function useFilePreview(token?: string | null) {
         }
 
         const headers: Record<string, string> = {};
-        if (effectiveToken && !doc.url.includes("token=")) {
+        if (effectiveToken && !rawUrl.includes("token=")) {
           headers.Authorization = `Bearer ${effectiveToken}`;
         }
 

@@ -114,33 +114,43 @@ export function SettlementVoucherModal({ settlementId, open, onClose, sessionTok
                 </div>
                 <div>
                   <span className="text-muted block text-[10px] uppercase font-bold">Settlement Mode</span>
-                  <span className="font-semibold capitalize text-emerald-600 dark:text-emerald-400">
-                    {voucher.settlement_mode?.replace("_", " ") || "Settled"}
+                  <span
+                    className={`font-semibold capitalize ${
+                      voucher.settlement_mode === "payment_entry"
+                        ? "text-indigo-600 dark:text-indigo-400"
+                        : "text-emerald-600 dark:text-emerald-400"
+                    }`}
+                  >
+                    {voucher.settlement_mode === "payment_entry"
+                      ? "Direct Treasury Payment"
+                      : voucher.settlement_mode?.replace("_", " ") || "Settled"}
                   </span>
                 </div>
               </div>
 
-              {/* Claim items settled */}
-              <div>
-                <span className="text-xs font-bold text-foreground uppercase tracking-wider block mb-2">
-                  Settled Expense Claims ({voucher.claims?.length || 0})
-                </span>
-                <div className="rounded-xl border border-border overflow-hidden divide-y divide-border text-xs">
-                  {voucher.claims?.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-2.5 bg-card">
-                      <div>
-                        <span className="font-semibold text-foreground">
-                          {EXPENSE_CATEGORY_LABELS[item.category || ""] || item.category || "Claim"}
-                        </span>
-                        {item.description && (
-                          <p className="text-[11px] text-muted">{item.description}</p>
-                        )}
+              {/* Claim items settled (only if not standalone payment entry) */}
+              {voucher.claims && voucher.claims.length > 0 && (
+                <div>
+                  <span className="text-xs font-bold text-foreground uppercase tracking-wider block mb-2">
+                    Settled Expense Claims ({voucher.claims?.length || 0})
+                  </span>
+                  <div className="rounded-xl border border-border overflow-hidden divide-y divide-border text-xs">
+                    {voucher.claims?.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-2.5 bg-card">
+                        <div>
+                          <span className="font-semibold text-foreground">
+                            {EXPENSE_CATEGORY_LABELS[item.category || ""] || item.category || "Claim"}
+                          </span>
+                          {item.description && (
+                            <p className="text-[11px] text-muted">{item.description}</p>
+                          )}
+                        </div>
+                        <span className="font-bold text-foreground">{formatCurrency(item.amount)}</span>
                       </div>
-                      <span className="font-bold text-foreground">{formatCurrency(item.amount)}</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Advance deductions */}
               {voucher.advances && voucher.advances.length > 0 && (
@@ -163,18 +173,54 @@ export function SettlementVoucherModal({ settlementId, open, onClose, sessionTok
                 </div>
               )}
 
+              {/* Payment Entry deductions */}
+              {voucher.payment_entries && voucher.payment_entries.length > 0 && (
+                <div>
+                  <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider block mb-2">
+                    Direct Payment Entry Deductions
+                  </span>
+                  <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 divide-y divide-indigo-500/10 text-xs">
+                    {voucher.payment_entries.map((pay, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-2.5">
+                        <span className="font-medium text-foreground">
+                          {pay.payment_number || "Payment Entry Deduction"}
+                        </span>
+                        <span className="font-bold text-indigo-700 dark:text-indigo-300">
+                          - {formatCurrency(pay.deducted_amount)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Direct Payout Details */}
               {voucher.direct_payment_amount > 0 && (
-                <div className="p-3.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-xs space-y-1">
-                  <div className="flex justify-between font-bold text-emerald-700 dark:text-emerald-300">
-                    <span>Direct Company Payment (Reimbursement):</span>
-                    <span>{formatCurrency(voucher.direct_payment_amount)}</span>
+                <div
+                  className={`p-3.5 rounded-xl border text-xs space-y-1 ${
+                    voucher.settlement_mode === "payment_entry"
+                      ? "border-indigo-500/20 bg-indigo-500/5 text-indigo-900 dark:text-indigo-200"
+                      : "border-emerald-500/20 bg-emerald-500/5 text-emerald-900 dark:text-emerald-200"
+                  }`}
+                >
+                  <div className="flex justify-between font-bold">
+                    <span>
+                      {voucher.settlement_mode === "payment_entry"
+                        ? "Treasury Disbursement / Direct Payment:"
+                        : "Direct Company Payment (Reimbursement):"}
+                    </span>
+                    <span className="text-base font-extrabold">{formatCurrency(voucher.direct_payment_amount)}</span>
                   </div>
                   <div className="text-muted text-[11px]">
                     Mode: <span className="font-semibold uppercase">{voucher.payment_method || "Direct Payout"}</span>
                     {voucher.transaction_reference && ` • Ref: ${voucher.transaction_reference}`}
                     {voucher.bank_name && ` • Bank: ${voucher.bank_name}`}
                   </div>
+                  {voucher.settlement_notes && (
+                    <div className="text-muted text-[11px] pt-1">
+                      Notes: {voucher.settlement_notes}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -194,9 +240,17 @@ export function SettlementVoucherModal({ settlementId, open, onClose, sessionTok
 
               {/* Total summary */}
               <div className="rounded-xl bg-surface-muted p-3.5 flex items-center justify-between border border-border text-xs">
-                <span className="font-bold text-foreground">Total Claim Amount Settled:</span>
+                <span className="font-bold text-foreground">
+                  {voucher.settlement_mode === "payment_entry"
+                    ? "Total Direct Payment Disbursed:"
+                    : "Total Claim Amount Settled:"}
+                </span>
                 <span className="text-sm font-extrabold text-foreground">
-                  {formatCurrency(voucher.total_claim_amount)}
+                  {formatCurrency(
+                    voucher.settlement_mode === "payment_entry"
+                      ? voucher.direct_payment_amount || 0
+                      : voucher.total_claim_amount || 0
+                  )}
                 </span>
               </div>
             </div>

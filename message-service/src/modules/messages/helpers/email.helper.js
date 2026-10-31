@@ -69,7 +69,7 @@ async function getCompanyInfoFromAuthService() {
  * @param {string} [from] - From email.
  * @returns {Promise<object>} Send status result.
  */
-async function sendEmail(recipient, subject, textBody, htmlBody, attachments = [], cc = [], from = null) {
+async function sendEmail(recipient, subject, textBody, htmlBody, attachments = [], cc = [], from = null, emailType = null) {
   return unifiedEmailService.send({
     from,
     to: recipient,
@@ -78,6 +78,7 @@ async function sendEmail(recipient, subject, textBody, htmlBody, attachments = [
     html: htmlBody,
     attachments,
     cc,
+    emailType,
   });
 }
 
@@ -112,7 +113,7 @@ function compileTemplate(template, data) {
 /**
  * Sends a template-based email.
  */
-async function sendTemplateEmail(recipient, templateName, templateData = {}, attachments = [], cc = [], from = null) {
+async function sendTemplateEmail(recipient, templateName, templateData = {}, attachments = [], cc = [], from = null, emailType = null) {
   const templatesDir = path.join(__dirname, '..', 'templates', 'emails');
   const templatePath = path.join(templatesDir, `${templateName}.html`);
   const defaultTemplatePath = path.join(templatesDir, 'default.html');
@@ -242,7 +243,7 @@ async function sendTemplateEmail(recipient, templateName, templateData = {}, att
     ? cc
     : mergedData.cc || [];
   const finalFrom = from || mergedData.from;
-  return sendEmail(recipient, subject, textBody, htmlBody, finalAttachments, finalCc, finalFrom);
+  return sendEmail(recipient, subject, textBody, htmlBody, finalAttachments, finalCc, finalFrom, emailType);
 }
 
 module.exports = {

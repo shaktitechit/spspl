@@ -26,6 +26,7 @@ import {
   User,
   ShieldCheck,
   Phone,
+  MessageSquare,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -57,6 +58,8 @@ import {
 } from "./workPlanUtils";
 import { DownloadTasksVisitsReportModal } from "./DownloadTasksVisitsReportModal";
 import { SeniorRemarksModal } from "./SeniorRemarksModal";
+import { DirectiveThreadModal } from "./DirectiveThreadModal";
+import type { SeniorRemarkFeedItem } from "@/types/workPlanner";
 
 export interface DisplayTaskVisitItem {
   id: string;
@@ -177,6 +180,56 @@ export function TasksVisitsPage() {
 
   // Action targets for remarks modal
   const [seniorRemarksTarget, setSeniorRemarksTarget] = useState<DisplayTaskVisitItem | null>(null);
+  const [selectedThreadItem, setSelectedThreadItem] = useState<SeniorRemarkFeedItem | null>(null);
+
+  function buildDirectiveThreadItem(item: DisplayTaskVisitItem): SeniorRemarkFeedItem {
+    const raw = (item.raw as any) || {};
+    const authRemarks = Array.isArray(raw.authority_remarks) ? raw.authority_remarks : [];
+    const latestRemark =
+      authRemarks.length > 0
+        ? authRemarks[authRemarks.length - 1]
+        : {
+            _id: "legacy",
+            remark: raw.manager_remarks || "",
+            remark_type: "instruction",
+            priority: "medium",
+            status: "pending_response",
+            followup_remarks: [],
+            created_at: raw.updatedAt || raw.createdAt,
+          };
+
+    return {
+      id: String(latestRemark._id || item.id),
+      remark_id: String(latestRemark._id || "0"),
+      target_type: item.itemType === "visit" ? "visit" : "task",
+      plan_id: item.planId,
+      target_id: item.id,
+      plan_date: item.planDate,
+      title: item.titleOrParty,
+      location: item.locationOrAddress || "",
+      sales_user: {
+        _id: item.salesUserId,
+        name: item.executiveName,
+        email: item.executiveEmail || "",
+      },
+      senior_user: {
+        _id: String(latestRemark.user?._id || latestRemark.user || ""),
+        name: latestRemark.user_name || (typeof latestRemark.user === "object" ? latestRemark.user?.name : "Senior Authority"),
+        role: latestRemark.role || "Senior Authority",
+      },
+      remark: latestRemark.remark || raw.manager_remarks || "",
+      remark_type: latestRemark.remark_type || "instruction",
+      priority: latestRemark.priority || "medium",
+      status: latestRemark.status || "pending_response",
+      expected_followup_date: latestRemark.expected_followup_date || null,
+      followup_remarks: Array.isArray(latestRemark.followup_remarks) ? latestRemark.followup_remarks : [],
+      resolution_remarks: latestRemark.resolution_remarks || "",
+      resolved_at: latestRemark.resolved_at || null,
+      resolved_by: latestRemark.resolved_by || null,
+      resolved_by_name: latestRemark.resolved_by_name || "",
+      created_at: latestRemark.created_at || raw.updatedAt || raw.createdAt || new Date().toISOString(),
+    };
+  }
 
   // User Roster and Team queries
   const { data: usersData } = useGetUsersQuery(undefined, { skip: !adminRole });
@@ -945,6 +998,37 @@ export function TasksVisitsPage() {
                         </div>
 
                         <div className="flex items-center gap-1.5">
+                          {/* Closed-Loop Thread button if remarks exist */}
+                          {((Array.isArray((item.raw as any)?.authority_remarks) && (item.raw as any).authority_remarks.length > 0) || (item.raw as any)?.manager_remarks) && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedThreadItem(buildDirectiveThreadItem(item))}
+                              className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-bold transition cursor-pointer ${
+                                ((item.raw as any)?.authority_remarks?.slice(-1)[0]?.status === "resolved")
+                                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20"
+                                  : ((item.raw as any)?.authority_remarks?.slice(-1)[0]?.status === "responded")
+                                  ? "bg-sky-500/10 border-sky-500/30 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20"
+                                  : "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
+                              }`}
+                              title="Open Closed-Loop Directive Thread"
+                            >
+                              <MessageSquare className="h-3 w-3" />
+                              <span>Thread</span>
+                              {((item.raw as any)?.authority_remarks?.slice(-1)[0]?.status === "resolved") ? (
+                                <span className="text-[9px]">✅</span>
+                              ) : ((item.raw as any)?.authority_remarks?.slice(-1)[0]?.status === "responded") ? (
+                                <span className="text-[9px]">💬</span>
+                              ) : (
+                                <span className="text-[9px]">⏳</span>
+                              )}
+                              {((item.raw as any)?.authority_remarks?.slice(-1)[0]?.followup_remarks?.length || 0) > 0 && (
+                                <span className="rounded-full bg-foreground/10 px-1 text-[8px]">
+                                  {(item.raw as any).authority_remarks.slice(-1)[0].followup_remarks.length}
+                                </span>
+                              )}
+                            </button>
+                          )}
+
                           {elevatedRole && currentUserId !== item.salesUserId && (
                             <button
                               type="button"
@@ -1225,6 +1309,37 @@ export function TasksVisitsPage() {
                         </div>
 
                         <div className="flex items-center gap-1.5">
+                          {/* Closed-Loop Thread button if remarks exist */}
+                          {((Array.isArray((item.raw as any)?.authority_remarks) && (item.raw as any).authority_remarks.length > 0) || (item.raw as any)?.manager_remarks) && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedThreadItem(buildDirectiveThreadItem(item))}
+                              className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-bold transition cursor-pointer ${
+                                ((item.raw as any)?.authority_remarks?.slice(-1)[0]?.status === "resolved")
+                                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20"
+                                  : ((item.raw as any)?.authority_remarks?.slice(-1)[0]?.status === "responded")
+                                  ? "bg-sky-500/10 border-sky-500/30 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20"
+                                  : "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
+                              }`}
+                              title="Open Closed-Loop Directive Thread"
+                            >
+                              <MessageSquare className="h-3 w-3" />
+                              <span>Thread</span>
+                              {((item.raw as any)?.authority_remarks?.slice(-1)[0]?.status === "resolved") ? (
+                                <span className="text-[9px]">✅</span>
+                              ) : ((item.raw as any)?.authority_remarks?.slice(-1)[0]?.status === "responded") ? (
+                                <span className="text-[9px]">💬</span>
+                              ) : (
+                                <span className="text-[9px]">⏳</span>
+                              )}
+                              {((item.raw as any)?.authority_remarks?.slice(-1)[0]?.followup_remarks?.length || 0) > 0 && (
+                                <span className="rounded-full bg-foreground/10 px-1 text-[8px]">
+                                  {(item.raw as any).authority_remarks.slice(-1)[0].followup_remarks.length}
+                                </span>
+                              )}
+                            </button>
+                          )}
+
                           {elevatedRole && currentUserId !== item.salesUserId && (
                             <button
                               type="button"
@@ -1617,6 +1732,37 @@ export function TasksVisitsPage() {
                           {/* Direct Row Actions */}
                           <td className="px-4 py-3 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5">
+                              {/* Closed-Loop Thread button if remarks exist */}
+                              {((Array.isArray((item.raw as any)?.authority_remarks) && (item.raw as any).authority_remarks.length > 0) || (item.raw as any)?.manager_remarks) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedThreadItem(buildDirectiveThreadItem(item))}
+                                  className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-bold transition cursor-pointer ${
+                                    ((item.raw as any)?.authority_remarks?.slice(-1)[0]?.status === "resolved")
+                                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20"
+                                      : ((item.raw as any)?.authority_remarks?.slice(-1)[0]?.status === "responded")
+                                      ? "bg-sky-500/10 border-sky-500/30 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20"
+                                      : "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
+                                  }`}
+                                  title="Open Closed-Loop Directive Thread"
+                                >
+                                  <MessageSquare className="h-3 w-3" />
+                                  <span>Thread</span>
+                                  {((item.raw as any)?.authority_remarks?.slice(-1)[0]?.status === "resolved") ? (
+                                    <span className="text-[9px]">✅</span>
+                                  ) : ((item.raw as any)?.authority_remarks?.slice(-1)[0]?.status === "responded") ? (
+                                    <span className="text-[9px]">💬</span>
+                                  ) : (
+                                    <span className="text-[9px]">⏳</span>
+                                  )}
+                                  {((item.raw as any)?.authority_remarks?.slice(-1)[0]?.followup_remarks?.length || 0) > 0 && (
+                                    <span className="rounded-full bg-foreground/10 px-1 text-[8px]">
+                                      {(item.raw as any).authority_remarks.slice(-1)[0].followup_remarks.length}
+                                    </span>
+                                  )}
+                                </button>
+                              )}
+
                               {elevatedRole && currentUserId !== item.salesUserId && (
                                 <button
                                   type="button"
@@ -1698,6 +1844,18 @@ export function TasksVisitsPage() {
           initialRemarks={(seniorRemarksTarget.raw as any)?.manager_remarks}
           authorityRemarksHistory={(seniorRemarksTarget.raw as any)?.authority_remarks}
           onClose={() => setSeniorRemarksTarget(null)}
+          onSuccess={() => {
+            loadData();
+          }}
+        />
+      )}
+
+      {/* Closed-Loop Directive Thread Modal */}
+      {selectedThreadItem && (
+        <DirectiveThreadModal
+          open={Boolean(selectedThreadItem)}
+          item={selectedThreadItem}
+          onClose={() => setSelectedThreadItem(null)}
           onSuccess={() => {
             loadData();
           }}

@@ -510,6 +510,7 @@ async function completePlan(id, user, dayEndData = null) {
     plan.day_end = {
       completed_at: new Date(),
       from_email: dayEndData.from_email || user.email,
+      from_name: dayEndData.from_name || user.name || '',
       to_email: dayEndData.to_email || '',
       cc_emails: Array.isArray(dayEndData.cc_emails)
         ? dayEndData.cc_emails.map((e) => String(e).trim()).filter(Boolean)
@@ -602,9 +603,12 @@ async function getDayEndDraft(id, user) {
     (email) => email && email.toLowerCase() !== String(firstManagerEmail || '').toLowerCase()
   );
 
-  const executiveName = user.name || user.email?.split('@')[0] || 'Executive';
-  const executiveEmail = user.email || '';
-  const fromAddress = `${executiveName} <${executiveEmail}>`;
+  const salesUserObj = typeof plan.sales_user === 'object' && plan.sales_user ? plan.sales_user : null;
+  const executiveName = salesUserObj?.name || user.name || user.email?.split('@')[0] || 'Executive';
+  const executiveEmail = salesUserObj?.email || user.email || '';
+  const submitterName = user.name || user.email?.split('@')[0] || executiveName;
+  const submitterEmail = user.email || executiveEmail;
+  const fromAddress = `${submitterName} <${submitterEmail}>`;
 
   const planDateStr = plan.plan_date
     ? new Date(plan.plan_date).toLocaleDateString('en-GB', {
@@ -625,6 +629,7 @@ async function getDayEndDraft(id, user) {
   <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
     <h2 style="margin: 0 0 12px 0; color: #0f172a; font-size: 18px;">Day End Report — Summary</h2>
     <p style="margin: 4px 0; font-size: 14px;"><strong>Executive:</strong> ${executiveName} (${executiveEmail})</p>
+    ${submitterEmail && executiveEmail && submitterEmail.toLowerCase() !== executiveEmail.toLowerCase() ? `<p style="margin: 4px 0; font-size: 14px;"><strong>Submitted By:</strong> ${submitterName} (${submitterEmail})</p>` : ''}
     <p style="margin: 4px 0; font-size: 14px;"><strong>Plan Date:</strong> ${planDateStr}</p>
     <p style="margin: 4px 0; font-size: 14px;"><strong>Plan Type:</strong> ${plan.plan_type || 'Visits'} | <strong>Location:</strong> ${plan.location || 'N/A'}</p>
     <p style="margin: 4px 0; font-size: 14px;"><strong>Total Expenses Logged:</strong> ₹${expensesTotal.toLocaleString('en-IN')}</p>
@@ -647,12 +652,14 @@ async function getDayEndDraft(id, user) {
     plan_id: String(plan._id),
     plan_date: plan.plan_date,
     from: fromAddress,
-    from_email: executiveEmail,
+    from_name: submitterName,
+    from_email: submitterEmail,
     to: firstManagerEmail,
     cc: ccEmails,
     subject,
     body_html: defaultHtmlBody,
     managers: managerList,
+    attachments: plan.day_end?.attachments || [],
   };
 }
 
@@ -1188,6 +1195,29 @@ async function submit(id, user, body = {}) {
     const now = new Date();
     await WorkPlanVisit.updateMany({ work_plan: id, deletedAt: null }, { $set: { deletedAt: now } });
     await WorkPlanWork.updateMany({ work_plan: id, deletedAt: null }, { $set: { deletedAt: now } });
+  }
+
+  const rawAtts = body.attachment_ids || body.attachmentIds || body.attachments;
+  const validAttachmentIds = Array.isArray(rawAtts)
+    ? rawAtts
+        .map((aid) => (typeof aid === 'object' && aid ? aid._id || aid.id : aid))
+        .filter((aid) => aid && mongoose.Types.ObjectId.isValid(aid))
+    : [];
+
+  if (validAttachmentIds.length > 0) {
+    plan.attachments = validAttachmentIds;
+  }
+  if (body.from_email || body.from_name || body.to_email) {
+    plan.creation_mail = {
+      from_email: body.from_email || user.email,
+      from_name: body.from_name || user.name || '',
+      to_email: body.to_email || '',
+      cc_emails: Array.isArray(body.cc_emails)
+        ? body.cc_emails.map((e) => String(e).trim()).filter(Boolean)
+        : [],
+      subject: body.subject || '',
+      attachments: validAttachmentIds,
+    };
   }
 
   plan.status = plan.plan_type === 'Leave' ? 'completed' : 'planned';
@@ -2943,11 +2973,28 @@ async function rejectExpense(planId, expenseId, body, user) {
     throw new ApiError(403, 'Segregation of Duties: You cannot reject your own expense claim');
   }
 
+  const rejectionReason = body.rejection_reason.trim();
   expense.status = 'rejected';
-  expense.rejection_reason = body.rejection_reason.trim();
+  expense.rejection_reason = rejectionReason;
+  expense.manager_remarks = rejectionReason;
   expense.approved_by = userId(user);
   expense.approved_at = new Date();
   expense.updated_by = userId(user);
+
+  if (!Array.isArray(expense.authority_remarks)) {
+    expense.authority_remarks = [];
+  }
+  expense.authority_remarks.push({
+    remark: rejectionReason,
+    user: userId(user),
+    user_name: user?.name || user?.email || 'Senior Authority',
+    role: getUserRole(user),
+    remark_type: 'objection',
+    priority: 'high',
+    status: 'pending_response',
+    followup_remarks: [],
+    created_at: new Date(),
+  });
   await expense.save();
 
   await logActivity(
@@ -3972,6 +4019,20 @@ async function deleteWorkPlanDraft(query, user) {
   return { success: true };
 }
 
+function detectRemarkType(text, explicitType) {
+  if (explicitType && ['instruction', 'appreciation', 'objection'].includes(explicitType)) {
+    return explicitType;
+  }
+  const str = String(text || '').toLowerCase();
+  if (str.includes('objection') || str.includes('reject') || str.includes('audit query') || str.includes('audit objection')) {
+    return 'objection';
+  }
+  if (str.includes('appreciation') || str.includes('congrat') || str.includes('good job') || str.includes('well done')) {
+    return 'appreciation';
+  }
+  return 'instruction';
+}
+
 async function getSeniorRemarksFeed(query = {}, user) {
   const { WorkPlan, WorkPlanVisit, WorkPlanWork, WorkPlanExpense, User } = getModels();
   const selfId = String(userId(user) || '');
@@ -4211,7 +4272,13 @@ async function getSeniorRemarksFeed(query = {}, user) {
         role: seniorRole,
       },
       remark: r.remark,
-      remark_type: r.remark_type || 'instruction',
+      remark_type:
+        r.remark_type && r.remark_type !== 'instruction'
+          ? r.remark_type
+          : detectRemarkType(
+              r.remark || doc.manager_remarks || doc.rejection_reason,
+              r.remark_type
+            ),
       priority: r.priority || 'medium',
       expected_followup_date: r.expected_followup_date || null,
       status: r.status || 'pending_response',
@@ -4242,6 +4309,7 @@ async function getSeniorRemarksFeed(query = {}, user) {
         );
       });
     } else if (doc.manager_remarks && doc.manager_remarks.trim()) {
+      const detectedType = detectRemarkType(doc.manager_remarks);
       pushRemarkItem(
         doc,
         {
@@ -4249,8 +4317,8 @@ async function getSeniorRemarksFeed(query = {}, user) {
           remark: doc.manager_remarks.trim(),
           user_name: 'Senior Manager',
           role: 'Manager',
-          remark_type: 'instruction',
-          priority: 'medium',
+          remark_type: detectedType,
+          priority: detectedType === 'objection' ? 'high' : 'medium',
           status: 'pending_response',
           created_at: doc.updatedAt || doc.createdAt,
         },
@@ -4287,6 +4355,7 @@ async function getSeniorRemarksFeed(query = {}, user) {
         );
       });
     } else if (doc.manager_remarks && doc.manager_remarks.trim()) {
+      const detectedType = detectRemarkType(doc.manager_remarks);
       pushRemarkItem(
         doc,
         {
@@ -4294,8 +4363,8 @@ async function getSeniorRemarksFeed(query = {}, user) {
           remark: doc.manager_remarks.trim(),
           user_name: 'Senior Manager',
           role: 'Manager',
-          remark_type: 'instruction',
-          priority: 'medium',
+          remark_type: detectedType,
+          priority: detectedType === 'objection' ? 'high' : 'medium',
           status: 'pending_response',
           created_at: doc.updatedAt || doc.createdAt,
         },
@@ -4330,6 +4399,7 @@ async function getSeniorRemarksFeed(query = {}, user) {
         );
       });
     } else if (doc.manager_remarks && doc.manager_remarks.trim()) {
+      const detectedType = detectRemarkType(doc.manager_remarks);
       pushRemarkItem(
         doc,
         {
@@ -4337,8 +4407,8 @@ async function getSeniorRemarksFeed(query = {}, user) {
           remark: doc.manager_remarks.trim(),
           user_name: 'Senior Manager',
           role: 'Manager',
-          remark_type: 'instruction',
-          priority: 'medium',
+          remark_type: detectedType,
+          priority: detectedType === 'objection' ? 'high' : 'medium',
           status: 'pending_response',
           created_at: doc.updatedAt || doc.createdAt,
         },
@@ -4376,16 +4446,18 @@ async function getSeniorRemarksFeed(query = {}, user) {
           fallbackDate
         );
       });
-    } else if (doc.manager_remarks && doc.manager_remarks.trim()) {
+    } else if ((doc.manager_remarks && doc.manager_remarks.trim()) || (doc.rejection_reason && doc.rejection_reason.trim())) {
+      const text = (doc.manager_remarks && doc.manager_remarks.trim()) || doc.rejection_reason.trim();
+      const detectedType = doc.rejection_reason ? 'objection' : detectRemarkType(text);
       pushRemarkItem(
         doc,
         {
           _id: 'legacy',
-          remark: doc.manager_remarks.trim(),
+          remark: text,
           user_name: 'Senior Manager',
           role: 'Manager',
-          remark_type: 'instruction',
-          priority: 'medium',
+          remark_type: detectedType,
+          priority: detectedType === 'objection' ? 'high' : 'medium',
           status: 'pending_response',
           created_at: doc.updatedAt || doc.createdAt,
         },
@@ -4517,18 +4589,72 @@ async function addJuniorFollowup(body, user) {
     throw new ApiError(404, `${target_type} not found`);
   }
 
-  if (!Array.isArray(doc.authority_remarks) || doc.authority_remarks.length === 0) {
-    throw new ApiError(404, 'No authority remarks found on this target');
+  if (!Array.isArray(doc.authority_remarks)) {
+    doc.authority_remarks = [];
   }
 
   let remark = null;
-  if (remark_id) {
+  if (remark_id && String(remark_id) !== 'legacy') {
     remark = doc.authority_remarks.find(
       (r) => String(r._id) === String(remark_id)
     );
   }
-  if (!remark) {
+  if (!remark && doc.authority_remarks.length > 0) {
     remark = doc.authority_remarks[doc.authority_remarks.length - 1];
+  }
+
+  const isExpenseTarget = target_type === 'expense';
+  const incomingRemarkType = ['instruction', 'appreciation', 'objection'].includes(body.remark_type)
+    ? body.remark_type
+    : null;
+
+  const contextRemarkText =
+    (doc.manager_remarks && doc.manager_remarks.trim()) ||
+    (doc.rejection_reason && doc.rejection_reason.trim()) ||
+    (doc.remarks && doc.remarks.trim()) ||
+    '';
+
+  // For any expense claim, any supervisory query or rejection is by default an 'objection' unless explicitly 'appreciation'
+  const detectedType =
+    incomingRemarkType ||
+    (isExpenseTarget
+      ? (detectRemarkType(contextRemarkText) === 'appreciation' ? 'appreciation' : 'objection')
+      : detectRemarkType(contextRemarkText)) ||
+    'instruction';
+
+  // If no authority remarks exist yet on the target (e.g. legacy manager_remarks), initialize one
+  if (!remark) {
+    const fallbackRemarkText =
+      (doc.manager_remarks && doc.manager_remarks.trim()) ||
+      (doc.rejection_reason && doc.rejection_reason.trim()) ||
+      (doc.remarks && doc.remarks.trim()) ||
+      (doc.description && doc.description.trim()) ||
+      (detectedType === 'objection' ? 'Audit Objection Note' : 'Senior Authority Directive');
+
+    remark = {
+      remark: fallbackRemarkText,
+      user: doc.updated_by || doc.created_by || userId(user),
+      user_name: 'Senior Authority',
+      role: 'Manager',
+      remark_type: detectedType,
+      priority: detectedType === 'objection' ? 'high' : 'medium',
+      status: 'pending_response',
+      followup_remarks: [],
+      created_at: doc.updatedAt || doc.createdAt || new Date(),
+    };
+    doc.authority_remarks.push(remark);
+  } else {
+    // If remark exists, ensure objection or explicitly set remark_type is preserved and not altered to instruction
+    if (
+      incomingRemarkType === 'objection' ||
+      (!remark.remark_type && detectedType === 'objection') ||
+      (isExpenseTarget && remark.remark_type !== 'appreciation') ||
+      (remark.remark_type === 'instruction' && (isExpenseTarget || detectRemarkType(doc.manager_remarks || remark.remark) === 'objection'))
+    ) {
+      remark.remark_type = 'objection';
+    } else if (incomingRemarkType && (!remark.remark_type || remark.remark_type === 'instruction')) {
+      remark.remark_type = incomingRemarkType;
+    }
   }
 
   if (!Array.isArray(remark.followup_remarks)) {
@@ -4580,34 +4706,95 @@ async function addJuniorFollowup(body, user) {
     });
   }
 
+  const isElevated = isWpElevated(user);
   const uRole = getUserRole(user);
-  const respondentRole = uRole === 'Senior Authority' ? 'Executive' : uRole;
+  const actorId = String(userId(user) || '');
+
+  // Determine whether actor is the target executive or a senior authority
+  const targetSalesUserId = String(
+    doc.sales_user?._id ||
+    doc.sales_user ||
+    (doc.work_plan && typeof doc.work_plan === 'object' ? doc.work_plan.sales_user?._id || doc.work_plan.sales_user : '') ||
+    ''
+  );
+  const isTargetExecutive = targetSalesUserId && actorId === targetSalesUserId;
+  const isSeniorActor = !isTargetExecutive && (isElevated || actorId !== targetSalesUserId);
+
+  // Preserve supervisor role for senior feedback, or Executive for junior responses
+  let respondentRole = isSeniorActor
+    ? (uRole === 'Executive' ? 'Senior Authority' : uRole)
+    : 'Executive';
+  const respondentName = user?.name || user?.email || (isSeniorActor ? 'Senior Authority' : 'Executive');
+
+  // Closed loop status transitions
+  const closedLoopAction = String(body.closed_loop_action || body.action || '').toLowerCase();
+  if (isSeniorActor) {
+    if (closedLoopAction === 'request_revision' || body.request_revision) {
+      remark.status = 'pending_response';
+    } else if (closedLoopAction === 'resolve') {
+      remark.status = 'resolved';
+      remark.resolved_at = new Date();
+      remark.resolved_by = userId(user);
+      remark.resolved_by_name = respondentName;
+      remark.resolution_remarks = response.trim();
+    } else if (closedLoopAction === 'guidance' || closedLoopAction === 'directive') {
+      remark.status = 'pending_response';
+    }
+  } else {
+    // Executive responded: status transitions to awaiting senior review
+    remark.status = 'responded';
+  }
+
   remark.followup_remarks.push({
     response: response.trim(),
     user: userId(user),
-    user_name: user?.name || user?.email || 'Executive',
+    user_name: respondentName,
     role: respondentRole,
-    action_status: action_status || 'completed',
+    action_status: action_status || (isSeniorActor ? 'completed' : 'completed'),
     attachments: parsedAttachments,
     attachment_details: parsedDetails,
     created_at: new Date(),
   });
 
-  if (remark.status === 'pending_response') {
-    remark.status = 'responded';
-  }
-
   await doc.save();
 
-  notifyJuniorFollowupAdded({
-    targetType: target_type,
-    targetId: target_id,
-    remark,
-    followup: remark.followup_remarks[remark.followup_remarks.length - 1],
-    actorUser: user,
-  }).catch((err) => {
-    console.error('[WorkPlanner] Error notifying junior followup:', err);
-  });
+  if (isSeniorActor) {
+    // Senior replied: notify target executive
+    try {
+      const { notifyAuthorityRemarkAdded, notifyDirectiveResolved } = require('./workPlannerAutoNotification.service');
+      if (remark.status === 'resolved') {
+        notifyDirectiveResolved({
+          targetType: target_type,
+          targetId: target_id,
+          doc,
+          remark,
+          actorUser: user,
+        }).catch(() => {});
+      } else {
+        notifyAuthorityRemarkAdded({
+          planId: doc.work_plan?._id || doc.work_plan || doc._id,
+          visitId: target_type === 'visit' ? doc._id : null,
+          workId: target_type === 'task' ? doc._id : null,
+          expenseId: target_type === 'expense' ? doc._id : null,
+          remarkText: response.trim(),
+          actorUser: user,
+        }).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('[WorkPlanner] Error notifying executive of senior reply:', e.message);
+    }
+  } else {
+    // Junior replied: notify senior authority
+    notifyJuniorFollowupAdded({
+      targetType: target_type,
+      targetId: target_id,
+      remark,
+      followup: remark.followup_remarks[remark.followup_remarks.length - 1],
+      actorUser: user,
+    }).catch((err) => {
+      console.error('[WorkPlanner] Error notifying junior followup:', err);
+    });
+  }
 
   return { success: true, remark };
 }
@@ -4639,30 +4826,86 @@ async function updateSeniorRemarkStatus(body, user) {
     throw new ApiError(404, `${target_type} not found`);
   }
 
+  if (!Array.isArray(doc.authority_remarks)) {
+    doc.authority_remarks = [];
+  }
+
   let remark = null;
-  if (remark_id) {
-    remark = doc.authority_remarks?.find(
+  if (remark_id && String(remark_id) !== 'legacy') {
+    remark = doc.authority_remarks.find(
       (r) => String(r._id) === String(remark_id)
     );
   }
-  if (!remark && Array.isArray(doc.authority_remarks) && doc.authority_remarks.length > 0) {
+  if (!remark && doc.authority_remarks.length > 0) {
     remark = doc.authority_remarks[doc.authority_remarks.length - 1];
   }
 
   if (!remark) {
-    throw new ApiError(404, 'Authority remark not found');
+    const isExpenseTarget = target_type === 'expense';
+    const fallbackRemarkText =
+      (doc.manager_remarks && doc.manager_remarks.trim()) ||
+      (doc.rejection_reason && doc.rejection_reason.trim()) ||
+      (doc.remarks && doc.remarks.trim()) ||
+      (doc.description && doc.description.trim()) ||
+      (isExpenseTarget ? 'Audit Objection Note' : 'Senior Authority Directive');
+
+    const detectedType = isExpenseTarget
+      ? (detectRemarkType(fallbackRemarkText) === 'appreciation' ? 'appreciation' : 'objection')
+      : detectRemarkType(fallbackRemarkText);
+
+    remark = {
+      remark: fallbackRemarkText,
+      user: userId(user),
+      user_name: user?.name || user?.email || 'Senior Authority',
+      role: 'Senior Authority',
+      remark_type: detectedType,
+      priority: detectedType === 'objection' ? 'high' : 'medium',
+      status: 'pending_response',
+      followup_remarks: [],
+      created_at: doc.updatedAt || doc.createdAt || new Date(),
+    };
+    doc.authority_remarks.push(remark);
+  } else if (target_type === 'expense' && remark.remark_type !== 'appreciation') {
+    remark.remark_type = 'objection';
   }
 
   remark.status = status;
+  const seniorRole = getUserRole(user) || 'Senior Authority';
+  const seniorName = user?.name || user?.email || 'Senior Authority';
+
   if (status === 'resolved') {
     remark.resolution_remarks = (resolution_remarks && resolution_remarks.trim()) || undefined;
     remark.resolved_at = new Date();
     remark.resolved_by = userId(user);
-    remark.resolved_by_name = user?.name || user?.email || 'Senior Authority';
+    remark.resolved_by_name = seniorName;
+    if (resolution_remarks && resolution_remarks.trim()) {
+      remark.followup_remarks.push({
+        response: `[Directive Resolved & Closed]: ${resolution_remarks.trim()}`,
+        user: userId(user),
+        user_name: seniorName,
+        role: seniorRole,
+        action_status: 'completed',
+        attachments: [],
+        attachment_details: [],
+        created_at: new Date(),
+      });
+    }
   } else if (status === 'pending_response') {
     remark.resolved_at = undefined;
     remark.resolved_by = undefined;
     remark.resolved_by_name = undefined;
+    if (resolution_remarks && resolution_remarks.trim()) {
+      remark.followup_remarks.push({
+        response: `[Directive Reopened / Revision Requested]: ${resolution_remarks.trim()}`,
+        user: userId(user),
+        user_name: seniorName,
+        role: seniorRole,
+        action_status: 'need_help',
+        attachments: [],
+        attachment_details: [],
+        created_at: new Date(),
+      });
+    }
   }
 
   await doc.save();

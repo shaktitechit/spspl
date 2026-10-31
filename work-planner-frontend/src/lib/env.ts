@@ -21,9 +21,18 @@ export function publicNotificationServiceOrigin(): string {
   return WORK_PLANNER_SERVICE_URL.replace(/\/+$/, "");
 }
 
-export function resolvePublicAssetUrl(path: string, token?: string | null): string {
+export function resolvePublicAssetUrl(path: any, token?: string | null): string {
   if (!path) return "";
-  const value = path.trim();
+  const rawString =
+    typeof path === "string"
+      ? path
+      : typeof path?.url === "string"
+      ? path.url
+      : typeof path?._id === "string"
+      ? path._id
+      : String(path || "");
+  if (!rawString || rawString === "[object Object]") return "";
+  const value = rawString.trim();
   if (/^data:image\//i.test(value)) return value;
 
   const wpBase = WORK_PLANNER_SERVICE_URL.replace(/\/+$/, "");

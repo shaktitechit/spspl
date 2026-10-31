@@ -36,6 +36,8 @@ import type {
 } from "@/types/workPlanner";
 
 export interface CreateEmailPayload {
+  fromEmail?: string;
+  fromName?: string;
   toEmail: string;
   ccEmails: string[];
   subject: string;
@@ -138,8 +140,8 @@ export function WorkPlanCreateMailModal({
 
   const isLeave = plan?.plan_type === "Leave";
 
-  const fromName = sessionUser?.name || currentSessionUser?.name || "Executive";
-  const fromEmail = sessionUser?.email || currentSessionUser?.email || draftData?.from_email || "";
+  const fromName = currentSessionUser?.name || sessionUser?.name || "Executive";
+  const fromEmail = currentSessionUser?.email || sessionUser?.email || draftData?.from_email || "";
 
   const allUsers = useMemo<any[]>(() => {
     if (adminRole && usersData) return (usersData as any[]) || [];
@@ -178,11 +180,12 @@ export function WorkPlanCreateMailModal({
   const targetExecutiveName = targetUserObj?.name || "";
 
   const isManagerCreatingForExecutive = useMemo(() => {
-    if (!targetExecutiveEmail || !sessionUser?.email) return false;
-    return targetExecutiveEmail.toLowerCase().trim() !== sessionUser.email.toLowerCase().trim();
-  }, [targetExecutiveEmail, sessionUser?.email]);
+    const creatorEmail = currentSessionUser?.email || sessionUser?.email || "";
+    if (!targetExecutiveEmail || !creatorEmail) return false;
+    return targetExecutiveEmail.toLowerCase().trim() !== creatorEmail.toLowerCase().trim();
+  }, [targetExecutiveEmail, currentSessionUser?.email, sessionUser?.email]);
 
-  const targetExecId = targetUserObj ? String(targetUserObj._id || targetUserObj.id || "") : String((sessionUser as any)?._id || (sessionUser as any)?.id || "");
+  const targetExecId = targetUserObj ? String(targetUserObj._id || targetUserObj.id || "") : String((currentSessionUser as any)?._id || (sessionUser as any)?._id || "");
   const { data: dbUserSettings } = useGetUserSettingsQuery(targetExecId, { skip: !isOpen || !targetExecId });
 
   const effectiveSettings = useMemo(() => {
@@ -558,7 +561,8 @@ export function WorkPlanCreateMailModal({
 <div style="font-family: Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #1e293b;">
   <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
     <h2 style="margin: 0 0 12px 0; color: #0f172a; font-size: 18px;">${headerTitle}</h2>
-    <p style="margin: 4px 0; font-size: 14px;"><strong>Executive:</strong> ${executiveName} (${fromEmail})</p>
+    <p style="margin: 4px 0; font-size: 14px;"><strong>Executive:</strong> ${executiveName} (${targetExecutiveEmail || fromEmail})</p>
+    ${isManagerCreatingForExecutive ? `<p style="margin: 4px 0; font-size: 14px;"><strong>Created By:</strong> ${fromName} (${fromEmail})</p>` : ""}
     <p style="margin: 4px 0; font-size: 14px;"><strong>Plan Date:</strong> ${planDateStr}</p>
     <p style="margin: 4px 0; font-size: 14px;"><strong>Plan Type:</strong> ${plan.plan_type || "Visits"}${locationLine}</p>
     <p style="margin: 4px 0; font-size: 14px;"><strong>Discussed with Manager:</strong> ${isDiscussed ? `Yes (${discussedManager})` : "No"}</p>
@@ -624,7 +628,9 @@ export function WorkPlanCreateMailModal({
           toast.success(`Attached ${file.name}`);
         }
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Failed to upload file";
+        const e: any = err;
+        const msg = e?.data?.message || e?.data?.error || e?.error || (err instanceof Error ? err.message : "Failed to upload file");
+        console.error("[Attachment upload] failed:", err);
         toast.error(`Error uploading ${file.name}: ${msg}`);
       } finally {
         setUploadingFiles((prev) => prev.filter((name) => name !== file.name));
@@ -672,6 +678,8 @@ function extractErrorMessage(err: unknown, fallbackMsg: string): string {
     setSubmitting(true);
     try {
       await onCreateAndSend({
+        fromEmail,
+        fromName,
         toEmail: toEmail.trim(),
         ccEmails,
         subject: subject.trim(),

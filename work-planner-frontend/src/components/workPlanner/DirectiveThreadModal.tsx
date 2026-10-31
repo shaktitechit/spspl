@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import {
   X,
@@ -27,6 +27,7 @@ import {
   Download,
   UploadCloud,
   FileSpreadsheet,
+  CornerDownRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -90,8 +91,16 @@ export function DirectiveThreadModal({
   const currentUserId = String(sessionUser?._id || (sessionUser as any)?.id || "");
   const elevatedRole = isWpElevated(sessionUser);
 
+  // Local active state so real-time updates happen immediately without closing modal
+  const [activeItem, setActiveItem] = useState<SeniorRemarkFeedItem | null>(item);
+
+  useEffect(() => {
+    setActiveItem(item);
+  }, [item]);
+
   const [followupText, setFollowupText] = useState("");
   const [actionStatus, setActionStatus] = useState<FollowupActionStatus>("completed");
+  const [seniorActionMode, setSeniorActionMode] = useState<"guidance" | "request_revision" | "resolve">("guidance");
   const [resolutionRemarks, setResolutionRemarks] = useState("");
   const [showResolveInput, setShowResolveInput] = useState(false);
   const [stagedFiles, setStagedFiles] = useState<StagedAttachment[]>([]);
@@ -112,15 +121,15 @@ export function DirectiveThreadModal({
     downloadFile,
   } = useFilePreview(sessionToken);
 
-  if (!open || !item) return null;
+  if (!open || !activeItem) return null;
 
-  const isJuniorOwner = currentUserId === String(item.sales_user._id);
-  const isSeniorAuthor = currentUserId === String(item.senior_user._id);
+  const isJuniorOwner = currentUserId === String(activeItem.sales_user._id);
+  const isSeniorActor = elevatedRole || !isJuniorOwner;
   const canResolve = isWpAdmin(sessionUser) || (elevatedRole && !isJuniorOwner);
 
-  const isObjection = item.remark_type === "objection";
-  const isAppreciation = item.remark_type === "appreciation";
-  const isDirective = item.remark_type === "instruction";
+  const isObjection = activeItem.remark_type === "objection";
+  const isAppreciation = activeItem.remark_type === "appreciation";
+  const isDirective = activeItem.remark_type === "instruction";
 
   const handleFileUpload = async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
@@ -182,7 +191,7 @@ export function DirectiveThreadModal({
     e.preventDefault();
     const clean = followupText.trim();
     if (!clean || clean === "<p></p>") {
-      toast.error("Please enter your follow-up remarks or clarification.");
+      toast.error("Please enter your message or remarks.");
       return;
     }
 
@@ -204,17 +213,57 @@ export function DirectiveThreadModal({
     }));
 
     try {
-      await addFollowupMut({
-        target_type: item.target_type,
-        target_id: item.target_id,
-        remark_id: item.remark_id,
+      const res = await addFollowupMut({
+        target_type: activeItem.target_type,
+        target_id: activeItem.target_id,
+        remark_id: activeItem.remark_id,
+        remark_type: activeItem.remark_type,
         response: clean,
-        action_status: actionStatus,
+        action_status: isSeniorActor
+          ? seniorActionMode === "resolve"
+            ? "completed"
+            : seniorActionMode === "request_revision"
+            ? "need_help"
+            : "in_progress"
+          : actionStatus,
+        closed_loop_action: isSeniorActor ? seniorActionMode : undefined,
+        request_revision: isSeniorActor && seniorActionMode === "request_revision",
         attachments: attachmentIds.length > 0 ? attachmentIds : undefined,
         attachment_details: attachmentDetails.length > 0 ? attachmentDetails : undefined,
       }).unwrap();
 
-      toast.success("Follow-up response submitted successfully!");
+      toast.success(
+        isSeniorActor
+          ? seniorActionMode === "resolve"
+            ? (activeItem.remark_type === "objection" ? "Objection marked as Resolved & Closed!" : "Directive marked as Resolved & Closed!")
+            : seniorActionMode === "request_revision"
+            ? "Revision requested from Executive!"
+            : "Senior guidance submitted successfully!"
+          : "Follow-up response submitted successfully!"
+      );
+
+      // Instantly update active thread state
+      if (res?.remark) {
+        setActiveItem((prev) =>
+          prev
+            ? {
+                ...prev,
+                remark_type: res.remark.remark_type || prev.remark_type,
+                status: res.remark.status || prev.status,
+                followup_remarks: Array.isArray(res.remark.followup_remarks)
+                  ? res.remark.followup_remarks
+                  : prev.followup_remarks,
+                resolved_at: res.remark.resolved_at || prev.resolved_at,
+                resolved_by_name: res.remark.resolved_by_name || prev.resolved_by_name,
+                resolution_remarks:
+                  res.remark.resolution_remarks !== undefined
+                    ? res.remark.resolution_remarks
+                    : prev.resolution_remarks,
+              }
+            : null
+        );
+      }
+
       setFollowupText("");
       setStagedFiles([]);
       onSuccess?.();
@@ -225,17 +274,39 @@ export function DirectiveThreadModal({
 
   const handleResolve = async () => {
     try {
-      await updateStatusMut({
-        target_type: item.target_type,
-        target_id: item.target_id,
-        remark_id: item.remark_id,
+      const res = await updateStatusMut({
+        target_type: activeItem.target_type,
+        target_id: activeItem.target_id,
+        remark_id: activeItem.remark_id,
         status: "resolved",
         resolution_remarks: resolutionRemarks.trim() || undefined,
       }).unwrap();
 
-      toast.success("Directive / Objection marked as Resolved!");
+      toast.success("Directive / Objection marked as Resolved & Closed!");
       setShowResolveInput(false);
       setResolutionRemarks("");
+
+      if (res?.remark) {
+        setActiveItem((prev) =>
+          prev
+            ? {
+                ...prev,
+                remark_type: res.remark.remark_type || prev.remark_type,
+                status: "resolved",
+                followup_remarks: Array.isArray(res.remark.followup_remarks)
+                  ? res.remark.followup_remarks
+                  : prev.followup_remarks,
+                resolved_at: res.remark.resolved_at || new Date().toISOString(),
+                resolved_by_name: res.remark.resolved_by_name || sessionUser?.name || "Senior Authority",
+                resolution_remarks:
+                  res.remark.resolution_remarks !== undefined
+                    ? res.remark.resolution_remarks
+                    : resolutionRemarks.trim(),
+              }
+            : null
+        );
+      }
+
       onSuccess?.();
     } catch (err: any) {
       toast.error(err?.data?.message || err?.message || "Failed to resolve directive");
@@ -244,14 +315,33 @@ export function DirectiveThreadModal({
 
   const handleReopen = async () => {
     try {
-      await updateStatusMut({
-        target_type: item.target_type,
-        target_id: item.target_id,
-        remark_id: item.remark_id,
+      const res = await updateStatusMut({
+        target_type: activeItem.target_type,
+        target_id: activeItem.target_id,
+        remark_id: activeItem.remark_id,
         status: "pending_response",
+        resolution_remarks: "Reopened by Senior Authority for further action",
       }).unwrap();
 
-      toast.success("Directive reopened for further junior follow-up.");
+      toast.success("Directive reopened for further executive follow-up.");
+
+      if (res?.remark) {
+        setActiveItem((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: "pending_response",
+                followup_remarks: Array.isArray(res.remark.followup_remarks)
+                  ? res.remark.followup_remarks
+                  : prev.followup_remarks,
+                resolved_at: undefined,
+                resolved_by_name: undefined,
+                resolution_remarks: undefined,
+              }
+            : null
+        );
+      }
+
       onSuccess?.();
     } catch (err: any) {
       toast.error(err?.data?.message || err?.message || "Failed to reopen directive");
@@ -308,45 +398,45 @@ export function DirectiveThreadModal({
                   {/* Priority Badge */}
                   <span
                     className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${
-                      item.priority === "urgent"
+                      activeItem.priority === "urgent"
                         ? "bg-rose-500/15 text-rose-600 border-rose-500/30"
-                        : item.priority === "high"
+                        : activeItem.priority === "high"
                         ? "bg-amber-500/15 text-amber-600 border-amber-500/30"
-                        : item.priority === "low"
+                        : activeItem.priority === "low"
                         ? "bg-slate-500/15 text-slate-600 border-slate-500/30"
                         : "bg-blue-500/15 text-blue-600 border-blue-500/30"
                     }`}
                   >
-                    {item.priority}
+                    {activeItem.priority}
                   </span>
 
-                  {/* Status Badge */}
+                  {/* Closed Loop Status Badge */}
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${
-                      item.status === "resolved"
-                        ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30"
-                        : item.status === "responded"
-                        ? "bg-sky-500/15 text-sky-600 border-sky-500/30"
-                        : "bg-amber-500/15 text-amber-600 border-amber-500/30 animate-pulse"
+                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border shadow-2xs ${
+                      activeItem.status === "resolved"
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                        : activeItem.status === "responded"
+                        ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
+                        : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 animate-pulse"
                     }`}
                   >
-                    {item.status === "resolved"
-                      ? "✅ Resolved"
-                      : item.status === "responded"
-                      ? "💬 Responded"
-                      : "⏳ Pending"}
+                    {activeItem.status === "resolved"
+                      ? "✅ Closed & Resolved"
+                      : activeItem.status === "responded"
+                      ? "💬 Responded (Review Pending)"
+                      : "⏳ Action Required"}
                   </span>
                 </div>
                 <p className="text-[11px] sm:text-xs text-muted mt-0.5 truncate">
-                  Target: <strong className="text-foreground capitalize">{item.target_type}</strong> &bull;{" "}
-                  {item.title}
+                  Target: <strong className="text-foreground capitalize">{activeItem.target_type}</strong> &bull;{" "}
+                  {activeItem.title}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <Link
-                href={`/dashboard/plans/${item.plan_id}`}
+                href={`/dashboard/plans/${activeItem.plan_id}`}
                 className="inline-flex items-center gap-1 rounded-xl border border-border bg-surface-muted px-2.5 py-1.5 text-xs font-semibold text-muted hover:text-foreground active:scale-95 transition"
                 title="Open full Work Plan"
               >
@@ -364,9 +454,9 @@ export function DirectiveThreadModal({
           </div>
 
           {/* Modal Body */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
             {/* Metadata Card */}
-            <div className="rounded-xl border border-border bg-surface-muted/30 p-4 space-y-2 text-xs">
+            <div className="rounded-xl border border-border bg-surface-muted/30 p-3.5 sm:p-4 space-y-2 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 <div className="space-y-0.5">
                   <span className="text-[10px] text-muted uppercase font-bold tracking-wider">
@@ -374,7 +464,7 @@ export function DirectiveThreadModal({
                   </span>
                   <div className="font-semibold text-foreground flex items-center gap-1.5">
                     <User className="h-3.5 w-3.5 text-primary" />
-                    <span>{item.sales_user.name}</span>
+                    <span>{activeItem.sales_user.name}</span>
                   </div>
                 </div>
 
@@ -384,8 +474,8 @@ export function DirectiveThreadModal({
                   </span>
                   <div className="font-semibold text-foreground flex items-center gap-1.5">
                     <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                    <span>{item.senior_user.name}</span>
-                    <span className="text-[10px] text-muted font-normal">({item.senior_user.role})</span>
+                    <span>{activeItem.senior_user.name}</span>
+                    <span className="text-[10px] text-muted font-normal">({activeItem.senior_user.role})</span>
                   </div>
                 </div>
 
@@ -395,18 +485,18 @@ export function DirectiveThreadModal({
                   </span>
                   <div className="font-semibold text-foreground flex items-center gap-1.5">
                     <Calendar className="h-3.5 w-3.5 text-primary" />
-                    <span>{formatPlanDate(item.plan_date)}</span>
+                    <span>{formatPlanDate(activeItem.plan_date)}</span>
                   </div>
                 </div>
 
-                {item.expected_followup_date && (
+                {activeItem.expected_followup_date && (
                   <div className="space-y-0.5">
                     <span className="text-[10px] text-muted uppercase font-bold tracking-wider">
                       Expected Follow-up By
                     </span>
                     <div className="font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
                       <Clock className="h-3.5 w-3.5" />
-                      <span>{formatPlanDate(item.expected_followup_date)}</span>
+                      <span>{formatPlanDate(activeItem.expected_followup_date)}</span>
                     </div>
                   </div>
                 )}
@@ -416,7 +506,22 @@ export function DirectiveThreadModal({
                     Directive Created
                   </span>
                   <div className="font-medium text-muted">
-                    {formatDateTime(item.created_at)}
+                    {formatDateTime(activeItem.created_at)}
+                  </div>
+                </div>
+
+                <div className="space-y-0.5">
+                  <span className="text-[10px] text-muted uppercase font-bold tracking-wider">
+                    Closed Loop Cycle
+                  </span>
+                  <div className="font-semibold text-foreground">
+                    {activeItem.status === "resolved" ? (
+                      <span className="text-emerald-600 dark:text-emerald-400">Resolved & Closed</span>
+                    ) : activeItem.status === "responded" ? (
+                      <span className="text-sky-600 dark:text-sky-400">Under Senior Review</span>
+                    ) : (
+                      <span className="text-amber-600 dark:text-amber-400">Awaiting Action</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -442,45 +547,53 @@ export function DirectiveThreadModal({
                     <ShieldCheck className="h-4 w-4 text-primary" />
                   )}
                   <span>
-                    Directive from: <strong className="text-primary">{item.senior_user?.name || "Senior Authority"}</strong>
-                    {item.senior_user?.role && <span className="ml-1 text-[10px] font-normal text-muted">({item.senior_user.role})</span>}
+                    {isObjection ? "Initial Objection from:" : isAppreciation ? "Initial Appreciation from:" : "Initial Directive from:"} <strong className="text-primary">{activeItem.senior_user?.name || "Senior Authority"}</strong>
+                    {activeItem.senior_user?.role && <span className="ml-1 text-[10px] font-normal text-muted">({activeItem.senior_user.role})</span>}
                   </span>
                 </div>
-                <span className="text-[10px] text-muted">{formatDateTime(item.created_at)}</span>
+                <span className="text-[10px] text-muted">{formatDateTime(activeItem.created_at)}</span>
               </div>
 
               <div
                 className="rich-text-content prose prose-sm dark:prose-invert max-w-none text-xs leading-relaxed text-foreground"
-                dangerouslySetInnerHTML={{ __html: item.remark }}
+                dangerouslySetInnerHTML={{ __html: activeItem.remark }}
               />
             </div>
 
-            {/* Thread of Junior Follow-up Responses */}
+            {/* Thread of Responses & Senior Follow-ups */}
             <div className="space-y-3">
               <div className="flex items-center justify-between border-b border-border pb-2">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="h-4 w-4 text-primary" />
                   <h4 className="text-xs font-bold text-foreground">
-                    Follow-up &amp; Clarification History ({item.followup_remarks.length})
+                    Closed-Loop Interaction History ({activeItem.followup_remarks.length})
                   </h4>
                 </div>
-                {item.followup_remarks.length === 0 && (
+                {activeItem.followup_remarks.length === 0 && (
                   <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">
-                    Awaiting initial response from {item.sales_user.name}
+                    Awaiting initial response from {activeItem.sales_user.name}
                   </span>
                 )}
               </div>
 
-              {item.followup_remarks.length === 0 ? (
+              {activeItem.followup_remarks.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-border p-6 text-center text-xs text-muted">
-                  No follow-up remarks submitted yet.
+                  No responses or revision notes recorded yet.
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {item.followup_remarks.map((f, idx) => {
+                  {activeItem.followup_remarks.map((f, idx) => {
+                    const isSeniorSpeaker =
+                      f.role &&
+                      ["Senior Authority", "Manager", "Admin", "Super Admin", "senior_authority", "manager", "admin", "super_admin"].includes(
+                        String(f.role).trim()
+                      );
                     const isActionCompleted = f.action_status === "completed";
                     const isClarification = f.action_status === "clarification_provided";
                     const isHelp = f.action_status === "need_help";
+
+                    const isClosedAudit = String(f.response || "").includes("[Directive Resolved & Closed]");
+                    const isReopenAudit = String(f.response || "").includes("[Directive Reopened / Revision Requested]");
 
                     // Normalize attachments
                     const followupAttachments: FollowupAttachmentItem[] = Array.isArray(f.attachment_details) && f.attachment_details.length > 0
@@ -503,16 +616,45 @@ export function DirectiveThreadModal({
                     return (
                       <div
                         key={f._id || idx}
-                        className="rounded-xl border border-border bg-card p-4 space-y-3 text-xs shadow-xs"
+                        className={`rounded-xl border p-4 space-y-3 text-xs shadow-xs transition ${
+                          isClosedAudit
+                            ? "border-emerald-500/40 bg-emerald-500/5"
+                            : isReopenAudit
+                            ? "border-amber-500/40 bg-amber-500/5"
+                            : isSeniorSpeaker
+                            ? "border-primary/30 bg-primary/5"
+                            : "border-border bg-card"
+                        }`}
                       >
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-foreground">{f.user_name || "Executive"}</span>
-                            <span className="text-[10px] text-muted">
-                              ({f.role && f.role !== "Senior Authority" ? f.role : "Executive"})
-                            </span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {isSeniorSpeaker ? (
+                              <div className="inline-flex items-center gap-1 rounded-md bg-primary/15 border border-primary/30 px-2 py-0.5 text-[10px] font-bold text-primary">
+                                <ShieldCheck className="h-3 w-3" />
+                                <span>{f.user_name || "Senior Authority"}</span>
+                                <span className="opacity-75 font-normal">({f.role || "Manager"})</span>
+                              </div>
+                            ) : (
+                              <div className="inline-flex items-center gap-1 rounded-md bg-secondary border border-border px-2 py-0.5 text-[10px] font-bold text-foreground">
+                                <User className="h-3 w-3 text-primary" />
+                                <span>{f.user_name || activeItem.sales_user.name}</span>
+                                <span className="text-muted font-normal">(Executive)</span>
+                              </div>
+                            )}
 
-                            {f.action_status && (
+                            {isClosedAudit && (
+                              <span className="rounded-md bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[9px] font-bold uppercase text-emerald-600 dark:text-emerald-400">
+                                Resolution Closure
+                              </span>
+                            )}
+
+                            {isReopenAudit && (
+                              <span className="rounded-md bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-600 dark:text-amber-400">
+                                Revision Requested
+                              </span>
+                            )}
+
+                            {!isSeniorSpeaker && f.action_status && (
                               <span
                                 className={`rounded-md px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider border ${
                                   isActionCompleted
@@ -528,6 +670,7 @@ export function DirectiveThreadModal({
                               </span>
                             )}
                           </div>
+
                           <span className="text-[10px] text-muted font-normal">
                             {formatDateTime(f.created_at)}
                           </span>
@@ -627,102 +770,163 @@ export function DirectiveThreadModal({
             </div>
 
             {/* Resolution Card if Resolved */}
-            {item.status === "resolved" && (
+            {activeItem.status === "resolved" && (
               <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 space-y-2 text-xs">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 font-bold text-emerald-700 dark:text-emerald-300">
                     <CheckCircle2 className="h-4 w-4" />
-                    <span>Directive / Objection Marked as Resolved</span>
+                    <span>Directive / Objection Marked as Resolved &amp; Closed</span>
                   </div>
-                  {item.resolved_at && (
-                    <span className="text-[10px] text-muted">{formatDateTime(item.resolved_at)}</span>
+                  {activeItem.resolved_at && (
+                    <span className="text-[10px] text-muted">{formatDateTime(activeItem.resolved_at)}</span>
                   )}
                 </div>
-                {item.resolved_by_name && (
+                {activeItem.resolved_by_name && (
                   <div className="text-[11px] text-muted">
-                    Resolved by: <strong className="text-foreground">{item.resolved_by_name}</strong>
+                    Resolved by: <strong className="text-foreground">{activeItem.resolved_by_name}</strong>
                   </div>
                 )}
-                {item.resolution_remarks && (
+                {activeItem.resolution_remarks && (
                   <p className="text-xs text-foreground italic border-t border-emerald-500/20 pt-1.5">
-                    &ldquo;{item.resolution_remarks}&rdquo;
+                    &ldquo;{activeItem.resolution_remarks}&rdquo;
                   </p>
                 )}
               </div>
             )}
 
-            {/* Junior Response Input Form */}
-            {item.status !== "resolved" && (
+            {/* Reply / Closed-Loop Follow-up Form */}
+            {activeItem.status !== "resolved" && (
               <form onSubmit={handleSendFollowup} className="rounded-xl border border-border bg-surface-muted/40 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                    <Send className="h-3.5 w-3.5 text-primary" />
-                    <span>
-                      {isObjection
-                        ? "Submit Clarification / Corrective Action"
-                        : isAppreciation
-                        ? "Acknowledge & Reply"
-                        : "Submit Progress & Follow-up Response"}
-                    </span>
+                    {isSeniorActor ? (
+                      <>
+                        <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                        <span>Senior Action &amp; Closed-Loop Review</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-3.5 w-3.5 text-primary" />
+                        <span>
+                          {isObjection
+                            ? "Submit Clarification / Corrective Action"
+                            : isAppreciation
+                            ? "Acknowledge & Reply"
+                            : "Submit Progress & Follow-up Response"}
+                        </span>
+                      </>
+                    )}
                   </label>
                   <span className="text-[10px] text-muted">Rich Text &amp; Attachments Supported</span>
                 </div>
 
-                {/* Action Status Picker */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-medium text-muted">Action Status:</span>
-                  <button
-                    type="button"
-                    onClick={() => setActionStatus("completed")}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-bold border transition cursor-pointer ${
-                      actionStatus === "completed"
-                        ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
-                        : "bg-surface-muted border-border text-muted hover:text-foreground"
-                    }`}
-                  >
-                    Completed / Done
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActionStatus("clarification_provided")}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-bold border transition cursor-pointer ${
-                      actionStatus === "clarification_provided"
-                        ? "bg-sky-500/15 border-sky-500/40 text-sky-600 dark:text-sky-400"
-                        : "bg-surface-muted border-border text-muted hover:text-foreground"
-                    }`}
-                  >
-                    Clarification Provided
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActionStatus("in_progress")}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-bold border transition cursor-pointer ${
-                      actionStatus === "in_progress"
-                        ? "bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400"
-                        : "bg-surface-muted border-border text-muted hover:text-foreground"
-                    }`}
-                  >
-                    In Progress
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActionStatus("need_help")}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-bold border transition cursor-pointer ${
-                      actionStatus === "need_help"
-                        ? "bg-rose-500/15 border-rose-500/40 text-rose-600 dark:text-rose-400"
-                        : "bg-surface-muted border-border text-muted hover:text-foreground"
-                    }`}
-                  >
-                    Need Guidance
-                  </button>
-                </div>
+                {/* Senior vs Executive Mode Controls */}
+                {isSeniorActor ? (
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-semibold text-muted">Select Senior Closed-Loop Action:</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSeniorActionMode("guidance")}
+                        className={`rounded-lg px-2.5 py-1 text-xs font-bold border transition cursor-pointer flex items-center gap-1 ${
+                          seniorActionMode === "guidance"
+                            ? "bg-primary/15 border-primary/40 text-primary"
+                            : "bg-surface-muted border-border text-muted hover:text-foreground"
+                        }`}
+                      >
+                        <MessageSquare className="h-3 w-3" />
+                        <span>Add Guidance / Instruction</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSeniorActionMode("request_revision")}
+                        className={`rounded-lg px-2.5 py-1 text-xs font-bold border transition cursor-pointer flex items-center gap-1 ${
+                          seniorActionMode === "request_revision"
+                            ? "bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400"
+                            : "bg-surface-muted border-border text-muted hover:text-foreground"
+                        }`}
+                      >
+                        <AlertTriangle className="h-3 w-3" />
+                        <span>Request Revision / Action Required</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSeniorActionMode("resolve")}
+                        className={`rounded-lg px-2.5 py-1 text-xs font-bold border transition cursor-pointer flex items-center gap-1 ${
+                          seniorActionMode === "resolve"
+                            ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                            : "bg-surface-muted border-border text-muted hover:text-foreground"
+                        }`}
+                      >
+                        <CheckCircle2 className="h-3 w-3" />
+                        <span>Approve &amp; Resolve (Close Loop)</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-muted">Action Status:</span>
+                    <button
+                      type="button"
+                      onClick={() => setActionStatus("completed")}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-bold border transition cursor-pointer ${
+                        actionStatus === "completed"
+                          ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                          : "bg-surface-muted border-border text-muted hover:text-foreground"
+                      }`}
+                    >
+                      Completed / Done
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActionStatus("clarification_provided")}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-bold border transition cursor-pointer ${
+                        actionStatus === "clarification_provided"
+                          ? "bg-sky-500/15 border-sky-500/40 text-sky-600 dark:text-sky-400"
+                          : "bg-surface-muted border-border text-muted hover:text-foreground"
+                      }`}
+                    >
+                      Clarification Provided
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActionStatus("in_progress")}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-bold border transition cursor-pointer ${
+                        actionStatus === "in_progress"
+                          ? "bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400"
+                          : "bg-surface-muted border-border text-muted hover:text-foreground"
+                      }`}
+                    >
+                      In Progress
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActionStatus("need_help")}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-bold border transition cursor-pointer ${
+                        actionStatus === "need_help"
+                          ? "bg-rose-500/15 border-rose-500/40 text-rose-600 dark:text-rose-400"
+                          : "bg-surface-muted border-border text-muted hover:text-foreground"
+                      }`}
+                    >
+                      Need Guidance
+                    </button>
+                  </div>
+                )}
 
                 <DayEndRichEditor
                   value={followupText}
                   onChange={setFollowupText}
                   minHeight="100px"
                   placeholder={
-                    isObjection
+                    isSeniorActor
+                      ? seniorActionMode === "request_revision"
+                        ? "Specify the corrective actions or additional clarifications required from the executive..."
+                        : seniorActionMode === "resolve"
+                        ? "Enter resolution remarks to confirm the directive is satisfied and close the loop..."
+                        : "Enter senior guidance or additional directives..."
+                      : isObjection
                       ? "Provide clarification, reason, or details on corrective action taken regarding this objection..."
                       : "Enter outcome, follow-up progress, or action updates..."
                   }
@@ -852,34 +1056,42 @@ export function DirectiveThreadModal({
                   <button
                     type="submit"
                     disabled={isSubmittingFollowup || stagedFiles.some((f) => f.uploading)}
-                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition cursor-pointer"
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition cursor-pointer shadow-xs"
                   >
                     {isSubmittingFollowup ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
                       <Send className="h-3.5 w-3.5" />
                     )}
-                    <span>Post Follow-up Remark</span>
+                    <span>
+                      {isSeniorActor
+                        ? seniorActionMode === "resolve"
+                          ? "Confirm & Resolve Directive"
+                          : seniorActionMode === "request_revision"
+                          ? "Send Revision Request"
+                          : "Post Guidance Remark"
+                        : "Post Follow-up Remark"}
+                    </span>
                   </button>
                 </div>
               </form>
             )}
 
-            {/* Senior Resolve Controls */}
+            {/* Senior Resolve Controls & Reopen Options */}
             {canResolve && (
               <div className="rounded-xl border border-border bg-card p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="h-4 w-4 text-primary" />
-                    <h4 className="text-xs font-bold text-foreground">Senior Resolution Controls</h4>
+                    <h4 className="text-xs font-bold text-foreground">Senior Authority Controls</h4>
                   </div>
 
-                  {item.status === "resolved" ? (
+                  {activeItem.status === "resolved" ? (
                     <button
                       type="button"
                       onClick={handleReopen}
                       disabled={isUpdatingStatus}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1 text-xs font-bold text-muted hover:text-foreground hover:bg-surface-muted transition cursor-pointer"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-bold text-muted hover:text-foreground hover:bg-surface-muted transition cursor-pointer"
                     >
                       <RefreshCw className="h-3 w-3" />
                       <span>Reopen Directive</span>
@@ -888,24 +1100,24 @@ export function DirectiveThreadModal({
                     <button
                       type="button"
                       onClick={() => setShowResolveInput(!showResolveInput)}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25 transition cursor-pointer"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 px-3 py-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25 transition cursor-pointer"
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      <span>Mark as Resolved</span>
+                      <span>Mark as Resolved &amp; Closed</span>
                     </button>
                   )}
                 </div>
 
-                {showResolveInput && item.status !== "resolved" && (
+                {showResolveInput && activeItem.status !== "resolved" && (
                   <div className="space-y-2 pt-2 border-t border-border animate-in fade-in duration-150">
                     <label className="text-xs font-medium text-foreground">
-                      Resolution Note (Optional):
+                      Resolution Note / Closure Remarks:
                     </label>
                     <input
                       type="text"
                       value={resolutionRemarks}
                       onChange={(e) => setResolutionRemarks(e.target.value)}
-                      placeholder="e.g. Clarification accepted, issue sorted during team call..."
+                      placeholder="e.g. Corrective action accepted, target achieved..."
                       className="w-full rounded-xl border border-border bg-surface-muted px-3 py-2 text-xs text-foreground outline-none focus:border-primary"
                     />
                     <div className="flex justify-end gap-2 pt-1">
@@ -939,7 +1151,7 @@ export function DirectiveThreadModal({
           {/* Footer */}
           <div className="flex items-center justify-between border-t border-border bg-surface-muted/30 px-6 py-3">
             <div className="text-[11px] text-muted">
-              Directive ID: <code className="text-foreground">{item.remark_id}</code>
+              Directive ID: <code className="text-foreground">{activeItem.remark_id}</code>
             </div>
             <button
               type="button"

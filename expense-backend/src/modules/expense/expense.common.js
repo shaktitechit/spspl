@@ -32,8 +32,8 @@ function resolveEffectiveSalesUser(expense) {
  * Prohibits self-approval, self-disbursement, and self-settlement.
  */
 function assertMakerChecker(targetSalesUser, actor, actionName = 'perform this action') {
-  if (isSuperAdminBypass(actor)) {
-    return; // Super admins can bypass for emergencies/testing
+  if (isSuperAdminBypass(actor) || isExpenseAdmin(actor)) {
+    return; // Admin / Super Admin can approve and sanction all expenses directly without restriction
   }
   const actorId = String(userId(actor) || '');
   const targetId = String(targetSalesUser?._id || targetSalesUser || '');

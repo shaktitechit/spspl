@@ -127,6 +127,7 @@ export function OrderDetailTabContent(props: OrderDetailTabContentProps) {
           orderId={orderId}
           detail={detail}
           refetchOrder={refetchOrder}
+          partyName={partyLabel}
         />
       );
 

@@ -39,6 +39,14 @@ async function listSettlements(query = {}, actor) {
     filter.sales_user = asObjectId(targetUser) || targetUser;
   }
 
+  if (query.settlement_mode && query.settlement_mode !== 'all') {
+    filter.settlement_mode = query.settlement_mode;
+  }
+
+  if (query.status && query.status !== 'all') {
+    filter.status = query.status;
+  }
+
   const fromDate = query.from_date || query.from || query.start_date;
   const toDate = query.to_date || query.to || query.end_date;
   if (fromDate || toDate) {
@@ -68,6 +76,7 @@ async function listSettlements(query = {}, actor) {
       .populate('settled_by', '_id name email')
       .populate('claims.expense')
       .populate('advances.advance')
+      .populate('payment_entries.payment_entry')
       .sort({ settlement_date: -1, createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -96,6 +105,7 @@ async function getSettlement(settlementId) {
     .populate('settled_by', '_id name email')
     .populate('claims.expense')
     .populate('advances.advance')
+    .populate('payment_entries.payment_entry')
     .lean();
 
   if (!settlement) throw new ApiError(404, 'Settlement voucher not found');
@@ -106,8 +116,8 @@ async function getSettlement(settlementId) {
  * Creates and executes a settlement voucher (Finance role only).
  */
 async function createSettlement(body, actor) {
-  if (!isExpenseFinance(actor) && !isSuperAdminBypass(actor)) {
-    throw new ApiError(403, 'Only Finance officers can process settlements and payment vouchers.');
+  if (!isExpenseFinance(actor) && !isExpenseAdmin(actor) && !isSuperAdminBypass(actor)) {
+    throw new ApiError(403, 'Finance or Admin authority required to process settlements and payment vouchers.');
   }
 
   const { WorkPlanExpenseSettlement, WorkPlanExpense, WorkPlanTourAdvance } = getModels();
@@ -118,7 +128,10 @@ async function createSettlement(body, actor) {
 
   assertMakerChecker(body.sales_user, actor, 'settle expenses for');
 
-  const rawClaims = Array.isArray(body.claims) ? body.claims : [];
+  let rawClaims = Array.isArray(body.claims) ? body.claims : [];
+  if (rawClaims.length === 0 && Array.isArray(body.expense_ids)) {
+    rawClaims = body.expense_ids.map((id) => ({ expense: id }));
+  }
   if (rawClaims.length === 0) {
     throw new ApiError(400, 'At least one approved claim must be selected for settlement.');
   }
@@ -158,12 +171,13 @@ async function createSettlement(body, actor) {
     });
   }
 
+  // 1. Process Tour Advance Deductions
   let advanceDeductionAmount = 0;
   const processedAdvances = [];
   const rawAdvances = Array.isArray(body.advances) ? body.advances : [];
 
   for (const item of rawAdvances) {
-    const advanceId = item.advance || item._id || item.id;
+    const advanceId = item.advance || item.advance_id || item._id || item.id;
     const advDoc = await WorkPlanTourAdvance.findOne({ _id: advanceId, deletedAt: null });
     if (!advDoc) {
       throw new ApiError(404, `Tour advance ${advanceId} not found.`);
@@ -194,13 +208,59 @@ async function createSettlement(body, actor) {
     }
   }
 
-  const directPaymentAmount = Math.max(0, totalClaimAmount - advanceDeductionAmount);
+  // 2. Process Direct Payment Entry Deductions (Treasury payments already given to user)
+  let paymentEntryDeductionAmount = 0;
+  const processedPaymentEntries = [];
+  const rawPaymentEntries = Array.isArray(body.payment_entries) ? body.payment_entries : [];
+
+  for (const item of rawPaymentEntries) {
+    const paymentId = item.payment_entry || item.payment_id || item._id || item.id;
+    const payDoc = await WorkPlanExpenseSettlement.findOne({ _id: paymentId, deletedAt: null });
+    if (!payDoc) {
+      throw new ApiError(404, `Payment entry ${paymentId} not found.`);
+    }
+
+    if (payDoc.settlement_mode !== 'payment_entry') {
+      throw new ApiError(400, `Voucher ${payDoc.settlement_number} is not a direct payment entry.`);
+    }
+
+    const totalPaid = Number(payDoc.direct_payment_amount || 0);
+    const settledSoFar = Number(payDoc.settled_amount || 0);
+    const availableBal = (payDoc.remaining_balance !== undefined && payDoc.remaining_balance !== null && Number(payDoc.remaining_balance) > 0)
+      ? Number(payDoc.remaining_balance)
+      : Math.max(0, totalPaid - settledSoFar);
+
+    const deductAmt = Number(item.deducted_amount || item.amount || 0);
+
+    if (deductAmt > availableBal) {
+      throw new ApiError(
+        400,
+        `Deduction amount (₹${deductAmt}) exceeds available balance (₹${availableBal}) on payment entry ${payDoc.settlement_number}.`
+      );
+    }
+
+    if (deductAmt > 0) {
+      paymentEntryDeductionAmount += deductAmt;
+      processedPaymentEntries.push({
+        payment_entry: payDoc._id,
+        deducted_amount: deductAmt,
+        payment_number: payDoc.settlement_number,
+        _docRef: payDoc,
+      });
+    }
+  }
+
+  const directPaymentAmount = Math.max(
+    0,
+    totalClaimAmount - advanceDeductionAmount - paymentEntryDeductionAmount
+  );
 
   let settlementMode = body.settlement_mode;
   if (!settlementMode) {
-    if (advanceDeductionAmount > 0 && directPaymentAmount > 0) {
+    const totalDeductions = advanceDeductionAmount + paymentEntryDeductionAmount;
+    if (totalDeductions > 0 && directPaymentAmount > 0) {
       settlementMode = 'split';
-    } else if (advanceDeductionAmount > 0) {
+    } else if (totalDeductions > 0) {
       settlementMode = 'advance_deduction';
     } else {
       settlementMode = 'direct_payment';
@@ -225,8 +285,14 @@ async function createSettlement(body, actor) {
       deducted_amount: a.deducted_amount,
       advance_number: a.advance_number,
     })),
+    payment_entries: processedPaymentEntries.map((p) => ({
+      payment_entry: p.payment_entry,
+      deducted_amount: p.deducted_amount,
+      payment_number: p.payment_number,
+    })),
     total_claim_amount: totalClaimAmount,
     advance_deduction_amount: advanceDeductionAmount,
+    payment_entry_deduction_amount: paymentEntryDeductionAmount,
     direct_payment_amount: directPaymentAmount,
     settlement_mode: settlementMode,
     payment_method: normalizePaymentMethod(body.payment_method),
@@ -262,6 +328,17 @@ async function createSettlement(body, actor) {
     await adv.save();
   }
 
+  // Update payment entry remaining balances
+  for (const p of processedPaymentEntries) {
+    const pay = p._docRef;
+    const totalPaid = Number(pay.direct_payment_amount || 0);
+    const newSettled = Number(pay.settled_amount || 0) + p.deducted_amount;
+    pay.settled_amount = newSettled;
+    pay.remaining_balance = Math.max(0, totalPaid - newSettled);
+    pay.updated_by = asObjectId(userId(actor));
+    await pay.save();
+  }
+
   const plainSettlement = await getSettlement(settlementDoc._id);
 
   notifyExpenseSettlementCompleted({ settlement: plainSettlement, actorUser: actor }).catch(() => {});
@@ -269,9 +346,99 @@ async function createSettlement(body, actor) {
   return plainSettlement;
 }
 
+/**
+ * Record a direct payment, disbursement, or ledger adjustment entry for an employee (Finance/Admin role).
+ */
+async function recordPaymentEntry(body, actor) {
+  if (!isExpenseFinance(actor) && !isExpenseAdmin(actor) && !isSuperAdminBypass(actor)) {
+    throw new ApiError(403, 'Finance or Admin authority required to record payment entries.');
+  }
+
+  const { WorkPlanExpenseSettlement, User } = getModels();
+
+  const targetUserId = body.sales_user || body.user_id || body.sales_user_id;
+  if (!targetUserId) {
+    throw new ApiError(400, 'sales_user is required to record payment entry.');
+  }
+
+  const amount = Number(body.amount);
+  if (!amount || amount <= 0) {
+    throw new ApiError(400, 'Payment amount must be greater than zero.');
+  }
+
+  const userDoc = await User.findById(targetUserId).lean();
+  if (!userDoc) {
+    throw new ApiError(404, 'Employee record not found.');
+  }
+
+  const paymentNumber = await generateSequenceCode('PAY', WorkPlanExpenseSettlement);
+
+  const settlementDoc = await WorkPlanExpenseSettlement.create({
+    settlement_number: paymentNumber,
+    sales_user: asObjectId(targetUserId),
+    settlement_date: body.payment_date ? startOfDay(body.payment_date) : new Date(),
+    claims: [],
+    advances: [],
+    payment_entries: [],
+    total_claim_amount: 0,
+    advance_deduction_amount: 0,
+    payment_entry_deduction_amount: 0,
+    direct_payment_amount: amount,
+    remaining_balance: amount,
+    settled_amount: 0,
+    settlement_mode: 'payment_entry',
+    payment_method: normalizePaymentMethod(body.payment_method),
+    transaction_reference: body.transaction_reference?.trim() || undefined,
+    bank_name: body.bank_name?.trim() || undefined,
+    settlement_notes: body.notes?.trim() || body.settlement_notes?.trim() || 'Direct Treasury Payment / Disbursement Entry',
+    attachments: Array.isArray(body.attachments) ? body.attachments.map(asObjectId).filter(Boolean) : [],
+    settled_by: asObjectId(userId(actor)),
+  });
+
+  return await getSettlement(settlementDoc._id);
+}
+
+/**
+ * Lists active unsettled direct payment entries for an employee that can be adjusted in settlements.
+ */
+async function getActivePaymentEntries(targetUserId) {
+  const { WorkPlanExpenseSettlement } = getModels();
+  if (!targetUserId || targetUserId === 'all') return [];
+
+  const uOid = asObjectId(targetUserId);
+  const matchIds = [targetUserId, uOid, String(targetUserId)].filter(Boolean);
+
+  const payments = await WorkPlanExpenseSettlement.find({
+    sales_user: { $in: matchIds },
+    settlement_mode: 'payment_entry',
+    deletedAt: null,
+  })
+    .sort({ settlement_date: 1, createdAt: 1 })
+    .lean();
+
+  return payments
+    .map((p) => {
+      const plain = toPlain(p);
+      const settled = Number(plain.settled_amount || 0);
+      const total = Number(plain.direct_payment_amount || 0);
+      const remaining = (plain.remaining_balance !== undefined && plain.remaining_balance !== null && Number(plain.remaining_balance) > 0)
+        ? Number(plain.remaining_balance)
+        : Math.max(0, total - settled);
+
+      return {
+        ...plain,
+        settled_amount: settled,
+        remaining_balance: remaining,
+      };
+    })
+    .filter((p) => p.remaining_balance > 0);
+}
+
 module.exports = {
   listSettlements,
   getSettlement,
   createSettlement,
+  recordPaymentEntry,
+  getActivePaymentEntries,
 };
 

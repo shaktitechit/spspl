@@ -576,7 +576,22 @@ async function notifyWorkPlanCreated({ planId, actorUser, creationMailData = {} 
       ? providedCreationCc.map((e) => String(e).trim()).filter(Boolean)
       : [];
 
-    const fromAddress = salesUser?.email ? `${executiveName} <${salesUser.email}>` : `${actorName} <${actorUser.email}>`;
+    const creatorEmail =
+      creationMailData.from_email ||
+      creationMailData.fromEmail ||
+      actorUser?.email ||
+      salesUser?.email;
+    const creatorName =
+      creationMailData.from_name ||
+      creationMailData.fromName ||
+      actorUser?.name ||
+      salesUser?.name ||
+      executiveName;
+    const fromAddress = creatorEmail
+      ? `${creatorName} <${creatorEmail}>`
+      : salesUser?.email
+      ? `${executiveName} <${salesUser.email}>`
+      : `${actorName} <${actorUser.email}>`;
     const visitsTableHtml = renderVisitsTable(visits);
     const tasksTableHtml = renderTasksTable(workItems);
     const baseUrl = (FRONTEND_URL || process.env.FRONTEND_URL || '').replace(/\/$/, '');
@@ -597,6 +612,11 @@ async function notifyWorkPlanCreated({ planId, actorUser, creationMailData = {} 
               <td style="padding: 6px 0; color: #64748b; width: 140px;"><strong>Executive:</strong></td>
               <td style="padding: 6px 0; color: #0f172a;">${escapeHtml(executiveName)} (${escapeHtml(salesUser?.email || '')})</td>
             </tr>
+            ${creatorEmail && salesUser?.email && creatorEmail.toLowerCase() !== salesUser.email.toLowerCase() ? `
+            <tr>
+              <td style="padding: 6px 0; color: #64748b; width: 140px;"><strong>Created By:</strong></td>
+              <td style="padding: 6px 0; color: #0f172a;">${escapeHtml(creatorName)} (${escapeHtml(creatorEmail)})</td>
+            </tr>` : ''}
             <tr>
               <td style="padding: 6px 0; color: #64748b;"><strong>Plan Type:</strong></td>
               <td style="padding: 6px 0; color: #0f172a;"><span style="background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-weight: 600;">${escapeHtml(plan.plan_type || 'Visits')}</span></td>
@@ -632,7 +652,11 @@ async function notifyWorkPlanCreated({ planId, actorUser, creationMailData = {} 
       </div>
     `;
 
-    const rawAtts = creationMailData.attachment_ids || creationMailData.attachmentIds || creationMailData.attachments;
+    const rawAtts =
+      creationMailData.attachment_ids ||
+      creationMailData.attachmentIds ||
+      creationMailData.attachments ||
+      plan.attachments;
     const emailAttachments = await resolveEmailAttachments(rawAtts);
 
     await emailHelper.sendEmail(
@@ -971,7 +995,24 @@ async function notifyDayEndCompleted({ planId, actorUser, dayEndData = null }) {
       ? providedDayEndCc.map((e) => String(e).trim()).filter(Boolean)
       : [];
 
-    const fromAddress = salesUser?.email ? `${executiveName} <${salesUser.email}>` : null;
+    const creatorEmail =
+      dayEndData?.from_email ||
+      dayEndData?.fromEmail ||
+      plan.day_end?.from_email ||
+      actorUser?.email ||
+      salesUser?.email;
+    const creatorName =
+      dayEndData?.from_name ||
+      dayEndData?.fromName ||
+      plan.day_end?.from_name ||
+      actorUser?.name ||
+      salesUser?.name ||
+      executiveName;
+    const fromAddress = creatorEmail
+      ? `${creatorName} <${creatorEmail}>`
+      : salesUser?.email
+      ? `${executiveName} <${salesUser.email}>`
+      : null;
     const visitsTableHtml = renderVisitsTable(visits);
     const tasksTableHtml = renderTasksTable(workItems);
     const baseUrl = (FRONTEND_URL || process.env.FRONTEND_URL || '').replace(/\/$/, '');
@@ -991,6 +1032,11 @@ async function notifyDayEndCompleted({ planId, actorUser, dayEndData = null }) {
               <td style="padding: 6px 0; color: #64748b; width: 140px;"><strong>Executive:</strong></td>
               <td style="padding: 6px 0; color: #0f172a;">${escapeHtml(executiveName)} (${escapeHtml(salesUser?.email || '')})</td>
             </tr>
+            ${creatorEmail && salesUser?.email && creatorEmail.toLowerCase() !== salesUser.email.toLowerCase() ? `
+            <tr>
+              <td style="padding: 6px 0; color: #64748b; width: 140px;"><strong>Submitted By:</strong></td>
+              <td style="padding: 6px 0; color: #0f172a;">${escapeHtml(creatorName)} (${escapeHtml(creatorEmail)})</td>
+            </tr>` : ''}
             <tr>
               <td style="padding: 6px 0; color: #64748b;"><strong>Plan Type:</strong></td>
               <td style="padding: 6px 0; color: #0f172a;"><span style="background: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 4px; font-weight: 600;">${escapeHtml(plan.plan_type || 'Visits')}</span></td>

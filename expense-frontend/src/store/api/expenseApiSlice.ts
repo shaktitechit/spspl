@@ -113,12 +113,15 @@ export const expenseApiSlice = baseApi.injectEndpoints({
         if (params?.limit) q.set("limit", String(params.limit));
         const u = params?.sales_user || params?.user_id;
         if (u && u !== "all") q.set("sales_user", u);
-        if (params?.status && params.status !== "all") q.set("status", params.status);
+        if (params?.status) q.set("status", params.status);
         if (params?.category && params.category !== "all") q.set("category", params.category);
         if (params?.settlement_status && params.settlement_status !== "all") q.set("settlement_status", params.settlement_status);
-        if (params?.from_date) q.set("from_date", params.from_date);
-        if (params?.to_date) q.set("to_date", params.to_date);
+        const fromDate = params?.from_date || (params as any)?.from;
+        if (fromDate) q.set("from_date", fromDate);
+        const toDate = params?.to_date || (params as any)?.to;
+        if (toDate) q.set("to_date", toDate);
         if (params?.q) q.set("q", params.q);
+        if ((params as any)?.scope) q.set("scope", (params as any).scope);
 
         return {
           url: `${API_BASE}/api/expenses/claims?${q.toString()}`,
@@ -172,6 +175,45 @@ export const expenseApiSlice = baseApi.injectEndpoints({
       invalidatesTags: ["WorkPlanExpense", "WorkPlannerTeam"],
     }),
 
+    addExpenseAuthorityRemark: builder.mutation<
+      ExpenseRecord,
+      {
+        planId?: string;
+        expenseId: string;
+        body: {
+          manager_remarks: string;
+          remark?: string;
+          remark_type?: string;
+          priority?: string;
+          expected_followup_date?: string;
+        };
+      }
+    >({
+      query: ({ expenseId, body }) => ({
+        url: `${API_BASE}/api/expenses/claims/${expenseId}/authority-remarks`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["WorkPlanExpense", "SeniorRemarks", "WorkPlannerTeam"],
+    }),
+
+    updateExpenseAuthorityRemarkStatus: builder.mutation<
+      ExpenseRecord,
+      {
+        expenseId: string;
+        remark_id?: string;
+        status: "resolved" | "pending_response" | "responded";
+        resolution_remarks?: string;
+      }
+    >({
+      query: ({ expenseId, ...body }) => ({
+        url: `${API_BASE}/api/expenses/claims/${expenseId}/remarks/status`,
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: ["WorkPlanExpense", "SeniorRemarks", "WorkPlannerTeam"],
+    }),
+
     // 4. Advances
     getTourAdvances: builder.query<
       { data: TourAdvanceRecord[]; total: number; page: number; limit: number; pages: number },
@@ -194,10 +236,13 @@ export const expenseApiSlice = baseApi.injectEndpoints({
         if (params?.limit) q.set("limit", String(params.limit));
         const u = params?.sales_user || params?.user_id;
         if (u && u !== "all") q.set("sales_user", u);
-        if (params?.status && params.status !== "all") q.set("status", params.status);
-        if (params?.from_date) q.set("from_date", params.from_date);
-        if (params?.to_date) q.set("to_date", params.to_date);
+        if (params?.status) q.set("status", params.status);
+        const fromDate = params?.from_date || (params as any)?.from;
+        if (fromDate) q.set("from_date", fromDate);
+        const toDate = params?.to_date || (params as any)?.to;
+        if (toDate) q.set("to_date", toDate);
         if (params?.q) q.set("q", params.q);
+        if ((params as any)?.scope) q.set("scope", (params as any).scope);
 
         return {
           url: `${API_BASE}/api/expenses/advances?${q.toString()}`,
@@ -263,7 +308,7 @@ export const expenseApiSlice = baseApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["TourAdvance", "WorkPlanExpense", "WorkPlannerTeam"],
+      invalidatesTags: ["TourAdvance", "WorkPlanExpense", "ExpenseSettlement", "WorkPlannerTeam"],
     }),
 
     refundTourAdvance: builder.mutation<
@@ -283,7 +328,7 @@ export const expenseApiSlice = baseApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["TourAdvance", "WorkPlanExpense", "WorkPlannerTeam"],
+      invalidatesTags: ["TourAdvance", "WorkPlanExpense", "ExpenseSettlement", "WorkPlannerTeam"],
     }),
 
     getActiveAdvances: builder.query<TourAdvanceRecord[], string | { userId?: string } | void>({
@@ -339,10 +384,16 @@ export const expenseApiSlice = baseApi.injectEndpoints({
         const q = new URLSearchParams();
         if (params?.page) q.set("page", String(params.page));
         if (params?.limit) q.set("limit", String(params.limit));
-        if (params?.sales_user && params.sales_user !== "all") q.set("sales_user", params.sales_user);
-        if (params?.from_date) q.set("from_date", params.from_date);
-        if (params?.to_date) q.set("to_date", params.to_date);
+        const u = params?.sales_user || (params as any)?.user_id;
+        if (u && u !== "all") q.set("sales_user", u);
+        if ((params as any)?.status) q.set("status", (params as any).status);
+        if ((params as any)?.settlement_mode && (params as any).settlement_mode !== "all") q.set("settlement_mode", (params as any).settlement_mode);
+        const fromDate = params?.from_date || (params as any)?.from;
+        if (fromDate) q.set("from_date", fromDate);
+        const toDate = params?.to_date || (params as any)?.to;
+        if (toDate) q.set("to_date", toDate);
         if (params?.q) q.set("q", params.q);
+        if ((params as any)?.scope) q.set("scope", (params as any).scope);
 
         return {
           url: `${API_BASE}/api/expenses/settlements?${q.toString()}`,
@@ -364,9 +415,12 @@ export const expenseApiSlice = baseApi.injectEndpoints({
       ExpenseSettlementRecord,
       {
         sales_user: string;
-        claims?: { expense: string; amount: number }[];
+        claims?: { expense: string; amount?: number }[];
         expense_ids?: string[];
         advances?: any[];
+        payment_entries?: any[];
+        advance_deduction_amount?: number;
+        payment_entry_deduction_amount?: number;
         settlement_mode?: "advance_deduction" | "direct_payment" | "split";
         payment_method?: string;
         transaction_reference?: string;
@@ -381,6 +435,39 @@ export const expenseApiSlice = baseApi.injectEndpoints({
     >({
       query: (body) => ({
         url: `${API_BASE}/api/expenses/settlements`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["ExpenseSettlement", "WorkPlanExpense", "TourAdvance", "WorkPlannerTeam"],
+    }),
+
+    getActivePaymentEntries: builder.query<ExpenseSettlementRecord[], string | { userId?: string } | void>({
+      query: (arg) => {
+        const userId = typeof arg === "object" && arg !== null ? arg.userId : arg;
+        const u = userId && userId !== "all" ? `/${userId}` : "";
+        return {
+          url: `${API_BASE}/api/expenses/settlements/active-payments${u}`,
+        };
+      },
+      transformResponse: (res: any) => res?.data || (Array.isArray(res) ? res : []),
+      providesTags: ["ExpenseSettlement"],
+    }),
+
+    recordPaymentEntry: builder.mutation<
+      ExpenseSettlementRecord,
+      {
+        sales_user: string;
+        amount: number;
+        payment_method?: string;
+        transaction_reference?: string;
+        bank_name?: string;
+        notes?: string;
+        payment_date?: string;
+        attachments?: string[];
+      }
+    >({
+      query: (body) => ({
+        url: `${API_BASE}/api/expenses/payments/entry`,
         method: "POST",
         body,
       }),
@@ -411,6 +498,8 @@ export const {
   useApproveExpenseMutation,
   useBulkApproveExpensesMutation,
   useRejectExpenseMutation,
+  useAddExpenseAuthorityRemarkMutation,
+  useUpdateExpenseAuthorityRemarkStatusMutation,
   useGetTourAdvancesQuery,
   useLazyGetTourAdvancesQuery,
   useRequestTourAdvanceMutation,
@@ -426,6 +515,8 @@ export const {
   useLazyGetExpenseSettlementsQuery,
   useGetExpenseSettlementByIdQuery,
   useCreateExpenseSettlementMutation,
+  useRecordPaymentEntryMutation,
+  useGetActivePaymentEntriesQuery,
   useUploadExpenseFileMutation,
 } = expenseApiSlice;
 

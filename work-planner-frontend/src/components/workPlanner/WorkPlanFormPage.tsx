@@ -2364,6 +2364,8 @@ export function WorkPlanFormPage({ planId, copyId, initialDate }: WorkPlanFormPa
         await submitPlanMut({
           id: targetPlanId!,
           body: {
+            from_email: emailPayload.fromEmail,
+            from_name: emailPayload.fromName,
             to_email: emailPayload.toEmail,
             cc_emails: emailPayload.ccEmails,
             subject: emailPayload.subject,

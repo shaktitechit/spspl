@@ -30,6 +30,7 @@ async function createAndQueueMessage(messageData) {
     templateParams: messageData.templateParams,
     attachments: messageData.attachments || (messageData.templateParams && messageData.templateParams.attachments) || undefined,
     cc: messageData.cc || (messageData.templateParams && messageData.templateParams.cc) || undefined,
+    metadata: messageData.metadata || undefined,
   });
 
   logger.info(`[Message Service] Created message record: ${msg._id} for ${msg.recipient}`);
@@ -83,15 +84,16 @@ async function processMessageJob(messageId) {
       const attachments = msg.attachments || (msg.templateParams && msg.templateParams.attachments) || [];
       const cc = msg.cc || (msg.templateParams && msg.templateParams.cc) || [];
       const from = msg.from || (msg.templateParams && msg.templateParams.from) || undefined;
+      const emailType = msg.metadata?.emailType || (msg.templateParams && msg.templateParams.emailType) || undefined;
       if (msg.templateName) {
         const templateData = {
           body: msg.body,
           messageBody: msg.body,
           ...(msg.templateParams || {}),
         };
-        result = await emailHelper.sendTemplateEmail(msg.recipient, msg.templateName, templateData, attachments, cc, from);
+        result = await emailHelper.sendTemplateEmail(msg.recipient, msg.templateName, templateData, attachments, cc, from, emailType);
       } else {
-        result = await emailHelper.sendEmail(msg.recipient, msg.subject || 'Notification', msg.body, msg.body, attachments, cc, from);
+        result = await emailHelper.sendEmail(msg.recipient, msg.subject || 'Notification', msg.body, msg.body, attachments, cc, from, emailType);
       }
     } else if (msg.channel === 'whatsapp') {
       if (msg.templateName) {
@@ -110,7 +112,8 @@ async function processMessageJob(messageId) {
 
     msg.status = 'sent';
     msg.sentAt = new Date();
-    msg.metadata = result;
+    // Merge send result into metadata, preserving any pre-existing metadata (e.g. emailType)
+    msg.metadata = { ...(msg.metadata || {}), ...(result && typeof result === 'object' ? result : { result }) };
     msg.error = undefined;
     await msg.save();
 

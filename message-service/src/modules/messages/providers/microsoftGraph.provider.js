@@ -139,12 +139,28 @@ class MicrosoftGraphProvider {
 
     const accessToken = await this.getAccessToken();
 
-    const graphAttachments = (attachments || []).map((att) => ({
-      '@odata.type': '#microsoft.graph.fileAttachment',
-      name: att.filename || att.name || 'attachment.pdf',
-      contentType: att.contentType || 'application/pdf',
-      contentBytes: extractCleanBase64(att.content),
-    }));
+    const graphAttachments = [];
+    for (const att of attachments || []) {
+      let contentBytes = extractCleanBase64(att.content);
+      if (!contentBytes && att.path && /^https?:\/\//i.test(att.path)) {
+        try {
+          const fileRes = await axios.get(att.path, { responseType: 'arraybuffer', timeout: 20000 });
+          contentBytes = Buffer.from(fileRes.data).toString('base64');
+        } catch (dlErr) {
+          logger.warn(`[MicrosoftGraphProvider] Could not download attachment ${att.filename || att.path}: ${dlErr.message}`);
+        }
+      }
+      if (!contentBytes) {
+        logger.warn(`[MicrosoftGraphProvider] Skipping empty attachment ${att.filename || att.name || 'unknown'}`);
+        continue;
+      }
+      graphAttachments.push({
+        '@odata.type': '#microsoft.graph.fileAttachment',
+        name: att.filename || att.name || 'attachment.pdf',
+        contentType: att.contentType || 'application/octet-stream',
+        contentBytes,
+      });
+    }
 
     const toKeys = new Set(toRecipients.map((e) => e.toLowerCase()));
     const ccRecipients = parseEmailAddresses(cc).filter((e) => !toKeys.has(e.toLowerCase()));
@@ -220,8 +236,12 @@ class MicrosoftGraphProvider {
     } catch (graphErr) {
       // If custom from address failed, retry with default mailbox
       if (senderEmailAddress !== this.senderEmail && this.senderEmail) {
+        const graphDetail = graphErr.response?.data?.error
+          ? `${graphErr.response.data.error.code}: ${graphErr.response.data.error.message}`
+          : graphErr.message;
         logger.warn(
-          `[MicrosoftGraphProvider] Failed to send email via Graph API using sender ${senderEmailAddress} (${graphErr.message}). Retrying with default Graph mailbox (${this.senderEmail})...`
+          `[MicrosoftGraphProvider] Failed to send email via Graph API using sender ${senderEmailAddress} (${graphDetail}). ` +
+          `The mailbox must exist and be licensed in the Graph tenant, and the app needs Mail.Send for it. Retrying with default Graph mailbox (${this.senderEmail})...`
         );
         const fallbackUrl = `https://graph.microsoft.com/v1.0/users/${this.senderEmail}/sendMail`;
         const fallbackMailBody = {

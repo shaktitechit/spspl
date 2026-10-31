@@ -284,10 +284,20 @@ function registerModels() {
         day_end: {
           completed_at: Date,
           from_email: { type: String, trim: true },
+          from_name: { type: String, trim: true },
           to_email: { type: String, trim: true },
           cc_emails: [{ type: String, trim: true }],
           subject: { type: String, trim: true },
           body_html: { type: String },
+          attachments: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Attachment' }],
+        },
+        attachments: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Attachment' }],
+        creation_mail: {
+          from_email: { type: String, trim: true },
+          from_name: { type: String, trim: true },
+          to_email: { type: String, trim: true },
+          cc_emails: [{ type: String, trim: true }],
+          subject: { type: String, trim: true },
           attachments: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Attachment' }],
         },
         deletedAt: { type: Date, default: null, index: true },
@@ -1028,6 +1038,21 @@ function registerModels() {
             advance_number: String,
           },
         ],
+        payment_entries: [
+          {
+            payment_entry: {
+              type: mongoose.Schema.Types.ObjectId,
+              ref: 'WorkPlanExpenseSettlement',
+              required: true,
+            },
+            deducted_amount: {
+              type: Number,
+              required: true,
+              min: 0,
+            },
+            payment_number: String,
+          },
+        ],
         total_claim_amount: {
           type: Number,
           required: true,
@@ -1038,14 +1063,29 @@ function registerModels() {
           default: 0,
           min: 0,
         },
+        payment_entry_deduction_amount: {
+          type: Number,
+          default: 0,
+          min: 0,
+        },
         direct_payment_amount: {
+          type: Number,
+          default: 0,
+          min: 0,
+        },
+        remaining_balance: {
+          type: Number,
+          default: 0,
+          min: 0,
+        },
+        settled_amount: {
           type: Number,
           default: 0,
           min: 0,
         },
         settlement_mode: {
           type: String,
-          enum: ['advance_deduction', 'direct_payment', 'split'],
+          enum: ['advance_deduction', 'direct_payment', 'split', 'payment_entry'],
           required: true,
           default: 'direct_payment',
         },

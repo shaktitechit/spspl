@@ -107,18 +107,18 @@ export type ExpenseRole = (typeof EXPENSE_ROLES)[number];
 
 export function isSuperAdmin(user: AuthUser | any | null | undefined): boolean {
   if (!user) return false;
-  if (user.is_super_admin || user.isSuperAdmin || user.is_admin) return true;
+  if (user.is_super_admin || user.isSuperAdmin) return true;
   const role = String(user.role || "").toLowerCase().trim();
-  if (["super_admin", "superadmin", "admin"].includes(role)) return true;
+  if (["super_admin", "superadmin"].includes(role)) return true;
   if (Array.isArray(user.role_codes) && user.role_codes.some((r: any) => ["super_admin", "superadmin"].includes(String(r).toLowerCase()))) return true;
   if (Array.isArray(user.roles) && user.roles.some((r: any) => ["super_admin", "superadmin"].includes(String(r.code || r.name || r).toLowerCase()))) return true;
   return false;
 }
 
-export function getExpenseAccessRoles(user: AuthUser | any | null | undefined): string[] {
-  if (!user) return [];
+export function getExpensePortalEntry(user: AuthUser | any | null | undefined): any | null {
+  if (!user) return null;
   const uAny = user as any;
-  if (uAny.is_active === false || uAny.active === false) return [];
+  if (uAny.is_active === false || uAny.active === false) return null;
 
   const portals = Array.isArray(user.portals)
     ? user.portals
@@ -126,21 +126,33 @@ export function getExpenseAccessRoles(user: AuthUser | any | null | undefined): 
     ? uAny.portal_access
     : [];
 
-  const expPortal = portals.find((p: any) => {
-    if (!p) return false;
-    const code =
-      p.portal_code ||
-      p.code ||
-      (typeof p.portal === "object" ? p.portal?.code || p.portal?.portal_code : p.portal);
-    const norm = String(code || "").toLowerCase().trim();
-    return norm === "expense" || norm === "expenses" || norm === "expense_portal" || norm === "expense_management";
-  });
+  return (
+    portals.find((p: any) => {
+      if (!p) return false;
+      const code = String(
+        p.portal_code ||
+          p.code ||
+          (typeof p.portal === "object" ? p.portal?.code || p.portal?.portal_code : p.portal) ||
+          ""
+      ).toLowerCase().trim();
+      return (
+        code === "expense" ||
+        code === "expenses" ||
+        code === "expense_portal" ||
+        code === "expense_management"
+      );
+    }) || null
+  );
+}
 
+export function getExpenseAccessRoles(user: AuthUser | any | null | undefined): string[] {
+  if (!user) return [];
+  const uAny = user as any;
+  if (uAny.is_active === false || uAny.active === false) return [];
+
+  const expPortal = getExpensePortalEntry(user);
   if (!expPortal) {
-    if (isSuperAdmin(user)) return ["admin", "finance"];
-    const dept = String(uAny.department || "").toLowerCase().trim();
-    if (dept === "finance" || dept === "accounts" || dept === "account") return ["finance"];
-    if (dept === "super_admin" || (Array.isArray(uAny.role_codes) && uAny.role_codes.includes("admin"))) return ["admin"];
+    // Only explicitly assigned users can have roles. No department or global role fallbacks.
     return [];
   }
 
@@ -154,10 +166,10 @@ export function getExpenseAccessRoles(user: AuthUser | any | null | undefined): 
 
   const valid = roles
     .map((r) => String(r || "").toLowerCase().trim())
-    .filter((r) => EXPENSE_ROLES.includes(r as ExpenseRole));
+    .filter((r) => EXPENSE_ROLES.includes(r as ExpenseRole) || r === "super_admin" || r === "superadmin");
 
-  if (isSuperAdmin(user)) {
-    return Array.from(new Set([...valid, "admin", "finance"]));
+  if (isSuperAdmin(user) || valid.includes("super_admin") || valid.includes("superadmin")) {
+    return Array.from(new Set([...valid.filter((r) => EXPENSE_ROLES.includes(r as ExpenseRole)), "admin", "finance"]));
   }
 
   return valid;
@@ -165,20 +177,21 @@ export function getExpenseAccessRoles(user: AuthUser | any | null | undefined): 
 
 export function isExpenseAdmin(user: AuthUser | any | null | undefined): boolean {
   if (!user) return false;
-  if (isSuperAdmin(user)) return true;
+  if (!hasExpensePortalAccess(user)) return false;
   return getExpenseAccessRoles(user).includes("admin");
 }
 
 export function isExpenseFinance(user: AuthUser | any | null | undefined): boolean {
   if (!user) return false;
-  if (isSuperAdmin(user)) return true;
+  if (!hasExpensePortalAccess(user)) return false;
   return getExpenseAccessRoles(user).includes("finance");
 }
 
 export function hasExpensePortalAccess(user: AuthUser | any | null | undefined): boolean {
   if (!user) return false;
-  if (isSuperAdmin(user)) return true;
-  return isExpenseAdmin(user) || isExpenseFinance(user);
+  const expPortal = getExpensePortalEntry(user);
+  if (!expPortal) return false;
+  return getExpenseAccessRoles(user).length > 0;
 }
 
 export function hasWorkPlannerPortalAccess(user: AuthUser | any | null | undefined): boolean {

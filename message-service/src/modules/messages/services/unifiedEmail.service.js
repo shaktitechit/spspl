@@ -38,6 +38,7 @@ class UnifiedEmailService {
       text,
       attachments = [],
       provider: requestedProvider,
+      emailType,
     } = params;
 
     const toRecipients = to || recipient;
@@ -49,21 +50,34 @@ class UnifiedEmailService {
       );
     }
 
+    const isReminderOrDigest = Boolean(
+      (subject && /\b(reminder|digest)\b/i.test(subject)) ||
+      (emailType && (emailType.includes('reminder') || emailType.includes('digest')))
+    );
+
+    const effectiveProvider = isReminderOrDigest && resolver.microsoftProvider.isConfigured()
+      ? 'microsoft'
+      : requestedProvider;
+
     const startTime = Date.now();
     const recipientCount = Array.isArray(toRecipients)
       ? toRecipients.length
       : String(toRecipients).split(/[,;]/).filter(Boolean).length;
 
     // 1. Resolve appropriate provider and account credentials
-    const { providerName, provider, account } = await resolver.resolve(from, requestedProvider);
+    // For auto reminders and digests, force using the default Microsoft Graph provider
+    const { providerName, provider, account } = await resolver.resolve(
+      isReminderOrDigest ? null : from,
+      effectiveProvider
+    );
 
     logger.info(
-      `[UnifiedEmailService] Routing email "${subject || 'No Subject'}" to provider=${providerName} for ${recipientCount} recipient(s)`
+      `[UnifiedEmailService] Routing email "${subject || 'No Subject'}" to provider=${providerName} for ${recipientCount} recipient(s)${isReminderOrDigest ? ' (auto reminder/digest forced to default Graph sender)' : ''}`
     );
 
     try {
       const result = await provider.send({
-        from,
+        from: isReminderOrDigest ? null : from,
         to: toRecipients,
         cc,
         bcc,

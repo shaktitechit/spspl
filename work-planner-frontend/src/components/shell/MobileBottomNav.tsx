@@ -8,6 +8,7 @@ import {
   CheckSquare,
   CalendarDays,
   DollarSign,
+  BookOpen,
   Sparkles,
   Menu,
 } from "lucide-react";
@@ -48,9 +49,9 @@ export function MobileBottomNav({
       active: isTasksVisitsActive,
     },
     {
-      name: "Expenses",
+      name: "Passbook",
       href: "/dashboard/expenses",
-      icon: DollarSign,
+      icon: BookOpen,
       active: isExpensesActive,
     },
     {

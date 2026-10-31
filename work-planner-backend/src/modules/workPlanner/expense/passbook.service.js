@@ -26,7 +26,7 @@ function buildMatchUserIds(userIds = []) {
  * Computes executive balances and net financial positions for visible users.
  */
 async function getExecutiveBalances(query = {}, actor) {
-  const { User, WorkPlanExpense, WorkPlanTourAdvance } = getModels();
+  const { User, WorkPlanExpense, WorkPlanTourAdvance, WorkPlanExpenseSettlement } = getModels();
 
   let targetUserIds = [];
   const visible = await getVisibleSalesUserIds(actor);
@@ -187,7 +187,36 @@ async function getExecutiveBalances(query = {}, actor) {
   const expenseMap = new Map();
   expensesAgg.forEach((e) => expenseMap.set(String(e._id), e));
 
-  // 4. Assemble Rows
+  // 4. Aggregate Active Payment Entries
+  const settlementsAgg = await WorkPlanExpenseSettlement.aggregate([
+    {
+      $match: {
+        sales_user: { $in: matchUserIds },
+        deletedAt: null,
+        settlement_mode: 'payment_entry',
+      },
+    },
+    {
+      $group: {
+        _id: '$sales_user',
+        total_payment_entries: {
+          $sum: {
+            $cond: [
+              { $ifNull: ['$remaining_balance', false] },
+              '$remaining_balance',
+              { $subtract: ['$direct_payment_amount', { $ifNull: ['$settled_amount', 0] }] },
+            ],
+          },
+        },
+        payment_entries_count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const settlementMap = new Map();
+  settlementsAgg.forEach((s) => settlementMap.set(String(s._id), s));
+
+  // 5. Assemble Rows
   const results = [];
   for (const u of userDocs) {
     const sId = String(u._id);
@@ -202,10 +231,15 @@ async function getExecutiveBalances(query = {}, actor) {
       total_settled_amount: 0,
       total_settled_count: 0,
     };
+    const set = settlementMap.get(sId) || {
+      total_payment_entries: 0,
+      payment_entries_count: 0,
+    };
 
     const activeAdvanceBalance = Math.round((adv.total_remaining_balance || 0) * 100) / 100;
     const unsettledApprovedAmount = Math.round((exp.unsettled_approved_amount || 0) * 100) / 100;
-    const netPosition = Math.round((unsettledApprovedAmount - activeAdvanceBalance) * 100) / 100;
+    const totalPaymentEntries = Math.round((set.total_payment_entries || 0) * 100) / 100;
+    const netPosition = Math.round((unsettledApprovedAmount - activeAdvanceBalance - totalPaymentEntries) * 100) / 100;
 
     results.push({
       sales_user: toPlain(u),
@@ -215,6 +249,8 @@ async function getExecutiveBalances(query = {}, actor) {
       unsettled_approved_claims_count: exp.unsettled_approved_count || 0,
       total_settled_claims_amount: Math.round((exp.total_settled_amount || 0) * 100) / 100,
       total_settled_claims_count: exp.total_settled_count || 0,
+      total_payment_entries: totalPaymentEntries,
+      payment_entries_count: set.payment_entries_count || 0,
       net_position: netPosition,
       position_status:
         netPosition > 0
@@ -238,8 +274,8 @@ async function getExecutiveBalances(query = {}, actor) {
 
   // Sort by highest activity / balance
   filtered.sort((a, b) => {
-    const actA = a.active_advance_balance + a.unsettled_approved_claims_amount + Math.abs(a.net_position);
-    const actB = b.active_advance_balance + b.unsettled_approved_claims_amount + Math.abs(b.net_position);
+    const actA = a.active_advance_balance + a.unsettled_approved_claims_amount + (a.total_payment_entries || 0) + Math.abs(a.net_position);
+    const actB = b.active_advance_balance + b.unsettled_approved_claims_amount + (b.total_payment_entries || 0) + Math.abs(b.net_position);
     return actB - actA;
   });
 
@@ -334,7 +370,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
       }
     }
 
-    if (Array.isArray(adv.refunds)) {
+    if (Array.isArray(adv.refunds) && adv.refunds.length > 0) {
       for (const ref of adv.refunds) {
         const refAmount = ref.amount || 0;
         if (refAmount > 0) {
@@ -349,11 +385,29 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
             impact_claim_receivable: 0,
             payment_method: ref.payment_method || 'bank_transfer',
             transaction_reference: ref.transaction_reference,
-            actor_name: ref.accepted_by ? 'Manager / Finance' : 'Company',
+            actor_name: ref.accepted_by ? (ref.accepted_by?.name || 'Manager / Finance') : 'Company',
             details: ref.notes || 'Unspent advance refunded back to company',
+            attachments: ref.attachments || [],
+            attachment_details: ref.attachment_details || [],
           });
         }
       }
+    } else if (Number(adv.refunded_amount || 0) > 0) {
+      const refAmount = Number(adv.refunded_amount);
+      rawLedger.push({
+        id: `ADV-REF-${adv._id}`,
+        entry_type: 'advance_refund',
+        date: adv.refunded_at || adv.updatedAt || adv.createdAt,
+        reference: adv.advance_number || `ADV-${String(adv._id).slice(-6).toUpperCase()}`,
+        title: `Tour Advance Refund (${adv.advance_number || 'Advance'})`,
+        amount: refAmount,
+        impact_advance_balance: -refAmount,
+        impact_claim_receivable: 0,
+        payment_method: adv.refund_reference ? 'Bank / UPI' : 'Refund',
+        transaction_reference: adv.refund_reference,
+        actor_name: adv.refunded_by?.name || 'Finance Authority',
+        details: adv.refund_notes || 'Unspent advance refunded back to company',
+      });
     }
   }
 
@@ -379,24 +433,52 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
     }
   }
 
-  // 3. Settlements
+  // 3. Settlements & Direct Payment Entries
   for (const set of settlements) {
     const setDate = set.settlement_date || set.settled_at || set.createdAt;
+
+    if (set.settlement_mode === 'payment_entry') {
+      const payAmount = set.direct_payment_amount || set.amount || 0;
+      rawLedger.push({
+        id: `PAY-ENTRY-${set._id}`,
+        settlement_id: String(set._id),
+        entry_type: 'payment_entry',
+        date: setDate,
+        reference: set.settlement_number || `PAY-${String(set._id).slice(-6).toUpperCase()}`,
+        title: set.settlement_notes || `Direct Treasury Payment Entry`,
+        amount: payAmount,
+        advance_deduction_amount: 0,
+        payment_entry_deduction_amount: 0,
+        direct_payment_amount: payAmount,
+        impact_advance_balance: 0,
+        impact_payment_entry: +payAmount,
+        impact_claim_receivable: 0,
+        payment_method: set.payment_method || 'Bank Transfer',
+        transaction_reference: set.transaction_reference,
+        actor_name: set.settled_by?.name || 'Finance Authority',
+        details: set.settlement_notes || `Direct Treasury payment of ₹${Number(payAmount).toLocaleString('en-IN')}`,
+      });
+      continue;
+    }
+
     rawLedger.push({
       id: `SETTLE-${set._id}`,
+      settlement_id: String(set._id),
       entry_type: 'settlement_voucher',
       date: setDate,
       reference: set.settlement_number || `SETTLE-${String(set._id).slice(-6).toUpperCase()}`,
       title: `Expense Settlement Voucher #${set.settlement_number || ''}`,
       amount: set.total_claim_amount || 0,
       advance_deduction_amount: set.advance_deduction_amount || 0,
+      payment_entry_deduction_amount: set.payment_entry_deduction_amount || 0,
       direct_payment_amount: set.direct_payment_amount || 0,
       impact_advance_balance: -(set.advance_deduction_amount || 0),
+      impact_payment_entry: -(set.payment_entry_deduction_amount || 0),
       impact_claim_receivable: -(set.total_claim_amount || 0),
       payment_method: set.payment_method,
       transaction_reference: set.transaction_reference,
       actor_name: set.settled_by?.name || 'Finance Authority',
-      details: set.settlement_notes || `Settled ${set.claims?.length || 0} claims (Deducted ₹${set.advance_deduction_amount || 0}, Paid ₹${set.direct_payment_amount || 0})`,
+      details: set.settlement_notes || `Settled ${set.claims?.length || 0} claims (Adv Ded: ₹${set.advance_deduction_amount || 0}, Pay Offset: ₹${set.payment_entry_deduction_amount || 0}, Paid: ₹${set.direct_payment_amount || 0})`,
     });
   }
 
@@ -408,9 +490,11 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
   const toDate = query.to_date || query.to ? endOfDay(query.to_date || query.to) : null;
 
   let runningAdvance = 0;
+  let runningPaymentEntry = 0;
   let runningReceivable = 0;
 
   let openingAdvance = 0;
+  let openingPaymentEntry = 0;
   let openingReceivable = 0;
 
   const entries = [];
@@ -420,24 +504,28 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
 
     if (fromDate && itemDate < fromDate) {
       openingAdvance += item.impact_advance_balance || 0;
+      openingPaymentEntry += item.impact_payment_entry || 0;
       openingReceivable += item.impact_claim_receivable || 0;
       runningAdvance += item.impact_advance_balance || 0;
+      runningPaymentEntry += item.impact_payment_entry || 0;
       runningReceivable += item.impact_claim_receivable || 0;
       continue;
     }
 
     runningAdvance += item.impact_advance_balance || 0;
+    runningPaymentEntry += item.impact_payment_entry || 0;
     runningReceivable += item.impact_claim_receivable || 0;
 
     if (toDate && itemDate > toDate) {
       continue;
     }
 
-    const runningNet = Math.round((runningReceivable - runningAdvance) * 100) / 100;
+    const runningNet = Math.round((runningReceivable - runningAdvance - runningPaymentEntry) * 100) / 100;
 
     entries.push({
       ...item,
       running_advance_balance: Math.round(runningAdvance * 100) / 100,
+      running_payment_entry: Math.round(runningPaymentEntry * 100) / 100,
       running_claim_receivable: Math.round(runningReceivable * 100) / 100,
       running_net_position: runningNet,
     });
@@ -446,11 +534,14 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
   return {
     sales_user: toPlain(userDoc) || { _id: targetId, name: 'Executive' },
     opening_advance_balance: Math.round(openingAdvance * 100) / 100,
+    opening_payment_entry: Math.round(openingPaymentEntry * 100) / 100,
     opening_claim_receivable: Math.round(openingReceivable * 100) / 100,
-    opening_net_position: Math.round((openingReceivable - openingAdvance) * 100) / 100,
+    opening_net_position: Math.round((openingReceivable - openingAdvance - openingPaymentEntry) * 100) / 100,
     current_advance_balance: Math.round(runningAdvance * 100) / 100,
+    current_payment_entry: Math.round(runningPaymentEntry * 100) / 100,
+    total_payment_entries: Math.round(runningPaymentEntry * 100) / 100,
     current_claim_receivable: Math.round(runningReceivable * 100) / 100,
-    current_net_position: Math.round((runningReceivable - runningAdvance) * 100) / 100,
+    current_net_position: Math.round((runningReceivable - runningAdvance - runningPaymentEntry) * 100) / 100,
     entries: entries.reverse(), // most recent first for UI
   };
 }

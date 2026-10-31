@@ -382,7 +382,7 @@ async function createMessage(flagId, body, user) {
     .lean();
 
   const parentOrder = await getModels().Order.findById(flag.order)
-    .populate('party', 'legal_name trade_name name')
+    .populate('party', 'legal_name trade_name name party_name')
     .populate('customer', 'name')
     .lean();
   void flagNotificationService.notifyChatMessage(flag, msg, parentOrder, user);
@@ -505,7 +505,7 @@ async function updateStatus(flagId, status, resolutionNote, user) {
 
   const updated = await get(flagId);
   const parentOrder = await getModels().Order.findById(flag.order)
-    .populate('party', 'legal_name trade_name name')
+    .populate('party', 'legal_name trade_name name party_name')
     .populate('customer', 'name')
     .lean();
   void flagNotificationService.notifyFlagStatusChange(flag, parentOrder, user, status, oldStatus, resolutionNote);

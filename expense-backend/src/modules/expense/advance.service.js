@@ -307,13 +307,29 @@ async function refundAdvance(advanceId, body, actor) {
 
   const newRefunded = Number(advance.refunded_amount || 0) + refundAmount;
   const newRemaining = Math.max(0, currentBalance - refundAmount);
+  const refundDate = body.refund_date ? new Date(body.refund_date) : new Date();
 
   advance.refunded_amount = newRefunded;
   advance.remaining_balance = newRemaining;
-  advance.refunded_at = new Date();
+  advance.refunded_at = refundDate;
   advance.refunded_by = asObjectId(userId(actor));
   advance.refund_notes = body.notes?.trim() || undefined;
   advance.refund_reference = body.transaction_reference?.trim() || undefined;
+
+  if (!Array.isArray(advance.refunds)) {
+    advance.refunds = [];
+  }
+  advance.refunds.push({
+    amount: refundAmount,
+    refund_date: refundDate,
+    payment_method: body.payment_method || 'Refund',
+    transaction_reference: body.transaction_reference?.trim() || undefined,
+    notes: body.notes?.trim() || undefined,
+    attachments: Array.isArray(body.attachments) ? body.attachments : [],
+    attachment_details: Array.isArray(body.attachment_details) ? body.attachment_details : [],
+    accepted_by: asObjectId(userId(actor)),
+    accepted_at: new Date(),
+  });
 
   if (newRemaining === 0) {
     advance.status = 'refunded';
@@ -330,16 +346,21 @@ async function refundAdvance(advanceId, body, actor) {
 }
 
 /**
- * Get active advances with remaining balance for a specific user.
+ * Get active advances with remaining balance for a specific user (or all users if omitted).
  */
 async function getActiveAdvances(targetUserId) {
   const { WorkPlanTourAdvance } = getModels();
-  const advances = await WorkPlanTourAdvance.find({
-    sales_user: asObjectId(targetUserId),
+  const query = {
     status: { $in: ['disbursed', 'recovered', 'refunded'] },
     remaining_balance: { $gt: 0 },
     deletedAt: null,
-  })
+  };
+  if (targetUserId && targetUserId !== 'all') {
+    query.sales_user = asObjectId(targetUserId);
+  }
+
+  const advances = await WorkPlanTourAdvance.find(query)
+    .populate('sales_user', '_id name email department phone')
     .sort({ request_date: 1 })
     .lean();
 

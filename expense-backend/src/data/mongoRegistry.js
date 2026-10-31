@@ -262,6 +262,65 @@ function registerModels() {
           default: null,
           index: true,
         },
+        authority_remarks: [
+          {
+            remark: { type: String, required: true, trim: true },
+            user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+            user_name: { type: String, trim: true },
+            role: { type: String, trim: true },
+            remark_type: {
+              type: String,
+              enum: ['instruction', 'appreciation', 'objection'],
+              default: 'instruction',
+            },
+            priority: {
+              type: String,
+              enum: ['low', 'medium', 'high', 'urgent'],
+              default: 'medium',
+            },
+            expected_followup_date: Date,
+            status: {
+              type: String,
+              enum: ['pending_response', 'responded', 'resolved'],
+              default: 'pending_response',
+            },
+            followup_remarks: [
+              {
+                response: { type: String, required: true, trim: true },
+                user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+                user_name: { type: String, trim: true },
+                role: { type: String, trim: true },
+                action_status: {
+                  type: String,
+                  enum: ['in_progress', 'completed', 'clarification_provided', 'need_help', 'acknowledged'],
+                  default: 'completed',
+                },
+                attachments: [
+                  {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: 'Attachment',
+                  },
+                ],
+                attachment_details: [
+                  {
+                    attachment_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Attachment' },
+                    filename: { type: String, trim: true },
+                    original_name: { type: String, trim: true },
+                    mime_type: { type: String, trim: true },
+                    size: { type: Number },
+                    url: { type: String, trim: true },
+                  },
+                ],
+                created_at: { type: Date, default: Date.now },
+              },
+            ],
+            resolution_remarks: { type: String, trim: true },
+            resolved_at: Date,
+            resolved_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+            resolved_by_name: { type: String, trim: true },
+            created_at: { type: Date, default: Date.now },
+          },
+        ],
         deletedAt: { type: Date, default: null, index: true },
         created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -398,6 +457,33 @@ function registerModels() {
           type: String,
           trim: true,
         },
+        refunds: [
+          {
+            amount: { type: Number, required: true, min: 0.01 },
+            refund_date: { type: Date, default: Date.now },
+            payment_method: { type: String, default: 'UPI' },
+            transaction_reference: { type: String, trim: true },
+            notes: { type: String, trim: true },
+            attachments: [
+              {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Attachment',
+              },
+            ],
+            attachment_details: [
+              {
+                attachment_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Attachment' },
+                filename: { type: String, trim: true },
+                original_name: { type: String, trim: true },
+                mime_type: { type: String, trim: true },
+                size: { type: Number },
+                url: { type: String, trim: true },
+              },
+            ],
+            accepted_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+            accepted_at: { type: Date, default: Date.now },
+          },
+        ],
         attachments: [
           {
             type: mongoose.Schema.Types.ObjectId,
@@ -480,6 +566,21 @@ function registerModels() {
             advance_number: String,
           },
         ],
+        payment_entries: [
+          {
+            payment_entry: {
+              type: mongoose.Schema.Types.ObjectId,
+              ref: 'WorkPlanExpenseSettlement',
+              required: true,
+            },
+            deducted_amount: {
+              type: Number,
+              required: true,
+              min: 0,
+            },
+            payment_number: String,
+          },
+        ],
         total_claim_amount: {
           type: Number,
           required: true,
@@ -490,14 +591,29 @@ function registerModels() {
           default: 0,
           min: 0,
         },
+        payment_entry_deduction_amount: {
+          type: Number,
+          default: 0,
+          min: 0,
+        },
         direct_payment_amount: {
+          type: Number,
+          default: 0,
+          min: 0,
+        },
+        remaining_balance: {
+          type: Number,
+          default: 0,
+          min: 0,
+        },
+        settled_amount: {
           type: Number,
           default: 0,
           min: 0,
         },
         settlement_mode: {
           type: String,
-          enum: ['advance_deduction', 'direct_payment', 'split'],
+          enum: ['advance_deduction', 'direct_payment', 'split', 'payment_entry'],
           required: true,
           default: 'direct_payment',
         },

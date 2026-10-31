@@ -1316,11 +1316,51 @@ export function DownloadExpensesModal({
                         ? `${startKm.toLocaleString()} → ${closeKm.toLocaleString()} (${(closeKm - startKm).toLocaleString()} KM${isBike ? " @ ₹3.5" : ""})`
                         : "—";
 
-                    const attachmentsList: ExpenseAttachmentItem[] = Array.isArray(e.attachments)
-                      ? (e.attachments as any[])
-                      : e.receipt_attachment
-                      ? [{ url: e.receipt_attachment, name: "Receipt Document" }]
-                      : [];
+                    let rawAtts: any[] = [];
+                    if (Array.isArray(e.attachments) && e.attachments.length > 0) {
+                      rawAtts = e.attachments;
+                    } else if (e.receipt_attachment) {
+                      rawAtts = [e.receipt_attachment];
+                    }
+
+                    const attachmentsList = rawAtts
+                      .map((attItem: any, attIdx: number) => {
+                        if (typeof attItem === "string") {
+                          return {
+                            original_name: `Attachment #${attIdx + 1}`,
+                            filename: `Attachment #${attIdx + 1}`,
+                            name: `Attachment #${attIdx + 1}`,
+                            url: `/api/work-planner/attachments/${attItem}/preview`,
+                            mime_type: "",
+                            mime: "",
+                          };
+                        }
+                        const id =
+                          attItem?._id || attItem?.attachment_id || attItem?.file_id || attItem?.id;
+                        const resolvedUrl =
+                          typeof attItem?.url === "string"
+                            ? attItem.url
+                            : (attItem?.url && typeof attItem.url.url === "string")
+                            ? attItem.url.url
+                            : id
+                            ? `/api/work-planner/attachments/${id}/preview`
+                            : "";
+                        const name =
+                          attItem?.original_name ||
+                          attItem?.filename ||
+                          attItem?.name ||
+                          `Attachment #${attIdx + 1}`;
+                        const mime = attItem?.mime_type || attItem?.mime || "";
+                        return {
+                          original_name: name,
+                          filename: name,
+                          name,
+                          url: resolvedUrl,
+                          mime_type: mime,
+                          mime,
+                        };
+                      })
+                      .filter((a) => Boolean(a.url));
 
                     return (
                       <tr
@@ -1367,7 +1407,7 @@ export function DownloadExpensesModal({
                                 const a0 = attachmentsList[0];
                                 openPreview({
                                   name: a0.original_name || a0.filename || (a0 as any).name || "Expense Attachment",
-                                  url: a0.url || "",
+                                  url: typeof a0.url === "string" ? a0.url : "",
                                   mime: a0.mime_type || (a0 as any).mime,
                                 });
                               }}
@@ -1416,7 +1456,36 @@ export function DownloadExpensesModal({
                 <tbody className="divide-y divide-border/60">
                   {filteredAdvances.map((adv, idx) => {
                     const exec = salesUserLabel(adv.sales_user);
-                    const atts = Array.isArray(adv.attachments) ? adv.attachments : [];
+                    const rawAdvAtts = Array.isArray(adv.attachments) ? adv.attachments : [];
+                    const atts = rawAdvAtts
+                      .map((attItem: any, attIdx: number) => {
+                        if (typeof attItem === "string") {
+                          return {
+                            name: `Disbursement Proof #${attIdx + 1}`,
+                            url: `/api/work-planner/attachments/${attItem}/preview`,
+                            mime: "",
+                          };
+                        }
+                        const id =
+                          attItem?._id || attItem?.attachment_id || attItem?.file_id || attItem?.id;
+                        const resolvedUrl =
+                          typeof attItem?.url === "string"
+                            ? attItem.url
+                            : (attItem?.url && typeof attItem.url.url === "string")
+                            ? attItem.url.url
+                            : id
+                            ? `/api/work-planner/attachments/${id}/preview`
+                            : "";
+                        const name =
+                          attItem?.original_name ||
+                          attItem?.filename ||
+                          attItem?.name ||
+                          `Disbursement Proof #${attIdx + 1}`;
+                        const mime = attItem?.mime_type || attItem?.mime || "";
+                        return { name, url: resolvedUrl, mime };
+                      })
+                      .filter((a) => Boolean(a.url));
+
                     return (
                       <tr
                         key={adv._id || adv.id || idx}
@@ -1455,10 +1524,11 @@ export function DownloadExpensesModal({
                               type="button"
                               onClick={() => {
                                 const a0 = atts[0];
-                                const url = typeof a0 === "string" ? a0 : a0?.url || "";
-                                const name = typeof a0 === "object" ? a0?.original_name || a0?.filename || a0?.name || "Disbursement Proof" : "Disbursement Proof";
-                                const mime = typeof a0 === "object" ? a0?.mime_type || a0?.mime : undefined;
-                                openPreview({ name, url, mime });
+                                openPreview({
+                                  name: a0.name || "Disbursement Proof",
+                                  url: typeof a0.url === "string" ? a0.url : "",
+                                  mime: a0.mime,
+                                });
                               }}
                               className="inline-flex items-center gap-1 rounded bg-indigo-500/10 hover:bg-indigo-500/20 px-2 py-0.5 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 transition"
                             >

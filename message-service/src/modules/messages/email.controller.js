@@ -11,7 +11,7 @@ const { ApiError } = require('../../utils/ApiError');
  * POST /api/emails
  */
 exports.sendEmail = asyncHandler(async (req, res) => {
-  const { recipient, to, from, subject, body, templateName, templateParams, orderId, attachments, cc, bcc } = req.body;
+  const { recipient, to, from, subject, body, templateName, templateParams, orderId, attachments, cc, bcc, emailType, metadata } = req.body;
 
   const targetRecipient = recipient || to;
   if (!targetRecipient) {
@@ -29,6 +29,8 @@ exports.sendEmail = asyncHandler(async (req, res) => {
     attachments,
     cc,
     bcc,
+    emailType,
+    metadata,
   });
 
   res.status(201).json({

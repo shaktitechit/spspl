@@ -620,6 +620,15 @@ export const workPlannerApiSlice = baseApi.injectEndpoints({
       transformResponse: (res: any) => res.data || res,
       providesTags: ["TourAdvance"],
     }),
+    getActivePaymentEntries: builder.query<{ data: WorkPlanExpenseSettlementRecord[] }, { userId?: string } | void>({
+      query: (params) => {
+        const query = new URLSearchParams();
+        if (params?.userId) query.append("userId", params.userId);
+        return `${WORK_PLANNER_SERVICE_URL}/api/work-planner/expenses/settlements/active-payments?${query.toString()}`;
+      },
+      transformResponse: (res: any) => res.data || res,
+      providesTags: ["ExpenseSettlement"],
+    }),
     getExpenseSettlements: builder.query<
       { data: WorkPlanExpenseSettlementRecord[]; total: number; page: number; limit: number; pages: number },
       Record<string, string | number | undefined> | void
@@ -654,6 +663,7 @@ export const workPlannerApiSlice = baseApi.injectEndpoints({
         settlement_date?: string;
         expense_ids: string[];
         advances?: Array<{ advance_id: string; deducted_amount: number }>;
+        payment_entries?: Array<{ payment_entry_id: string; deducted_amount: number }>;
         direct_payment_amount?: number;
         payment_method?: string;
         transaction_reference?: string;
@@ -961,8 +971,11 @@ export const workPlannerApiSlice = baseApi.injectEndpoints({
         target_type: "plan" | "visit" | "task" | "expense";
         target_id: string;
         remark_id?: string;
+        remark_type?: "instruction" | "appreciation" | "objection";
         response: string;
         action_status?: string;
+        closed_loop_action?: "request_revision" | "resolve" | "guidance" | string;
+        request_revision?: boolean;
         attachments?: string[];
         attachment_details?: any[];
       }
@@ -1187,6 +1200,8 @@ export const {
   useUploadExpenseAttachmentMutation,
   useGetActiveTourAdvancesQuery,
   useLazyGetActiveTourAdvancesQuery,
+  useGetActivePaymentEntriesQuery,
+  useLazyGetActivePaymentEntriesQuery,
   useGetExpenseSettlementsQuery,
   useLazyGetExpenseSettlementsQuery,
   useGetExpenseSettlementQuery,

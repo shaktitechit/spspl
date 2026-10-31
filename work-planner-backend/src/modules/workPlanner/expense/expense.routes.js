@@ -48,6 +48,8 @@ router.patch('/advances/:id/refund', managerRoles, controller.refundAdvance);
 
 // 4. Settlements
 router.get('/settlements', controller.listSettlements);
+router.get('/settlements/active-payments', controller.getActivePaymentEntries);
+router.get('/settlements/active-payments/:userId', controller.getActivePaymentEntries);
 router.get('/settlements/:id', controller.getSettlement);
 router.post('/settlements', managerRoles, controller.createSettlement);
 

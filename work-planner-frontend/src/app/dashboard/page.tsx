@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import Link from "next/link";
-import { Plus, CalendarDays, FileText, DollarSign, ArrowRight } from "lucide-react";
+import { Plus, CalendarDays, FileText, DollarSign, BookOpen, ArrowRight } from "lucide-react";
 import { WorkPlannerStatsWidgets } from "@/components/workPlanner/WorkPlannerStatsWidgets";
 import { DashboardDateFilter, type DateRange } from "@/components/workPlanner/DashboardDateFilter";
 import { isWpElevated, readSessionFromStorage } from "@/utils/authStorage";
@@ -101,16 +101,16 @@ export default function DashboardPage() {
           className="group rounded-xl border border-border bg-card p-5 shadow-xs hover:border-primary hover:shadow-md transition"
         >
           <div className="flex items-center justify-between">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
-              <DollarSign className="h-5 w-5" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
+              <BookOpen className="h-5 w-5" />
             </div>
-            <ArrowRight className="h-4 w-4 text-muted group-hover:text-emerald-500 transition" />
+            <ArrowRight className="h-4 w-4 text-muted group-hover:text-purple-600 transition" />
           </div>
           <h3 className="mt-4 text-sm font-bold text-foreground">
-            Expense Claims
+            My Passbook
           </h3>
           <p className="mt-1 text-xs text-muted">
-            Review submitted DA, stay, and local conveyance reimbursement claims.
+            Track tour advances, payment entries, approved claims & running balance.
           </p>
         </Link>
       </div>

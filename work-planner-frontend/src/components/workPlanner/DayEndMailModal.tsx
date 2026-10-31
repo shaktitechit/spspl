@@ -95,7 +95,9 @@ function getWorkPlannerUserRole(u: any): "Admin" | "Manager" | "Coordinator" | n
 function generateDayEndHtmlTemplate(
   plan: WorkPlanRecord,
   executiveName: string,
-  executiveEmail: string
+  executiveEmail: string,
+  fromName?: string,
+  fromEmail?: string
 ): string {
   const planDateStr = plan.plan_date
     ? new Date(plan.plan_date).toLocaleDateString("en-GB", {
@@ -301,6 +303,7 @@ function generateDayEndHtmlTemplate(
   <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
     <h2 style="margin: 0 0 12px 0; color: #0f172a; font-size: 18px;">Day End Report — Summary</h2>
     <p style="margin: 4px 0; font-size: 14px;"><strong>Executive:</strong> ${executiveName} ${executiveEmail ? `(${executiveEmail})` : ""}</p>
+    ${fromEmail && executiveEmail && fromEmail.toLowerCase().trim() !== executiveEmail.toLowerCase().trim() ? `<p style="margin: 4px 0; font-size: 14px;"><strong>Submitted By:</strong> ${fromName || fromEmail} (${fromEmail})</p>` : ""}
     <p style="margin: 4px 0; font-size: 14px;"><strong>Plan Date:</strong> ${planDateStr}</p>
     <p style="margin: 4px 0; font-size: 14px;"><strong>Plan Type:</strong> ${plan.plan_type || "Visits"} | <strong>Location:</strong> ${plan.location || "N/A"}</p>
     <p style="margin: 4px 0; font-size: 14px;"><strong>Total Expenses Logged:</strong> ₹${expensesTotal.toLocaleString("en-IN")}</p>
@@ -548,17 +551,28 @@ export function DayEndMailModal({
 
   const availableManagers = eligibleManagers;
 
-  const fromName =
+  const targetExecutiveName =
     (typeof plan?.sales_user === "object" && plan?.sales_user ? (plan.sales_user as any)?.name : null) ||
+    "";
+  const targetExecutiveEmail =
+    (typeof plan?.sales_user === "object" && plan?.sales_user ? (plan.sales_user as any)?.email : null) ||
+    "";
+
+  const fromName =
     currentSessionUser?.name ||
     sessionUser?.name ||
+    draftData?.from_name ||
+    targetExecutiveName ||
     "Executive";
   const fromEmail =
-    draftData?.from_email ||
-    (typeof plan?.sales_user === "object" && plan?.sales_user ? (plan.sales_user as any)?.email : null) ||
     currentSessionUser?.email ||
     sessionUser?.email ||
+    draftData?.from_email ||
+    targetExecutiveEmail ||
     "";
+
+  const executiveDisplayName = targetExecutiveName || fromName;
+  const executiveDisplayEmail = targetExecutiveEmail || fromEmail;
 
   const userEditedSubjectRef = useRef(false);
   const userEditedBodyRef = useRef(false);
@@ -594,7 +608,7 @@ export function DayEndMailModal({
         })
       : new Date().toLocaleDateString("en-GB");
 
-    const defaultSubject = `Day End Report — ${fromName} (${planDateStr})`;
+    const defaultSubject = `Day End Report — ${executiveDisplayName} (${planDateStr})`;
 
     const planTypeStr = plan?.plan_type || "Visits";
     const pts = effectiveSettings?.planTypeSettings?.[planTypeStr];
@@ -664,7 +678,13 @@ export function DayEndMailModal({
       appliedDraftKeyRef.current = draftKey;
     } else if (!draftData && !bodyHtml) {
       // Immediate client-side fallback generation so the editor is never blank
-      const fallbackHtml = generateDayEndHtmlTemplate(plan, fromName, fromEmail);
+      const fallbackHtml = generateDayEndHtmlTemplate(
+        plan,
+        executiveDisplayName,
+        executiveDisplayEmail,
+        fromName,
+        fromEmail
+      );
       if (!userEditedBodyRef.current) {
         setBodyHtml(fallbackHtml);
       }
@@ -722,7 +742,9 @@ export function DayEndMailModal({
           toast.success(`Attached ${file.name}`);
         }
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Failed to upload file";
+        const e: any = err;
+        const msg = e?.data?.message || e?.data?.error || e?.error || (err instanceof Error ? err.message : "Failed to upload file");
+        console.error("[Attachment upload] failed:", err);
         toast.error(`Error uploading ${file.name}: ${msg}`);
       } finally {
         setUploadingFiles((prev) => prev.filter((name) => name !== file.name));
@@ -771,6 +793,7 @@ function extractErrorMessage(err: unknown, fallbackMsg: string): string {
     try {
       const payload: DayEndPayload = {
         from_email: fromEmail,
+        from_name: fromName,
         to_email: toEmail.trim(),
         cc_emails: ccEmails,
         subject: subject.trim(),

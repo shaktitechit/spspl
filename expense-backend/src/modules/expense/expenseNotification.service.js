@@ -49,6 +49,18 @@ async function notifyExpenseRejected({ expense, rejectionReason, actorUser }) {
   });
 }
 
+async function notifyExpenseRemarkAdded({ expense, remarkText, actorUser }) {
+  const targetUserId = expense.sales_user?._id || expense.sales_user;
+  return createExpenseNotification({
+    userId: targetUserId,
+    title: 'New Remark on Expense Claim',
+    message: `${actorUser?.name || 'Admin'} added a directive/remark to your ${expense.category} expense claim: "${remarkText}"`,
+    type: 'warning',
+    link: '/dashboard/expenses',
+    metadata: { expenseId: expense._id, remark: remarkText },
+  });
+}
+
 async function notifyTourAdvanceApproved({ advance, actorUser }) {
   const targetUserId = advance.sales_user?._id || advance.sales_user;
   return createExpenseNotification({
@@ -101,6 +113,7 @@ module.exports = {
   createExpenseNotification,
   notifyExpenseApproved,
   notifyExpenseRejected,
+  notifyExpenseRemarkAdded,
   notifyTourAdvanceApproved,
   notifyTourAdvanceRejected,
   notifyTourAdvanceDisbursed,
