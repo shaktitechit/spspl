@@ -20,7 +20,6 @@ import {
   ShieldCheck,
   CheckCircle2,
   Building2,
-  ArrowRightLeft,
   Briefcase,
   Landmark,
 } from "lucide-react";
@@ -46,8 +45,6 @@ export function Sidebar({
   const pathname = usePathname();
   const {
     activeMode,
-    setActiveMode,
-    hasDualRole,
     isCurrentAdminMode,
     isCurrentFinanceMode,
     isAdmin,
@@ -146,35 +143,6 @@ export function Sidebar({
             </Link>
           </div>
 
-          {/* Dual Role Switcher Pill */}
-          {!desktopCollapsed && hasDualRole && (
-            <div className="mt-1 flex items-center rounded-xl bg-surface-muted p-0.5 border border-border">
-              <button
-                type="button"
-                onClick={() => setActiveMode("admin")}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1 text-[10px] font-bold rounded-lg transition ${
-                  isCurrentAdminMode
-                    ? "bg-emerald-600 text-white shadow-xs"
-                    : "text-muted hover:text-foreground"
-                }`}
-              >
-                <ShieldCheck className="h-3 w-3" />
-                <span>Admin Module</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveMode("finance")}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1 text-[10px] font-bold rounded-lg transition ${
-                  isCurrentFinanceMode
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : "text-muted hover:text-foreground"
-                }`}
-              >
-                <Landmark className="h-3 w-3" />
-                <span>Finance Module</span>
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Navigation Links */}

@@ -18,9 +18,6 @@ import {
   TrendingUp,
   AlertCircle,
   FileSpreadsheet,
-  ShieldCheck,
-  Landmark,
-  ArrowRightLeft,
 } from "lucide-react";
 import { useGetExpenseKpisQuery, useGetWorkPlannerUsersQuery } from "@/store/api/expenseApiSlice";
 import { useExpenseRole } from "@/context/ExpenseRoleContext";
@@ -28,8 +25,6 @@ import { useExpenseRole } from "@/context/ExpenseRoleContext";
 export default function ExpenseDashboardPage() {
   const {
     activeMode,
-    setActiveMode,
-    hasDualRole,
     isCurrentAdminMode,
     isCurrentFinanceMode,
     isAdmin,

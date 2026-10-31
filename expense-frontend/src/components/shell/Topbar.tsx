@@ -13,7 +13,6 @@ import {
   Settings,
   ShieldCheck,
   Landmark,
-  ArrowRightLeft,
 } from "lucide-react";
 import type { UserSession, ThemeColor } from "@/types/workPlanner";
 import { NotificationBell } from "./NotificationBell";
@@ -43,8 +42,6 @@ export function Topbar({
 
   const {
     activeMode,
-    setActiveMode,
-    hasDualRole,
     isCurrentAdminMode,
     isCurrentFinanceMode,
     isAdmin,
@@ -113,8 +110,6 @@ export function Topbar({
 
   const userRoleBadge = isSuper
     ? "SUPER ADMIN"
-    : isAdmin && isFinance
-    ? activeMode === "admin" ? "ADMIN DESK" : "FINANCE DESK"
     : isAdmin
     ? "EXPENSE ADMIN"
     : isFinance
@@ -143,23 +138,6 @@ export function Topbar({
 
       {/* Topbar Action Controls */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Dual Role Quick Switcher in Topbar */}
-        {hasDualRole && (
-          <button
-            type="button"
-            onClick={() => setActiveMode(isCurrentAdminMode ? "finance" : "admin")}
-            className={`hidden md:inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition shadow-2xs active:scale-95 cursor-pointer ${
-              isCurrentAdminMode
-                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20"
-                : "border-indigo-500/30 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-500/20"
-            }`}
-            title={`Switch to ${isCurrentAdminMode ? "Finance Desk" : "Admin Desk"}`}
-          >
-            <ArrowRightLeft className="h-3.5 w-3.5" />
-            <span>Switch to {isCurrentAdminMode ? "Finance" : "Admin"}</span>
-          </button>
-        )}
-
         {/* Notification Bell */}
         <NotificationBell />
 
@@ -212,25 +190,7 @@ export function Topbar({
                 </div>
               </div>
 
-              {/* Mobile Dual Role Switch in Menu */}
-              {hasDualRole && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveMode(isCurrentAdminMode ? "finance" : "admin");
-                    setUserDropdownOpen(false);
-                  }}
-                  className="w-full flex items-center justify-between rounded-xl px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition cursor-pointer"
-                >
-                  <span className="flex items-center gap-2">
-                    <ArrowRightLeft className="h-3.5 w-3.5" />
-                    Switch Mode
-                  </span>
-                  <span className="text-[10px] uppercase font-extrabold px-1.5 py-0.5 rounded bg-surface-muted border border-border">
-                    {isCurrentAdminMode ? "To Finance" : "To Admin"}
-                  </span>
-                </button>
-              )}
+              {/* Mobile Dual Role Switch in Menu - removed */}
 
               <Link
                 href="/dashboard/profile"
