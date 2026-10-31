@@ -46,6 +46,8 @@ export type UnbilledOrderLine = {
   approved: number;
   submittedDispatch: number;
   remaining: number;
+  amount?: number;
+  unitPrice?: number;
 };
 
 function refId(value: unknown): string {
@@ -197,14 +199,65 @@ export function orderUnbilledQuantityTotals(
 }
 
 
+export function computeOrderLineAmount(
+  qty: number,
+  orderLine?: Record<string, unknown> | null,
+): { amount: number; unitPrice: number } {
+  if (!orderLine || qty <= 0) return { amount: 0, unitPrice: 0 };
+  const unitPrice = num(
+    orderLine.unit_price ??
+      orderLine.approved_unit_price ??
+      orderLine.rate ??
+      0,
+  );
+  if (unitPrice <= 0) {
+    const lineTotal = num(orderLine.line_total ?? orderLine.total_amount ?? 0);
+    const orderedQty = num(
+      orderLine.ordered_quantity ?? orderLine.quantity ?? 0,
+    );
+    if (lineTotal > 0 && orderedQty > 0) {
+      const derivedRate = lineTotal / orderedQty;
+      return {
+        amount: Math.round(derivedRate * qty * 100) / 100,
+        unitPrice: Math.round(derivedRate * 100) / 100,
+      };
+    }
+    return { amount: 0, unitPrice: 0 };
+  }
+  const gstPct = num(orderLine.gst_percent ?? orderLine.tax_percent ?? 0);
+  const discPct = num(orderLine.discount_percent ?? 0);
+  const discAmt = num(orderLine.discount_amount ?? 0);
+  const orderedQty = num(
+    orderLine.ordered_quantity ?? orderLine.quantity ?? qty,
+  );
+
+  const gross = qty * unitPrice;
+  let discount = 0;
+  if (discPct > 0) {
+    discount = (gross * discPct) / 100;
+  } else if (discAmt > 0 && orderedQty > 0) {
+    discount = (discAmt / orderedQty) * qty;
+  }
+  const taxable = Math.max(0, gross - discount);
+  const total = taxable * (1 + gstPct / 100);
+  return {
+    amount: Math.round(total * 100) / 100,
+    unitPrice,
+  };
+}
+
 function orderLineMapFromOrder(
   liveOrder?: Record<string, unknown> | null,
+  fallbackOrder?: unknown,
 ): Map<string, Record<string, unknown>> {
   const map = new Map<string, Record<string, unknown>>();
-  if (!liveOrder) return map;
-  const items = Array.isArray(liveOrder.order_items)
-    ? liveOrder.order_items
-    : [];
+  const orderObj =
+    liveOrder ||
+    (fallbackOrder && typeof fallbackOrder === "object"
+      ? (fallbackOrder as Record<string, unknown>)
+      : null);
+  if (!orderObj) return map;
+  const items = Array.isArray(orderObj.order_items) ? orderObj.order_items : [];
   for (const raw of items) {
     if (!raw || typeof raw !== "object") continue;
     const line = raw as Record<string, unknown>;
@@ -222,7 +275,7 @@ export function listUnbilledLinesFromRecord(
 ): UnbilledOrderLine[] {
   const items = Array.isArray(record.unbilled_items) ? record.unbilled_items : [];
   const lines: UnbilledOrderLine[] = [];
-  const orderLineById = orderLineMapFromOrder(liveOrder);
+  const orderLineById = orderLineMapFromOrder(liveOrder, record.order);
 
   for (const raw of items) {
     if (!raw || typeof raw !== "object") continue;
@@ -263,6 +316,8 @@ export function listUnbilledLinesFromRecord(
       continue;
     }
 
+    const { amount, unitPrice } = computeOrderLineAmount(remaining, orderLine);
+
     lines.push({
       orderItemId: refId(item.order_item_id),
       productId,
@@ -271,6 +326,8 @@ export function listUnbilledLinesFromRecord(
       approved: num(item.approved_quantity),
       submittedDispatch: num(item.billed_dispatched_quantity),
       remaining,
+      amount,
+      unitPrice,
     });
   }
 
@@ -440,4 +497,38 @@ export function isUnbilledModalRecord(
     Boolean(record.manual_remaining)
   );
 }
+
+/**
+ * Formats a timestamped remark entry: `<User Name>, <timestamp>: <Remark>`
+ */
+export function formatTimestampedRemark(
+  userName: string,
+  remarkText: string,
+  date: Date = new Date(),
+): string {
+  const stamp = date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+  const cleanUser = userName.trim() || "User";
+  const cleanRemark = remarkText.trim();
+  return `${cleanUser}, ${stamp}: ${cleanRemark}`;
+}
+
+/**
+ * Appends a new timestamped remark to existing remarks (newline-separated).
+ */
+export function appendRemarkEntry(
+  existingRemarks: string | undefined,
+  newEntry: string,
+): string {
+  const trimmed = (existingRemarks || "").trim();
+  if (!trimmed || trimmed === "—") return newEntry.trim();
+  return `${trimmed}\n${newEntry.trim()}`;
+}
+
 

@@ -5,9 +5,22 @@ import {
   MONTH_OPTIONS,
   formatMultiSelectLabel,
 } from "./periodFilterUtils";
-import { DATE_FILTER_OPTIONS } from "../orders/list/orderListDateFilter";
 
 import type { DashboardDataType } from "./periodFilterUtils";
+
+export const PERIOD_DATE_FILTER_OPTIONS = [
+  { id: "all", label: "Current Month" },
+  { id: "today", label: "Today" },
+  { id: "yesterday", label: "Yesterday" },
+  { id: "last_week", label: "Last 7 Days" },
+  { id: "last_month", label: "Last Month" },
+  { id: "custom", label: "Custom Range" },
+] as const;
+
+export interface PeriodDateFilterOption {
+  id: string;
+  label: string;
+}
 
 interface PeriodFilterProps {
   availableYears: number[];
@@ -25,6 +38,7 @@ interface PeriodFilterProps {
   onDataTypeChange?: (value: DashboardDataType) => void;
   /** Visual density for leaderboard headers vs KPI row */
   size?: "sm" | "md";
+  dateFilterOptions?: readonly PeriodDateFilterOption[];
 }
 
 function MultiSelectMenu({
@@ -116,8 +130,12 @@ export default function PeriodFilter({
   dataType,
   onDataTypeChange,
   size = "md",
+  dateFilterOptions = PERIOD_DATE_FILTER_OPTIONS,
 }: PeriodFilterProps) {
   const toggleYear = (year: number) => {
+    if (dateFilter !== undefined && dateFilter !== "all" && onDateFilterChange) {
+      onDateFilterChange("all");
+    }
     if (selectedYears.includes(year)) {
       if (selectedYears.length === 1) return;
       onYearsChange(selectedYears.filter((y) => y !== year));
@@ -127,6 +145,9 @@ export default function PeriodFilter({
   };
 
   const toggleMonth = (month: number) => {
+    if (dateFilter !== undefined && dateFilter !== "all" && onDateFilterChange) {
+      onDateFilterChange("all");
+    }
     if (selectedMonths.includes(month)) {
       if (selectedMonths.length === 1) return;
       onMonthsChange(selectedMonths.filter((m) => m !== month).sort((a, b) => a - b));
@@ -208,7 +229,7 @@ export default function PeriodFilter({
             onChange={(e) => onDateFilterChange(e.target.value)}
             className={selectClass}
           >
-            {DATE_FILTER_OPTIONS.map((opt) => (
+            {dateFilterOptions.map((opt) => (
               <option key={opt.id} value={opt.id}>
                 {opt.label}
               </option>

@@ -6,6 +6,7 @@ import {
   ExternalLink,
   Landmark,
   LayoutGrid,
+  Receipt,
   Shield,
   ShieldCheck,
   Sparkles,
@@ -18,6 +19,7 @@ import { toast } from "@/lib/toast";
 import { useAuthProfile } from "@/hooks/useAuthProfile";
 import {
   LEAD_MANAGER_FRONTEND_URL,
+  EXPENSE_FRONTEND_URL,
   OPMS_FRONTEND_URL,
   USER_MANAGER_FRONTEND_URL,
   WORK_PLANNER_FRONTEND_URL,
@@ -154,6 +156,31 @@ function resolvePortalDetails(
     storageKey = "shakti.lead_manager.session";
     icon = TrendingUp;
     iconBg = "bg-orange-600 text-white";
+  } else if (
+    norm === "expense" ||
+    norm === "expenses" ||
+    norm === "expense_portal" ||
+    norm === "expense_management"
+  ) {
+    name = name || "Expense Portal";
+    subtitle = "Micro-frontend";
+    description = "Field staff claims, tour advances, and passbook settlements.";
+    getUrl = () => {
+      let base = EXPENSE_FRONTEND_URL;
+      if (typeof window !== "undefined" && window.location.hostname && window.location.hostname !== "localhost") {
+        try {
+          const parsed = new URL(base);
+          parsed.hostname = window.location.hostname;
+          base = parsed.toString().replace(/\/+$/, "");
+        } catch {
+          /* keep base */
+        }
+      }
+      return base;
+    };
+    storageKey = "shakti.expense.session";
+    icon = Receipt;
+    iconBg = "bg-emerald-600 text-white";
   } else {
     if (!name) {
       name = `${norm

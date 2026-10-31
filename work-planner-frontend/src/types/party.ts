@@ -10,6 +10,30 @@ export interface PartyContact {
   designation?: string;
 }
 
+export type PartyShippingAddress = {
+  _id?: string;
+  id?: string;
+  label?: string;
+  recipient_name?: string;
+  phone?: string;
+  gst_no?: string;
+  address_line_1?: string;
+  address_line_2?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  country?: string;
+  is_default?: boolean;
+};
+
+export interface ZoneRecord {
+  _id: string;
+  id?: string;
+  name: string;
+  code?: string;
+  is_active?: boolean;
+}
+
 export interface PartyRecord {
   _id: string;
   id?: string;
@@ -36,16 +60,21 @@ export interface PartyRecord {
     country?: string;
     [key: string]: unknown;
   };
+  shipping_addresses?: PartyShippingAddress[];
   district?: string;
   state?: string;
   city?: string;
   country_id?: string;
   state_id?: string;
   city_id?: string;
+  zone_id?: string;
   contacts?: PartyContact[];
   payment_terms?: string;
   is_active?: boolean;
   is_featured?: boolean;
+  sra?: boolean;
+  sra_from_date?: string;
+  sra_to_date?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -56,6 +85,7 @@ export interface PartyCountryRecord {
   name: string;
   iso_code?: string;
   phone_code?: string;
+  description?: string;
   is_active?: boolean;
 }
 
@@ -64,6 +94,8 @@ export interface PartyStateRecord {
   id?: string;
   name: string;
   country?: string | PartyCountryRecord;
+  code?: string;
+  description?: string;
   is_active?: boolean;
 }
 
@@ -72,6 +104,7 @@ export interface PartyCityRecord {
   id?: string;
   name: string;
   state?: string | PartyStateRecord;
+  description?: string;
   is_active?: boolean;
 }
 

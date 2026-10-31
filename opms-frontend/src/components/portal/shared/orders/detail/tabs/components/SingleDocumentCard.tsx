@@ -25,7 +25,7 @@ export type SingleDocumentCardProps = {
   onReplace?: (file: File) => Promise<void>;
   onDelete?: (attachmentId: string, name: string) => Promise<void>;
   onPreview: (attachment: Record<string, unknown>) => void;
-  onDownload: (fileUrl: string, fileName: string) => void;
+  onDownload: (fileUrl: string, fileName: string, fallbackId?: string) => void;
   isUploading?: boolean;
   isDeleting?: boolean;
   disabled?: boolean;
@@ -227,7 +227,10 @@ export function SingleDocumentCard({
 
               <button
                 type="button"
-                onClick={() => onDownload(fileUrl, fileName)}
+                onClick={() => {
+                  const docId = String(attachment?._id || attachment?.id || attachment?.filename || "");
+                  onDownload(fileUrl, fileName, docId);
+                }}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-emerald-600 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-white/10"
               >
                 <Download className="h-3.5 w-3.5 text-emerald-500" />

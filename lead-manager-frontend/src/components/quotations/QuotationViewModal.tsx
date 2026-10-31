@@ -109,6 +109,8 @@ export function QuotationViewModal({
       sales_person_phone: snap.sales_person_phone ?? quotation.sales_person_phone,
       sales_person_email: snap.sales_person_email ?? quotation.sales_person_email,
       sales_person_user: (snap.sales_person_user as any) ?? quotation.sales_person_user,
+      department: (snap as any).department ?? quotation.department,
+      departments: (snap as any).departments ?? quotation.departments,
       bank_name: snap.bank_name ?? quotation.bank_name,
       account_name: snap.account_name ?? quotation.account_name,
       account_number: snap.account_number ?? quotation.account_number,

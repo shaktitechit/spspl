@@ -39,6 +39,8 @@ upstream lead_manager_frontend { server 127.0.0.1:7010; keepalive 16; }
 upstream message_service       { server 127.0.0.1:7011; keepalive 32; }
 upstream notification_service  { server 127.0.0.1:7012; keepalive 32; }
 upstream app_frontend          { server 127.0.0.1:7013; keepalive 16; }
+upstream expense_backend       { server 127.0.0.1:7015; keepalive 32; }
+upstream expense_frontend      { server 127.0.0.1:7016; keepalive 16; }
 
 # -----------------------------------------------------------------------------
 # HTTP → HTTPS (+ ACME challenge)
@@ -52,12 +54,14 @@ server {
         users.spspl.com
         plans.spspl.com
         leads.spspl.com
+        expense.spspl.com
         api-opms.spspl.com
         auth.spspl.com
         api-products.spspl.com
         api-parties.spspl.com
         api-plans.spspl.com
         api-leads.spspl.com
+        api-expense.spspl.com
         api-message.spspl.com
         api-notification.spspl.com;
 
@@ -137,6 +141,19 @@ server {
     location / {
         include /etc/nginx/snippets/proxy-upgrade.conf;
         proxy_pass http://lead_manager_frontend;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name expense.spspl.com;
+    include /etc/nginx/snippets/opms-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://expense_frontend;
     }
 }
 
@@ -274,5 +291,24 @@ server {
     location / {
         include /etc/nginx/snippets/proxy-params.conf;
         proxy_pass http://notification_service;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name api-expense.spspl.com;
+    include /etc/nginx/snippets/opms-ssl.conf;
+    client_max_body_size 50m;
+
+    location ~ ^/api/notifications/stream {
+        include /etc/nginx/snippets/proxy-sse.conf;
+        proxy_pass http://expense_backend;
+    }
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://expense_backend;
+        proxy_read_timeout 120s;
     }
 }

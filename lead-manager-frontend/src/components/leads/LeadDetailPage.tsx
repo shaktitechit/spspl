@@ -79,6 +79,7 @@ import {
   LEAD_PRIORITY_CONFIG,
   FOLLOWUP_TYPE_CONFIG,
   getDeptLabel,
+  getLeadDepartments,
 } from "./leadUtils";
 import { AssignLeadModal } from "./AssignLeadModal";
 import { MarkWonModal } from "./MarkWonModal";
@@ -588,13 +589,20 @@ export function LeadDetailPage({ leadId, portalHome = "/dashboard" }: Props) {
                 </dd>
               </div>
 
-              {lead.department && (
+              {getLeadDepartments(lead).length > 0 && (
                 <div>
-                  <dt className="text-muted text-[11px] font-semibold">Department</dt>
-                  <dd className="mt-0.5">
-                    <span className="rounded-md bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 text-[11px] font-bold text-purple-700 dark:text-purple-300">
-                      {getDeptLabel(lead.department)}
-                    </span>
+                  <dt className="text-muted text-[11px] font-semibold">
+                    {getLeadDepartments(lead).length > 1 ? "Departments" : "Department"}
+                  </dt>
+                  <dd className="mt-1 flex flex-wrap gap-1.5">
+                    {getLeadDepartments(lead).map((dept) => (
+                      <span
+                        key={dept}
+                        className="rounded-md bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 text-[11px] font-bold text-purple-700 dark:text-purple-300"
+                      >
+                        {getDeptLabel(dept)}
+                      </span>
+                    ))}
                   </dd>
                 </div>
               )}

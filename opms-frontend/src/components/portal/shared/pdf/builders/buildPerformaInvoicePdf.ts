@@ -261,14 +261,49 @@ export async function buildPerformaInvoicePdf(
   const drawHeader = () => {
     const headerTop = currentY;
 
-    // Optional Logo on Top Left
+    // Optional Logo on Top Left with Aspect-Ratio preservation to prevent collapse/distortion
+    const logoMaxW = 38;
+    const logoMaxH = 16;
+    let logoW = 0;
+    let logoH = 0;
+
     if (logoDataUrl) {
-      const maxW = 38;
-      const maxH = 16;
       try {
-        pdf.addImage(logoDataUrl, "PNG", M, headerTop, maxW, maxH, undefined, "FAST");
+        const props = pdf.getImageProperties(logoDataUrl);
+        const pw = Number(props?.width) || 0;
+        const ph = Number(props?.height) || 0;
+        if (pw > 0 && ph > 0) {
+          const aspect = pw / ph;
+          logoW = logoMaxW;
+          logoH = logoW / aspect;
+          if (logoH > logoMaxH) {
+            logoH = logoMaxH;
+            logoW = logoH * aspect;
+          }
+        } else {
+          logoW = logoMaxW;
+          logoH = logoMaxH;
+        }
       } catch {
-        /* ignore */
+        logoW = logoMaxW;
+        logoH = logoMaxH;
+      }
+
+      const format = /image\/jpe?g/i.test(logoDataUrl)
+        ? "JPEG"
+        : /image\/webp/i.test(logoDataUrl)
+          ? "WEBP"
+          : "PNG";
+
+      const logoY = headerTop + Math.max(0, (logoMaxH - logoH) / 2);
+      try {
+        pdf.addImage(logoDataUrl, format, M, logoY, logoW, logoH, undefined, "FAST");
+      } catch {
+        try {
+          pdf.addImage(logoDataUrl, "PNG", M, logoY, logoW, logoH, undefined, "FAST");
+        } catch {
+          /* ignore */
+        }
       }
     }
 
@@ -290,40 +325,62 @@ export async function buildPerformaInvoicePdf(
     pdf.setTextColor(...BLUE);
     pdf.text(proformaNo, badgeX + badgeW / 2, headerTop + 8.5, { align: "center" });
 
-    // Company Name & Info Center
+    // Safe boundaries: ensure centered text never collides with left logo or right badge
+    const leftLimit = logoW > 0 ? M + logoW + 3 : M + 3;
+    const rightLimit = badgeX - 3;
+    const halfAvailable = Math.min(PAGE_W / 2 - leftLimit, rightLimit - PAGE_W / 2);
+    const maxCenterTextW = Math.max(65, Math.min(104, Math.floor(halfAvailable * 2)));
+
+    // Company Name (Wrapped & dynamically sized to avoid overlap)
+    const compNameUpper = companyName.toUpperCase();
+    const nameFontSize = compNameUpper.length > 55 ? 9.5 : compNameUpper.length > 35 ? 10.5 : 12;
     pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(12);
+    pdf.setFontSize(nameFontSize);
     pdf.setTextColor(...NAVY);
-    const maxCenterTextW = 105;
-    const companyLines = pdf.splitTextToSize(companyName.toUpperCase(), maxCenterTextW);
-    let infoY = headerTop + 4;
+
+    const companyLines = pdf.splitTextToSize(compNameUpper, maxCenterTextW) as string[];
+    let infoY = headerTop + (nameFontSize >= 12 ? 4 : 3.5);
     companyLines.forEach((line: string) => {
       pdf.text(line, PAGE_W / 2, infoY, { align: "center" });
-      infoY += 4.2;
+      infoY += nameFontSize >= 12 ? 4.2 : 3.7;
     });
 
+    // Company Address (Wrapped strictly within maxCenterTextW)
     if (companyAddress) {
-      pdf.setFontSize(7);
+      pdf.setFontSize(6.8);
       pdf.setFont("helvetica", "normal");
       pdf.setTextColor(...TEXT);
-      const splitAddr = pdf.splitTextToSize(`Regd. Off: ${companyAddress}`, maxCenterTextW + 10);
-      pdf.text(splitAddr, PAGE_W / 2, infoY, { align: "center" });
-      infoY += splitAddr.length * 3.1 + 0.5;
+      const addrPrefix = companyAddress.toLowerCase().startsWith("regd") ? "" : "Regd. Off: ";
+      const splitAddr = pdf.splitTextToSize(`${addrPrefix}${companyAddress}`, maxCenterTextW) as string[];
+      splitAddr.forEach((line: string) => {
+        pdf.text(line, PAGE_W / 2, infoY, { align: "center" });
+        infoY += 3.1;
+      });
+      infoY += 0.5;
     }
 
+    // Company Contact Details (Wrapped strictly within maxCenterTextW)
     const contactParts: string[] = [];
     if (companyPhone) contactParts.push(`Phone: ${companyPhone}`);
     if (companyEmail) contactParts.push(`Email: ${companyEmail}`);
     if (companyGstin) contactParts.push(`GSTIN: ${companyGstin}`);
+    const companyWebsite = letterhead.website || company?.website || "";
+    if (companyWebsite) contactParts.push(companyWebsite);
 
     if (contactParts.length > 0) {
-      pdf.setFontSize(6.6);
+      pdf.setFontSize(6.5);
+      pdf.setFont("helvetica", "normal");
       pdf.setTextColor(...MUTED);
-      pdf.text(contactParts.join("  |  "), PAGE_W / 2, infoY, { align: "center" });
-      infoY += 3.8;
+      const contactText = contactParts.join("  |  ");
+      const contactLines = pdf.splitTextToSize(contactText, maxCenterTextW) as string[];
+      contactLines.forEach((line: string) => {
+        pdf.text(line, PAGE_W / 2, infoY, { align: "center" });
+        infoY += 3.1;
+      });
     }
 
-    currentY = Math.max(headerTop + 17, infoY);
+    const headerMinBottom = headerTop + Math.max(logoH || 16, badgeH, 16);
+    currentY = Math.max(headerMinBottom, infoY) + 2.5;
     pdf.setDrawColor(...NAVY);
     pdf.setLineWidth(0.6);
     pdf.line(M, currentY, PAGE_W - M, currentY);

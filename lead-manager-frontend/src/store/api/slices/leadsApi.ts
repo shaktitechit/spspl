@@ -147,6 +147,7 @@ export type LeadRecord = {
   lost_info?: LeadLostInfo;
   conversion?: LeadConversion;
   department?: string;
+  departments?: string[];
   assigned_users?: Array<{ _id: string; name: string; email?: string; phone?: string; department?: string }>;
   last_contacted_at?: string;
   next_follow_up_at?: string;
@@ -168,6 +169,7 @@ export type LeadInputPayload = Omit<
   assigned_to?: string | null | { _id: string; name?: string; email?: string; phone?: string; department?: string };
   assigned_users?: string[];
   department?: string;
+  departments?: string[];
   created_by?: string;
   source_id?: string | { _id: string; name?: string };
   party_id?: string | null | { _id: string; party_name?: string };

@@ -12,6 +12,8 @@ import type { DashboardOrdersSummary } from "@/store/api/slices/dashboardApi";
 interface FeaturedMatrixSectionProps {
   orders?: any[];
   contributions?: DashboardOrdersSummary["contributions"];
+  salesUsersById?: Record<string, string>;
+  userNameById?: Record<string, string>;
   isOrdersFetching: boolean;
   externalFilterCaption?: string;
   qtyBasis?: MatrixQtyBasis;
@@ -22,6 +24,8 @@ type MatrixTab = "sales" | "zone" | "party";
 export default function FeaturedMatrixSection({
   orders = [],
   contributions,
+  salesUsersById,
+  userNameById,
   isOrdersFetching,
   externalFilterCaption,
   qtyBasis = "approved",
@@ -134,6 +138,8 @@ export default function FeaturedMatrixSection({
             catalog={catalog}
             enabled={isInView}
             contributions={contributions}
+            salesUsersById={salesUsersById}
+            userNameById={userNameById}
           />
         )}
 

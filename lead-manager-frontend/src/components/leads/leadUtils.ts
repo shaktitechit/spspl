@@ -204,13 +204,28 @@ export type LeadAssigneeLike = {
 } | null | undefined;
 
 export const LEAD_DEPARTMENT_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "sales", label: "Sales" },
-  { value: "admin", label: "Admin" },
-  { value: "finance", label: "Finance" },
-  { value: "dispatch", label: "Dispatch" },
-  { value: "account", label: "Account" },
-  { value: "operations", label: "Operations" },
+  { value: "UPS/Batteries", label: "UPS/Batteries" },
+  { value: "Solar", label: "Solar" },
+  { value: "RO", label: "RO" },
+  { value: "Works/Servo", label: "Works/Servo" },
+  { value: "AMC", label: "AMC" },
+  { value: "Audit", label: "Audit" },
 ];
+
+/** Extract list of departments from a lead (handles both `departments` array and comma-separated `department`) */
+export function getLeadDepartments(lead: { department?: string; departments?: string[] } | null | undefined): string[] {
+  if (!lead) return [];
+  if (Array.isArray(lead.departments) && lead.departments.length > 0) {
+    return lead.departments.filter(Boolean);
+  }
+  if (lead.department) {
+    return lead.department
+      .split(",")
+      .map((d) => d.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
 
 /** Compact label for list/detail: "John Doe" or "John Doe, Jane Smith" or "Unassigned" */
 export function formatLeadAssignees(lead: {
@@ -245,6 +260,18 @@ export function getUserDepartment(user: AuthUserLike): string {
 
 /** Human-readable label for a department */
 export function getDeptLabel(dept: string): string {
+  if (!dept) return "";
+  if (dept.includes(",")) {
+    return dept
+      .split(",")
+      .map((d) => getDeptLabel(d.trim()))
+      .filter(Boolean)
+      .join(", ");
+  }
+  const match = LEAD_DEPARTMENT_OPTIONS.find(
+    (opt) => opt.value.toLowerCase() === dept.trim().toLowerCase()
+  );
+  if (match) return match.label;
   switch (dept?.toLowerCase()) {
     case "sales": return "Sales";
     case "admin": return "Admin";
@@ -252,7 +279,7 @@ export function getDeptLabel(dept: string): string {
     case "dispatch": return "Dispatch";
     case "account": return "Account";
     case "operations": return "Operations";
-    default: return dept ? dept.charAt(0).toUpperCase() + dept.slice(1) : "Sales";
+    default: return dept ? dept.charAt(0).toUpperCase() + dept.slice(1) : "";
   }
 }
 

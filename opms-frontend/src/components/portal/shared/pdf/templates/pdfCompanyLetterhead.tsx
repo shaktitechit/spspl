@@ -103,25 +103,50 @@ export function PdfLetterheadBrand({ letterhead, compact = false }: BrandProps) 
         display: "flex",
         alignItems: "flex-start",
         gap: compact ? "10px" : "14px",
+        width: "100%",
+        overflow: "hidden",
       }}
     >
-      {letterhead.logoUrl ? (
-        <img
-          src={letterhead.logoUrl}
-          alt={letterhead.companyName || "Company logo"}
-          crossOrigin="anonymous"
-          style={{
-            width: `${logoW}px`,
-            height: `${logoH}px`,
-            objectFit: "contain",
-            objectPosition: "left center",
-            flexShrink: 0,
-          }}
-        />
-      ) : (
-        <div style={{ width: `${logoW}px`, height: `${logoH}px`, flexShrink: 0 }} />
-      )}
-      <div style={{ flex: 1, textAlign: "center", minWidth: 0 }}>
+      <div
+        style={{
+          width: `${logoW}px`,
+          minWidth: `${logoW}px`,
+          maxWidth: `${logoW}px`,
+          height: `${logoH}px`,
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-start",
+        }}
+      >
+        {letterhead.logoUrl ? (
+          <img
+            src={letterhead.logoUrl}
+            alt={letterhead.companyName || "Company logo"}
+            crossOrigin="anonymous"
+            style={{
+              maxWidth: "100%",
+              maxHeight: "100%",
+              width: "auto",
+              height: "auto",
+              objectFit: "contain",
+              objectPosition: "left center",
+              display: "block",
+            }}
+          />
+        ) : null}
+      </div>
+      <div
+        style={{
+          flex: 1,
+          textAlign: "center",
+          minWidth: 0,
+          wordBreak: "break-word",
+          overflowWrap: "anywhere",
+          whiteSpace: "normal",
+          padding: "0 4px",
+        }}
+      >
         {letterhead.companyName ? (
           <div
             style={{
@@ -129,7 +154,10 @@ export function PdfLetterheadBrand({ letterhead, compact = false }: BrandProps) 
               fontWeight: 700,
               color: "#1e3a5f",
               letterSpacing: "0.01em",
-              lineHeight: 1.2,
+              lineHeight: 1.25,
+              wordBreak: "break-word",
+              overflowWrap: "anywhere",
+              whiteSpace: "normal",
             }}
           >
             {letterhead.companyName}
@@ -142,6 +170,9 @@ export function PdfLetterheadBrand({ letterhead, compact = false }: BrandProps) 
               fontSize: metaSize,
               color: "#475569",
               lineHeight: 1.35,
+              wordBreak: "break-word",
+              overflowWrap: "anywhere",
+              whiteSpace: "normal",
             }}
           >
             {letterhead.addressLine}
@@ -154,13 +185,24 @@ export function PdfLetterheadBrand({ letterhead, compact = false }: BrandProps) 
               fontSize: compact ? "7.5px" : "8.5px",
               color: "#64748b",
               lineHeight: 1.35,
+              wordBreak: "break-word",
+              overflowWrap: "anywhere",
+              whiteSpace: "normal",
             }}
           >
             {letterhead.contactLine}
           </div>
         ) : null}
       </div>
-      <div style={{ width: `${logoW}px`, flexShrink: 0 }} aria-hidden />
+      <div
+        style={{
+          width: `${logoW}px`,
+          minWidth: `${logoW}px`,
+          maxWidth: `${logoW}px`,
+          flexShrink: 0,
+        }}
+        aria-hidden
+      />
     </div>
   );
 }
@@ -180,24 +222,68 @@ export function PdfLetterheadFooterCopy({
 }: BrandProps) {
   const size = compact ? "7.5px" : "8.5px";
   return (
-    <div style={{ minWidth: 0, flex: 1 }}>
+    <div
+      style={{
+        minWidth: 0,
+        flex: 1,
+        wordBreak: "break-word",
+        overflowWrap: "anywhere",
+        whiteSpace: "normal",
+      }}
+    >
       {letterhead.companyName ? (
-        <div style={{ fontWeight: 700, color: "#334155", fontSize: size }}>
+        <div
+          style={{
+            fontWeight: 700,
+            color: "#334155",
+            fontSize: size,
+            wordBreak: "break-word",
+            overflowWrap: "anywhere",
+            whiteSpace: "normal",
+          }}
+        >
           {letterhead.companyName}
         </div>
       ) : null}
       {letterhead.addressLine ? (
-        <div style={{ color: "#64748b", fontSize: size, lineHeight: 1.35 }}>
+        <div
+          style={{
+            color: "#64748b",
+            fontSize: size,
+            lineHeight: 1.35,
+            wordBreak: "break-word",
+            overflowWrap: "anywhere",
+            whiteSpace: "normal",
+          }}
+        >
           {letterhead.addressLine}
         </div>
       ) : null}
       {letterhead.contactLine ? (
-        <div style={{ color: "#64748b", fontSize: size, lineHeight: 1.35 }}>
+        <div
+          style={{
+            color: "#64748b",
+            fontSize: size,
+            lineHeight: 1.35,
+            wordBreak: "break-word",
+            overflowWrap: "anywhere",
+            whiteSpace: "normal",
+          }}
+        >
           {letterhead.contactLine}
         </div>
       ) : null}
       {letterhead.footerNote ? (
-        <div style={{ color: "#94a3b8", fontSize: size, marginTop: "2px" }}>
+        <div
+          style={{
+            color: "#94a3b8",
+            fontSize: size,
+            marginTop: "2px",
+            wordBreak: "break-word",
+            overflowWrap: "anywhere",
+            whiteSpace: "normal",
+          }}
+        >
           {letterhead.footerNote}
         </div>
       ) : null}

@@ -83,6 +83,11 @@ module.exports = {
     // Non-browser / same-origin tools (curl, server-to-server) send no Origin
     if (!origin) return callback(null, true);
 
+    // Always allow localhost / 127.0.0.1 origins on any port for micro-frontends
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
+
     const allowed = allowedOrigins();
     if (allowed.length === 0) {
       if (!warnedEmpty) {

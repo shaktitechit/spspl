@@ -25,6 +25,10 @@ export const LEAD_MANAGER_FRONTEND_URL = (
   process.env.NEXT_PUBLIC_LEAD_MANAGER_URL || "http://localhost:7010/dashboard"
 ).replace(/\/+$/, "");
 
+export const EXPENSE_FRONTEND_URL = (
+  process.env.NEXT_PUBLIC_EXPENSE_URL || "http://localhost:7016/dashboard"
+).replace(/\/+$/, "");
+
 export function resolvePublicAssetUrl(path: string): string {
   if (!path) return "";
   if (/^https?:\/\//i.test(path)) return path;

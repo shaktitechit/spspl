@@ -49,6 +49,7 @@ export const PORTAL_NAV: Record<PortalKey, readonly PortalNavLeaf[]> = {
       icon: "ClipboardList",
       children: ORDER_MASTER_NAV_CHILDREN_BY_PORTAL.admin,
     },
+    { segments: ["unbilled-orders"], label: "Unbilled Orders", icon: "Receipt" },
     { segments: ["create-order"], label: "Create Order", icon: "FilePlus" },
 
     {
@@ -98,6 +99,7 @@ export const PORTAL_NAV: Record<PortalKey, readonly PortalNavLeaf[]> = {
       icon: "ClipboardCheck",
       children: ORDER_MASTER_NAV_CHILDREN_BY_PORTAL.finance,
     },
+    { segments: ["unbilled-orders"], label: "Unbilled Orders", icon: "Receipt" },
     { segments: ["create-order"], label: "Create Order", icon: "FilePlus" },
 
     {
@@ -136,6 +138,7 @@ export const PORTAL_NAV: Record<PortalKey, readonly PortalNavLeaf[]> = {
       icon: "ClipboardCheck",
       children: ORDER_MASTER_NAV_CHILDREN_BY_PORTAL.account,
     },
+    { segments: ["unbilled-orders"], label: "Unbilled Orders", icon: "Receipt" },
     { segments: ["create-order"], label: "Create Order", icon: "FilePlus" },
     {
       segments: ["parties"],
@@ -184,6 +187,7 @@ export const PORTAL_NAV: Record<PortalKey, readonly PortalNavLeaf[]> = {
       icon: "ClipboardList",
       children: ORDER_MASTER_NAV_CHILDREN_BY_PORTAL.super_admin,
     },
+    { segments: ["unbilled-orders"], label: "Unbilled Orders", icon: "Receipt" },
     { segments: ["create-order"], label: "Create Order", icon: "FilePlus" },
 
     {
@@ -222,6 +226,7 @@ export const PORTAL_NAV: Record<PortalKey, readonly PortalNavLeaf[]> = {
       icon: "ClipboardList",
       children: ORDER_MASTER_NAV_CHILDREN_BY_PORTAL.coordinator,
     },
+    { segments: ["unbilled-orders"], label: "Unbilled Orders", icon: "Receipt" },
     { segments: ["create-order"], label: "Create Order", icon: "FilePlus" },
     {
       segments: ["parties"],

@@ -4,12 +4,21 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/toast";
 import {
+  type ProductManufacturerRecord,
+  useListProductManufacturersQuery,
   useGetProductManufacturerProductsQuery,
   useAssociateProductManufacturerProductsMutation,
   useListProductsQuery,
 } from "@/store/api";
 import { PortalBusyOverlay } from "@/components/portal/shared/shell/PortalBusyOverlay";
 import { ArrowLeft, Search, Plus, Trash2, Check, Package } from "lucide-react";
+
+function extractId(val: any): string {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "object" && (val._id || val.id)) return String(val._id || val.id);
+  return String(val);
+}
 
 export type ManufacturerProductsPageProps = {
   portalHome?: string;
@@ -22,6 +31,68 @@ export default function ManufacturerProductsPage({
   const searchParams = useSearchParams();
   const manufacturerId = searchParams.get("manufacturerId") || "";
   const manufacturerName = searchParams.get("manufacturerName") || "Manufacturer";
+
+  // Fetch all manufacturers to resolve other manufacturer mappings
+  const { data: allManufacturersData } = useListProductManufacturersQuery({ limit: 1000 });
+  const allManufacturers = useMemo(() => {
+    return Array.isArray(allManufacturersData?.data) ? (allManufacturersData.data as ProductManufacturerRecord[]) : [];
+  }, [allManufacturersData]);
+
+  const manufacturerIdToNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of allManufacturers) {
+      if (m?._id && m?.name) {
+        map.set(String(m._id), m.name);
+      }
+    }
+    return map;
+  }, [allManufacturers]);
+
+  const getProductOtherManufacturer = useCallback(
+    (p: any): { _id?: string; name: string } | null => {
+      if (!p) return null;
+      const rawManufacturer = p.manufacturer;
+      if (!rawManufacturer) return null;
+
+      let mId = "";
+      let mName = "";
+
+      if (typeof rawManufacturer === "object") {
+        mId = extractId(rawManufacturer._id || rawManufacturer.id);
+        mName = rawManufacturer.name || "";
+      } else if (typeof rawManufacturer === "string") {
+        const trimmed = rawManufacturer.trim();
+        if (manufacturerIdToNameMap.has(trimmed)) {
+          mId = trimmed;
+          mName = manufacturerIdToNameMap.get(trimmed)!;
+        } else {
+          const found = allManufacturers.find(
+            (m) => m.name.toLowerCase() === trimmed.toLowerCase() || String(m._id) === trimmed
+          );
+          if (found) {
+            mId = String(found._id);
+            mName = found.name;
+          } else {
+            mName = trimmed;
+          }
+        }
+      }
+
+      if (mId && !mName && manufacturerIdToNameMap.has(mId)) {
+        mName = manufacturerIdToNameMap.get(mId)!;
+      }
+
+      if (!mName && !mId) return null;
+
+      const isCurrent =
+        (mId && mId === String(manufacturerId)) ||
+        (mName && mName.toLowerCase() === manufacturerName.toLowerCase());
+      if (isCurrent) return null;
+
+      return { _id: mId, name: mName || "Other Manufacturer" };
+    },
+    [allManufacturers, manufacturerIdToNameMap, manufacturerId, manufacturerName]
+  );
 
   // Fetch currently associated products
   const { data: currentProducts = [], isLoading: isLoadingCurrent } = useGetProductManufacturerProductsQuery(manufacturerId, {
@@ -59,7 +130,7 @@ export default function ManufacturerProductsPage({
 
   const [associateProducts, { isLoading: isSaving }] = useAssociateProductManufacturerProductsMutation();
 
-  const handleAddProduct = async (productId: string) => {
+  const handleAddProduct = async (productId: string, otherManufacturer?: { name: string } | null) => {
     const existingIds = currentProducts.map((p: any) => p._id);
     if (existingIds.includes(productId)) return;
 
@@ -68,7 +139,11 @@ export default function ManufacturerProductsPage({
         id: manufacturerId,
         productIds: [...existingIds, productId],
       }).unwrap();
-      toast.success("Product added to manufacturer");
+      if (otherManufacturer?.name) {
+        toast.success(`Product transferred from "${otherManufacturer.name}" to "${manufacturerName}"`);
+      } else {
+        toast.success("Product added to manufacturer");
+      }
     } catch (err: any) {
       toast.error(err?.data?.message || "Failed to add product");
     }
@@ -128,24 +203,38 @@ export default function ManufacturerProductsPage({
               ) : currentProducts.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-500">No products are currently associated with this manufacturer.</div>
               ) : (
-                currentProducts.map((p: any) => (
-                  <div key={p._id} className="flex items-center justify-between p-3.5 hover:bg-slate-55/50 dark:hover:bg-white/[0.01]">
-                    <div className="min-w-0 pr-4">
-                      <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">{p.product_name}</p>
-                      <p className="text-2xs text-slate-400 truncate">
-                        {p.sku ? `SKU: ${p.sku} | ` : ""}
-                        Base Price: ₹{p.base_price || "0.00"}
-                      </p>
+                currentProducts.map((p: any) => {
+                  const otherManufacturer = getProductOtherManufacturer(p);
+                  return (
+                    <div key={p._id} className="flex items-center justify-between p-3.5 hover:bg-slate-50/50 dark:hover:bg-white/[0.01]">
+                      <div className="min-w-0 pr-4">
+                        <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">{p.product_name}</p>
+                        <p className="text-2xs text-slate-400 truncate">
+                          {p.sku ? `SKU: ${p.sku} | ` : ""}
+                          Base Price: ₹{p.base_price || "0.00"}
+                        </p>
+                        {otherManufacturer && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            <span className="text-3xs font-medium text-amber-600 dark:text-amber-400">
+                              Also mapped to:
+                            </span>
+                            <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-3xs font-medium text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20">
+                              <Package className="size-2.5" />
+                              {otherManufacturer.name}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleRemoveProduct(p._id)}
+                        className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700 shadow-sm transition hover:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20 cursor-pointer"
+                      >
+                        <Trash2 className="size-3" />
+                        Remove
+                      </button>
                     </div>
-                    <button
-                      onClick={() => handleRemoveProduct(p._id)}
-                      className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700 shadow-sm transition hover:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20 cursor-pointer"
-                    >
-                      <Trash2 className="size-3" />
-                      Remove
-                    </button>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -179,27 +268,47 @@ export default function ManufacturerProductsPage({
               ) : (
                 catalogProducts.map((p: any) => {
                   const isAssociated = currentIds.has(p._id);
+                  const otherManufacturer = getProductOtherManufacturer(p);
                   return (
-                    <div key={p._id} className="flex items-center justify-between p-3 hover:bg-slate-55/50 dark:hover:bg-white/[0.01]">
+                    <div key={p._id} className="flex items-center justify-between p-3 hover:bg-slate-50/50 dark:hover:bg-white/[0.01]">
                       <div className="min-w-0 pr-4">
                         <p className="text-xs font-medium text-slate-900 dark:text-white truncate">{p.product_name}</p>
                         <p className="text-2xs text-slate-400 truncate">
                           {p.sku ? `SKU: ${p.sku} | ` : ""}
-                          Manufacturer: {p.manufacturer?.name || p.manufacturer || "None"}
+                          Base Price: ₹{p.base_price || "0.00"}
                         </p>
+                        {otherManufacturer && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            <span className="text-3xs font-medium text-amber-600 dark:text-amber-400">
+                              Mapped to:
+                            </span>
+                            <span
+                              className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-3xs font-medium text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20"
+                              title={`Currently under manufacturer "${otherManufacturer.name}"`}
+                            >
+                              <Package className="size-2.5" />
+                              {otherManufacturer.name}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       {isAssociated ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-green-50 px-2 py-1 text-2xs font-semibold text-green-700 dark:bg-green-500/10 dark:text-green-400">
+                        <span className="inline-flex items-center gap-1 rounded bg-green-50 px-2 py-1 text-2xs font-semibold text-green-700 dark:bg-green-500/10 dark:text-green-400 shrink-0">
                           <Check className="size-2.5" />
                           Added
                         </span>
                       ) : (
                         <button
-                          onClick={() => handleAddProduct(p._id)}
-                          className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-1 text-xs text-blue-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-blue-400 dark:hover:bg-white/5 cursor-pointer"
+                          onClick={() => handleAddProduct(p._id, otherManufacturer)}
+                          title={
+                            otherManufacturer
+                              ? `Transfer product from "${otherManufacturer.name}" to "${manufacturerName}"`
+                              : "Add product to manufacturer"
+                          }
+                          className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-1 text-xs text-blue-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-blue-400 dark:hover:bg-white/5 cursor-pointer shrink-0"
                         >
                           <Plus className="size-3" />
-                          Add
+                          {otherManufacturer ? "Transfer" : "Add"}
                         </button>
                       )}
                     </div>

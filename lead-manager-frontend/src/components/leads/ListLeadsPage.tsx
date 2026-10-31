@@ -68,6 +68,7 @@ import {
   getLeadManagerPortalRole,
   LEAD_DEPARTMENT_OPTIONS,
   getDeptLabel,
+  getLeadDepartments,
 } from "./leadUtils";
 import { AssignLeadModal } from "./AssignLeadModal";
 import { FollowUpModal } from "./FollowUpModal";
@@ -101,6 +102,7 @@ const DEFAULT_LEAD_EXPORT_COLUMNS: ColumnDef[] = [
   { key: "lead_no", label: "Lead No*", defaultSelected: true, widthPdf: 1.2 },
   { key: "name", label: "Contact Person*", defaultSelected: true, widthPdf: 1.5 },
   { key: "company_name", label: "Company / Clinic*", defaultSelected: true, widthPdf: 1.6 },
+  { key: "departments", label: "Departments*", defaultSelected: true, widthPdf: 1.3 },
   { key: "phone", label: "Phone*", defaultSelected: true, widthPdf: 1.2 },
   { key: "email", label: "Email", defaultSelected: false, widthPdf: 1.4 },
   { key: "city", label: "City*", defaultSelected: true, widthPdf: 1 },
@@ -108,7 +110,6 @@ const DEFAULT_LEAD_EXPORT_COLUMNS: ColumnDef[] = [
   { key: "source", label: "Source", defaultSelected: true, widthPdf: 1.2 },
   { key: "status", label: "Status*", defaultSelected: true, widthPdf: 1 },
   { key: "priority", label: "Priority*", defaultSelected: true, widthPdf: 1 },
-  { key: "department", label: "Department", defaultSelected: true, widthPdf: 1.1 },
   { key: "assigned_to_name", label: "Assigned To*", defaultSelected: true, widthPdf: 1.3 },
   { key: "estimated_value_fmt", label: "Est. Value (₹)", defaultSelected: true, widthPdf: 1.3 },
   { key: "products_summary", label: "Products / Requirement", defaultSelected: false, widthPdf: 2 },
@@ -169,7 +170,7 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
 
   const [scopeFilter, setScopeFilter] = useState<"team" | "mine">("team");
   const showPricing = canViewLeadPricing(authUser, portalHome);
-  const tableColSpan = showPricing ? 14 : 13;
+  const tableColSpan = showPricing ? 13 : 12;
 
   const queryArgs = useMemo(
     () => ({
@@ -283,7 +284,8 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
         source: typeof lead.source === "string" ? lead.source : (lead.source as any)?.name || "Direct",
         status: (lead.status || "new").toUpperCase(),
         priority: (lead.priority || "medium").toUpperCase(),
-        department: getDeptLabel(lead.department || "sales"),
+        department: getLeadDepartments(lead).map(getDeptLabel).join(", ") || getDeptLabel(lead.department || ""),
+        departments: getLeadDepartments(lead).map(getDeptLabel).join(", ") || getDeptLabel(lead.department || ""),
         assigned_to_name: assignedNames,
         created_by_name: createdByName,
         estimated_value_fmt: lead.estimated_value
@@ -570,7 +572,24 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
             )}
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            {/* Quick Department Filter */}
+            <select
+              value={departmentFilter}
+              onChange={(e) => {
+                setDepartmentFilter(e.target.value);
+                setPage(1);
+              }}
+              className="rounded-xl border border-border bg-surface-muted/50 px-3 py-2 text-xs text-foreground focus:border-primary focus:bg-card focus:outline-none transition shrink-0 font-medium cursor-pointer"
+            >
+              <option value="all">All Departments</option>
+              {LEAD_DEPARTMENT_OPTIONS.map((d) => (
+                <option key={d.value} value={d.value}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+
             {/* Filter Drawer Trigger Button */}
             <button
               type="button"
@@ -629,6 +648,7 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
                 </th>
                 <th className="px-3 py-3">Lead No</th>
                 <th className="px-3.5 py-3">Contact &amp; Organization</th>
+                <th className="px-3 py-3">Departments</th>
                 <th className="px-3 py-3">Source</th>
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3">Priority</th>
@@ -706,7 +726,7 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
                       </td>
 
                       {/* Contact & Company */}
-                      <td className="px-3.5 py-3 max-w-[240px]">
+                      <td className="px-3.5 py-3 max-w-[220px]">
                         <div className="font-bold text-foreground truncate">
                           {lead.name || "Untitled Lead"}
                         </div>
@@ -716,19 +736,30 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
                             <span className="truncate">{lead.company_name}</span>
                           </div>
                         )}
-                        <div className="flex items-center gap-2 text-[11px] text-muted mt-1">
-                          {lead.phone && (
-                            <span className="flex items-center gap-1 font-mono text-[10px]">
-                              <Phone className="h-2.5 w-2.5 text-muted" />
-                              {lead.phone}
-                            </span>
-                          )}
-                          {lead.department && (
-                            <span className="rounded bg-surface-muted border border-border px-1 py-0.2 text-[9px] font-semibold text-muted">
-                              {getDeptLabel(lead.department)}
-                            </span>
-                          )}
-                        </div>
+                        {lead.phone && (
+                          <div className="flex items-center gap-1 font-mono text-[10px] text-muted mt-1">
+                            <Phone className="h-2.5 w-2.5 text-muted" />
+                            {lead.phone}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Departments */}
+                      <td className="px-3 py-3">
+                        {getLeadDepartments(lead).length > 0 ? (
+                          <div className="flex flex-wrap gap-1 max-w-[180px]">
+                            {getLeadDepartments(lead).map((dept) => (
+                              <span
+                                key={dept}
+                                className="rounded-md bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 dark:text-purple-300 whitespace-nowrap"
+                              >
+                                {getDeptLabel(dept)}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-muted italic">—</span>
+                        )}
                       </td>
 
                       {/* Source */}
@@ -1056,10 +1087,17 @@ export function ListLeadsPage({ portalHome = "/dashboard" }: Props) {
                         <span className="truncate">{lead.email}</span>
                       </a>
                     )}
-                    {lead.department && (
-                      <span className="rounded-lg bg-surface-muted px-2 py-1 text-[10px] font-bold text-muted">
-                        {getDeptLabel(lead.department)}
-                      </span>
+                    {getLeadDepartments(lead).length > 0 && (
+                      <div className="flex flex-wrap gap-1 items-center">
+                        {getLeadDepartments(lead).map((dept) => (
+                          <span
+                            key={dept}
+                            className="rounded-lg bg-surface-muted px-2 py-0.5 text-[10px] font-bold text-muted"
+                          >
+                            {getDeptLabel(dept)}
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </div>
 

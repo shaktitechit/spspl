@@ -82,7 +82,6 @@ export const ADMIN_LIST_ORDERS_CONFIG: ListOrdersPageConfig = {
   scopeToSalesUser: false,
   includeDraftTab: false,
   headerActions: [
-    "unbilled",
     "refresh",
     "sheet",
     "analytics",
@@ -114,7 +113,7 @@ export const ACCOUNT_LIST_ORDERS_CONFIG: ListOrdersPageConfig = {
   showPricing: true,
   scopeToSalesUser: false,
   includeDraftTab: false,
-  headerActions: ["unbilled", "sheet", "analytics", "refresh", "dashboard"],
+  headerActions: ["sheet", "analytics", "refresh", "dashboard"],
   accents: {
     strip:
       "border-primary/10 bg-gradient-to-r from-primary/5 to-primary/10 dark:from-primary/5 dark:to-primary/5",
@@ -141,7 +140,7 @@ export const FINANCE_LIST_ORDERS_CONFIG: ListOrdersPageConfig = {
   showPricing: true,
   scopeToSalesUser: false,
   includeDraftTab: false,
-  headerActions: ["unbilled", "sheet", "analytics", "refresh", "dashboard"],
+  headerActions: ["sheet", "analytics", "refresh", "dashboard"],
   accents: {
     strip:
       "border-primary/10 bg-gradient-to-r from-primary/5 to-primary/10 dark:from-primary/5 dark:to-primary/5",
@@ -226,7 +225,7 @@ export const COORDINATOR_LIST_ORDERS_CONFIG: ListOrdersPageConfig = {
   showPricing: true,
   scopeToSalesUser: false,
   includeDraftTab: true,
-  headerActions: ["unbilled", "refresh", "dashboard", "createDraft"],
+  headerActions: ["refresh", "dashboard", "createDraft"],
   createDraftLabel: "New Draft",
   emptyNoOrdersHint: "Get started by logging your first draft order.",
   accents: {

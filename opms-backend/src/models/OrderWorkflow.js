@@ -25,6 +25,7 @@ import mongoose from "mongoose";
 const WORKFLOW_ROLES = [
   "super_admin",
   "sales",
+  "coordinator",
   "admin",
   "finance",
   "account",

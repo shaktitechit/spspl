@@ -554,7 +554,28 @@ async function list(query = {}, user) {
   }
 
   if (query.department && query.department !== 'all') {
-    andConditions.push({ department: String(query.department).trim().toLowerCase() });
+    const rawDept = String(query.department).trim();
+    const depts = rawDept.split(',').map((d) => d.trim()).filter(Boolean);
+    if (depts.length > 1) {
+      const orClauses = [];
+      for (const d of depts) {
+        const escaped = d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const deptRegex = new RegExp(`(^|,\\s*)${escaped}(\\s*,|$)`, 'i');
+        orClauses.push({ departments: { $in: [new RegExp(`^${escaped}$`, 'i')] } });
+        orClauses.push({ department: { $regex: deptRegex } });
+      }
+      andConditions.push({ $or: orClauses });
+    } else if (depts.length === 1) {
+      const escaped = depts[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const deptRegex = new RegExp(`(^|,\\s*)${escaped}(\\s*,|$)`, 'i');
+      andConditions.push({
+        $or: [
+          { departments: { $in: [new RegExp(`^${escaped}$`, 'i')] } },
+          { department: { $regex: deptRegex } },
+          { department: { $regex: new RegExp(escaped, 'i') } },
+        ],
+      });
+    }
   }
 
   if (query.status && query.status !== 'all') {
@@ -697,9 +718,16 @@ async function create(body, user) {
   const { Lead } = getModels();
 
   const canManageAll = isLeadAdmin(user);
-  const department = body.department
-    ? String(body.department).trim().toLowerCase()
-    : (user.department ? String(user.department).trim().toLowerCase() : 'sales');
+  let departments = [];
+  if (Array.isArray(body.departments) && body.departments.length > 0) {
+    departments = body.departments.map((d) => String(d).trim()).filter(Boolean);
+  } else if (body.department) {
+    departments = String(body.department).split(',').map((d) => d.trim()).filter(Boolean);
+  }
+
+  const department = departments.length > 0
+    ? departments.join(', ')
+    : (body.department ? String(body.department).trim() : 'UPS/Batteries');
 
   let assigned_to = undefined;
   let assigned_users = [];
@@ -758,6 +786,7 @@ async function create(body, user) {
         source: String(body.source).trim(),
         source_id: body.source_id || undefined,
         department,
+        departments,
         status,
         priority: body.priority || 'medium',
         assigned_to,
@@ -851,6 +880,7 @@ async function update(id, body, user) {
     'tags',
     'qualification',
     'department',
+    'departments',
     'assigned_users',
   ];
 
@@ -868,7 +898,18 @@ async function update(id, body, user) {
   for (const field of allowedUpdates) {
     if (body[field] !== undefined) {
       if (field === 'department') {
-        lead.department = String(body.department).trim().toLowerCase();
+        lead.department = String(body.department).trim();
+        if (body.departments === undefined) {
+          lead.departments = lead.department ? lead.department.split(',').map((d) => d.trim()).filter(Boolean) : [];
+        }
+      } else if (field === 'departments') {
+        const rawDepts = Array.isArray(body.departments)
+          ? body.departments.map((d) => String(d).trim()).filter(Boolean)
+          : (body.departments ? String(body.departments).split(',').map((d) => d.trim()).filter(Boolean) : []);
+        lead.departments = rawDepts;
+        if (rawDepts.length > 0 && body.department === undefined) {
+          lead.department = rawDepts.join(', ');
+        }
       } else if (field === 'assigned_users') {
         const rawUsers = Array.isArray(body.assigned_users) ? body.assigned_users.filter(Boolean).map(String) : [];
         lead.assigned_users = rawUsers;
@@ -1698,7 +1739,12 @@ async function bulkCreate(body, user) {
           requirement: item.requirement ? String(item.requirement).trim() : '',
           estimated_value: Number(item.estimated_value || 0),
           source,
-          department: item.department ? String(item.department).trim().toLowerCase() : (user.department ? String(user.department).trim().toLowerCase() : 'sales'),
+          department: item.departments && Array.isArray(item.departments)
+            ? item.departments.join(', ')
+            : (item.department ? String(item.department).trim() : 'UPS/Batteries'),
+          departments: Array.isArray(item.departments) && item.departments.length > 0
+            ? item.departments.map((d) => String(d).trim()).filter(Boolean)
+            : (item.department ? String(item.department).split(',').map((d) => d.trim()).filter(Boolean) : ['UPS/Batteries']),
           status,
           priority,
           assigned_to,

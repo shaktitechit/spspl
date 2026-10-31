@@ -130,7 +130,8 @@ const leadSchema = new mongoose.Schema(
       index: true,
     },
 
-    department: { type: String, trim: true, default: "sales", index: true },
+    department: { type: String, trim: true, default: "UPS/Batteries", index: true },
+    departments: [{ type: String, trim: true }],
     assigned_to: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
     assigned_users: [{ type: mongoose.Schema.Types.ObjectId, ref: "User", index: true }],
     assigned_by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

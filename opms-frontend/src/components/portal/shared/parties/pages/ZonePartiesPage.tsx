@@ -4,6 +4,8 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/toast";
 import {
+  type ZoneRecord,
+  useListZonesQuery,
   useGetZonePartiesQuery,
   useAssociateZonePartiesMutation,
   useGetZoneSalesPersonsQuery,
@@ -13,6 +15,13 @@ import {
 } from "@/store/api";
 import { PortalBusyOverlay } from "@/components/portal/shared/shell/PortalBusyOverlay";
 import { ArrowLeft, Search, Plus, Trash2, Check, MapPin, Users, UserPlus } from "lucide-react";
+
+function extractId(val: any): string {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "object" && val._id) return String(val._id);
+  return String(val);
+}
 
 export type ZonePartiesPageProps = {
   portalHome?: string;
@@ -25,6 +34,98 @@ export default function ZonePartiesPage({
   const searchParams = useSearchParams();
   const zoneId = searchParams.get("zoneId") || "";
   const zoneName = searchParams.get("zoneName") || "Zone";
+
+  // Fetch all zones to resolve cross-zone mappings for parties and sales assignees
+  const { data: allZonesData } = useListZonesQuery({
+    limit: 1000,
+  });
+
+  const allZones = useMemo(() => {
+    return Array.isArray(allZonesData?.data) ? (allZonesData.data as ZoneRecord[]) : [];
+  }, [allZonesData]);
+
+  // Mapping of Party ID -> other zones it belongs to (excluding this zone)
+  const partyToOtherZonesMap = useMemo(() => {
+    const map = new Map<string, { _id: string; name: string }[]>();
+    for (const z of allZones) {
+      if (!z?._id || !z?.name) continue;
+      const zId = String(z._id);
+      if (zId === String(zoneId)) continue;
+
+      const zoneInfo = { _id: zId, name: z.name };
+      for (const p of z.parties || []) {
+        const pid = extractId(p);
+        if (!pid) continue;
+        const list = map.get(pid);
+        if (list) {
+          if (!list.some((existing) => existing._id === zId)) {
+            list.push(zoneInfo);
+          }
+        } else {
+          map.set(pid, [zoneInfo]);
+        }
+      }
+    }
+    return map;
+  }, [allZones, zoneId]);
+
+  const getPartyOtherZones = useCallback(
+    (party: any): { _id: string; name: string }[] => {
+      if (!party) return [];
+      const pid = extractId(party);
+      const list = partyToOtherZonesMap.get(pid) ? [...partyToOtherZonesMap.get(pid)!] : [];
+
+      // Check if party has a direct zone_id pointing to another zone
+      const directZoneId = extractId(party.zone_id);
+      if (
+        directZoneId &&
+        directZoneId !== String(zoneId) &&
+        !list.some((z) => z._id === directZoneId)
+      ) {
+        const found = allZones.find((z) => String(z._id) === directZoneId);
+        if (found) {
+          list.push({ _id: String(found._id), name: found.name });
+        }
+      }
+
+      return list;
+    },
+    [partyToOtherZonesMap, allZones, zoneId]
+  );
+
+  // Mapping of User ID (Sales Person / Assignee) -> other zones it belongs to (excluding this zone)
+  const salesPersonToOtherZonesMap = useMemo(() => {
+    const map = new Map<string, { _id: string; name: string }[]>();
+    for (const z of allZones) {
+      if (!z?._id || !z?.name) continue;
+      const zId = String(z._id);
+      if (zId === String(zoneId)) continue;
+
+      const zoneInfo = { _id: zId, name: z.name };
+      for (const sp of z.sales_persons || []) {
+        const uid = extractId(sp);
+        if (!uid) continue;
+        const list = map.get(uid);
+        if (list) {
+          if (!list.some((existing) => existing._id === zId)) {
+            list.push(zoneInfo);
+          }
+        } else {
+          map.set(uid, [zoneInfo]);
+        }
+      }
+    }
+    return map;
+  }, [allZones, zoneId]);
+
+  const getSalesPersonOtherZones = useCallback(
+    (user: any): { _id: string; name: string }[] => {
+      if (!user) return [];
+      const uid = extractId(user);
+      return salesPersonToOtherZonesMap.get(uid) || [];
+    },
+    [salesPersonToOtherZonesMap]
+  );
 
   // Fetch currently associated parties
   const { data: currentParties = [], isLoading: isLoadingParties, refetch: refetchParties } = useGetZonePartiesQuery(zoneId, {
@@ -100,7 +201,7 @@ export default function ZonePartiesPage({
   const [associateParties, { isLoading: isSavingParties }] = useAssociateZonePartiesMutation();
   const [associateSalesPersons, { isLoading: isSavingSales }] = useAssociateZoneSalesPersonsMutation();
 
-  const handleAddParty = async (partyId: string) => {
+  const handleAddParty = async (partyId: string, otherZones: { _id: string; name: string }[] = []) => {
     const existingIds = currentParties.map((p: any) => p._id);
     if (existingIds.includes(partyId)) return;
 
@@ -109,7 +210,11 @@ export default function ZonePartiesPage({
         id: zoneId,
         partyIds: [...existingIds, partyId],
       }).unwrap();
-      toast.success("Party added to zone");
+      if (otherZones.length > 0) {
+        toast.success(`Party transferred from ${otherZones.map((z) => z.name).join(", ")} to ${zoneName}`);
+      } else {
+        toast.success("Party added to zone");
+      }
     } catch (err: any) {
       toast.error(err?.data?.message || "Failed to add party");
     }
@@ -128,7 +233,7 @@ export default function ZonePartiesPage({
     }
   };
 
-  const handleAddSalesPerson = async (userId: string) => {
+  const handleAddSalesPerson = async (userId: string, otherZones: { _id: string; name: string }[] = []) => {
     const existingIds = currentSalesPersons.map((u: any) => u._id);
     if (existingIds.includes(userId)) return;
 
@@ -137,7 +242,11 @@ export default function ZonePartiesPage({
         id: zoneId,
         salesPersonIds: [...existingIds, userId],
       }).unwrap();
-      toast.success("Sales person assigned to zone");
+      if (otherZones.length > 0) {
+        toast.success(`Sales person assigned to ${zoneName} (also in ${otherZones.map((z) => z.name).join(", ")})`);
+      } else {
+        toast.success("Sales person assigned to zone");
+      }
     } catch (err: any) {
       toast.error(err?.data?.message || "Failed to assign sales person");
     }
@@ -204,25 +313,44 @@ export default function ZonePartiesPage({
                   No parties are currently mapped to this zone.
                 </div>
               ) : (
-                currentParties.map((p: any) => (
-                  <div key={p._id} className="flex items-center justify-between p-3.5 hover:bg-slate-55/50 dark:hover:bg-white/[0.01]">
-                    <div className="min-w-0 pr-4">
-                      <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
-                        {p.party_name}
-                      </p>
-                      <p className="text-2xs text-slate-400 truncate">
-                        Type: {p.party_type} | Location: {p.district ? `${p.district}, ` : ""}{p.state || "—"}
-                      </p>
+                currentParties.map((p: any) => {
+                  const otherZones = getPartyOtherZones(p);
+                  return (
+                    <div key={p._id} className="flex items-center justify-between p-3.5 hover:bg-slate-50/50 dark:hover:bg-white/[0.01]">
+                      <div className="min-w-0 pr-4">
+                        <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
+                          {p.party_name}
+                        </p>
+                        <p className="text-2xs text-slate-400 truncate">
+                          Type: {p.party_type} | Location: {p.district ? `${p.district}, ` : ""}{p.state || "—"}
+                        </p>
+                        {otherZones.length > 0 && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            <span className="text-3xs font-medium text-amber-600 dark:text-amber-400">
+                              Also mapped to:
+                            </span>
+                            {otherZones.map((z) => (
+                              <span
+                                key={z._id}
+                                className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-3xs font-medium text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20"
+                              >
+                                <MapPin className="size-2.5" />
+                                {z.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleRemoveParty(p._id)}
+                        className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700 shadow-sm transition hover:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20 cursor-pointer shrink-0"
+                      >
+                        <Trash2 className="size-3" />
+                        Remove
+                      </button>
                     </div>
-                    <button
-                      onClick={() => handleRemoveParty(p._id)}
-                      className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700 shadow-sm transition hover:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20 cursor-pointer"
-                    >
-                      <Trash2 className="size-3" />
-                      Remove
-                    </button>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -253,6 +381,7 @@ export default function ZonePartiesPage({
               ) : (
                 catalogParties.map((p: any) => {
                   const isAssociated = currentPartyIds.has(p._id);
+                  const otherZones = getPartyOtherZones(p);
                   return (
                     <div key={p._id} className="flex items-center justify-between py-2">
                       <div className="min-w-0 pr-4">
@@ -262,19 +391,41 @@ export default function ZonePartiesPage({
                         <p className="text-3xs text-slate-400">
                           {p.district ? `${p.district}, ` : ""}{p.state || ""}
                         </p>
+                        {otherZones.length > 0 && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            <span className="text-3xs font-medium text-amber-600 dark:text-amber-400">
+                              Mapped to:
+                            </span>
+                            {otherZones.map((z) => (
+                              <span
+                                key={z._id}
+                                className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-3xs font-medium text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20"
+                                title={`Currently in ${z.name}`}
+                              >
+                                <MapPin className="size-2.5" />
+                                {z.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       {isAssociated ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-500 dark:bg-white/5 dark:text-slate-450">
+                        <span className="inline-flex items-center gap-1 rounded bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-500 dark:bg-white/5 dark:text-slate-450 shrink-0">
                           <Check className="size-3.5" />
                           Added
                         </span>
                       ) : (
                         <button
-                          onClick={() => handleAddParty(p._id)}
-                          className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-1 text-xs text-blue-600 shadow-sm transition hover:bg-blue-50 dark:border-blue-500/30 dark:bg-slate-900 dark:text-blue-400 dark:hover:bg-blue-500/10 cursor-pointer"
+                          onClick={() => handleAddParty(p._id, otherZones)}
+                          title={
+                            otherZones.length > 0
+                              ? `Transfer party from ${otherZones.map((z) => z.name).join(", ")} to ${zoneName}`
+                              : "Add party to zone"
+                          }
+                          className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-1 text-xs text-blue-600 shadow-sm transition hover:bg-blue-50 dark:border-blue-500/30 dark:bg-slate-900 dark:text-blue-400 dark:hover:bg-blue-500/10 cursor-pointer shrink-0"
                         >
                           <Plus className="size-3" />
-                          Add
+                          {otherZones.length > 0 ? "Transfer" : "Add"}
                         </button>
                       )}
                     </div>
@@ -303,22 +454,41 @@ export default function ZonePartiesPage({
                   No sales persons assigned to this zone yet.
                 </div>
               ) : (
-                currentSalesPersons.map((u: any) => (
-                  <div key={u._id} className="flex items-center justify-between p-3 hover:bg-slate-55/50 dark:hover:bg-white/[0.01]">
-                    <div className="min-w-0 pr-4">
-                      <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
-                        {u.name}
-                      </p>
-                      <p className="text-3xs text-slate-400 truncate">{u.email}</p>
+                currentSalesPersons.map((u: any) => {
+                  const otherZones = getSalesPersonOtherZones(u);
+                  return (
+                    <div key={u._id} className="flex items-center justify-between p-3 hover:bg-slate-50/50 dark:hover:bg-white/[0.01]">
+                      <div className="min-w-0 pr-4">
+                        <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
+                          {u.name}
+                        </p>
+                        <p className="text-3xs text-slate-400 truncate">{u.email}</p>
+                        {otherZones.length > 0 && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            <span className="text-3xs font-medium text-indigo-600 dark:text-indigo-400">
+                              Also in:
+                            </span>
+                            {otherZones.map((z) => (
+                              <span
+                                key={z._id}
+                                className="inline-flex items-center gap-0.5 rounded bg-indigo-50 px-1.5 py-0.5 text-3xs font-medium text-indigo-700 border border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20"
+                              >
+                                <MapPin className="size-2.5" />
+                                {z.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleRemoveSalesPerson(u._id)}
+                        className="text-2xs font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 hover:underline cursor-pointer shrink-0"
+                      >
+                        Unassign
+                      </button>
                     </div>
-                    <button
-                      onClick={() => handleRemoveSalesPerson(u._id)}
-                      className="text-2xs font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 hover:underline cursor-pointer"
-                    >
-                      Unassign
-                    </button>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -349,6 +519,7 @@ export default function ZonePartiesPage({
               ) : (
                 filteredSalesUsers.map((u: any) => {
                   const isAssigned = currentSalesPersonIds.has(u._id);
+                  const otherZones = getSalesPersonOtherZones(u);
                   return (
                     <div key={u._id} className="flex items-center justify-between py-2">
                       <div className="min-w-0 pr-4">
@@ -356,16 +527,37 @@ export default function ZonePartiesPage({
                           {u.name}
                         </p>
                         <p className="text-3xs text-slate-400 truncate">{u.email}</p>
+                        {otherZones.length > 0 && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            <span className="text-3xs font-medium text-indigo-600 dark:text-indigo-400">
+                              Mapped to:
+                            </span>
+                            {otherZones.map((z) => (
+                              <span
+                                key={z._id}
+                                className="inline-flex items-center gap-0.5 rounded bg-indigo-50 px-1.5 py-0.5 text-3xs font-medium text-indigo-700 border border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20"
+                              >
+                                <MapPin className="size-2.5" />
+                                {z.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       {isAssigned ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-500 dark:bg-white/5 dark:text-slate-450">
+                        <span className="inline-flex items-center gap-1 rounded bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-500 dark:bg-white/5 dark:text-slate-450 shrink-0">
                           <Check className="size-3.5" />
                           Added
                         </span>
                       ) : (
                         <button
-                          onClick={() => handleAddSalesPerson(u._id)}
-                          className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-1 text-xs text-blue-600 shadow-sm transition hover:bg-blue-50 dark:border-blue-500/30 dark:bg-slate-900 dark:text-blue-400 dark:hover:bg-blue-500/10 cursor-pointer"
+                          onClick={() => handleAddSalesPerson(u._id, otherZones)}
+                          title={
+                            otherZones.length > 0
+                              ? `Assign sales person to ${zoneName} (also in ${otherZones.map((z) => z.name).join(", ")})`
+                              : "Assign sales person to zone"
+                          }
+                          className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-1 text-xs text-blue-600 shadow-sm transition hover:bg-blue-50 dark:border-blue-500/30 dark:bg-slate-900 dark:text-blue-400 dark:hover:bg-blue-500/10 cursor-pointer shrink-0"
                         >
                           <Plus className="size-3" />
                           Add

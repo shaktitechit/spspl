@@ -45,6 +45,12 @@ import {
   readSessionFromStorage,
 } from "@/utils/authStorage";
 import { formatPlanDate, formatAuditUser, formatDateTime } from "./workPlanUtils";
+import { QuickAddPartyModal } from "@/components/portal/shared/parties/modals/QuickAddPartyModal";
+import { SearchableSelect } from "@/components/portal/shared/parties/components/SearchableSelect";
+import PartyCountryDetailModal from "@/components/portal/shared/parties/modals/PartyCountryDetailModal";
+import PartyStateDetailModal from "@/components/portal/shared/parties/modals/PartyStateDetailModal";
+import PartyCityDetailModal from "@/components/portal/shared/parties/modals/PartyCityDetailModal";
+import { toast } from "@/lib/toast";
 
 export type VisitFormModalProps = {
   open: boolean;
@@ -92,7 +98,6 @@ function hasWorkPlannerAccess(u: ExecutiveUser | any, sessionUserId?: string): b
 const PARTY_TYPE_OPTIONS: Array<{ value: WorkPlanVisitPartyType; label: string }> = [
   { value: "existing", label: "Existing Party" },
   { value: "existing_lead", label: "Existing Leads" },
-  { value: "new_party", label: "New Party" },
 ];
 
 const inputClass =
@@ -342,7 +347,6 @@ export function VisitFormModal({
         { value: "enquiry", label: "Audit Enquiry" },
         { value: "existing", label: "Existing Party" },
         { value: "existing_lead", label: "Existing Leads" },
-        { value: "new_party", label: "New Party" },
       ];
     }
     return PARTY_TYPE_OPTIONS;
@@ -358,6 +362,28 @@ export function VisitFormModal({
   const [contacts, setContacts] = useState<ContactFormItem[]>([
     { id: "c-1", contact_person: "", contact_number: "", contact_email: "" },
   ]);
+
+  // Quick Add Party Modal state & handlers
+  const [quickPartyModalOpen, setQuickPartyModalOpen] = useState(false);
+  const [quickPartyInitialName, setQuickPartyInitialName] = useState("");
+
+  const openQuickPartyModal = (initialName = "") => {
+    setQuickPartyInitialName(initialName);
+    setQuickPartyModalOpen(true);
+  };
+
+  const handlePartyCreated = (created: Record<string, unknown>) => {
+    const newParty =
+      created && typeof created === "object" && "data" in created && created.data && typeof created.data === "object"
+        ? (created.data as Record<string, unknown>)
+        : created;
+    if (!newParty) return;
+    setPartyType("existing");
+    handleSelectParty(newParty as unknown as PartyRecord);
+    setQuickPartyModalOpen(false);
+    setQuickPartyInitialName("");
+    toast.success("Party successfully created and selected!");
+  };
   const [address, setAddress] = useState("");
   const [countryId, setCountryId] = useState("");
   const [countryName, setCountryName] = useState("");
@@ -365,6 +391,71 @@ export function VisitFormModal({
   const [stateName, setStateName] = useState("");
   const [cityId, setCityId] = useState("");
   const [cityName, setCityName] = useState("");
+
+  const [countryModalOpen, setCountryModalOpen] = useState(false);
+  const [stateModalOpen, setStateModalOpen] = useState(false);
+  const [cityModalOpen, setCityModalOpen] = useState(false);
+  const [geoInitialName, setGeoInitialName] = useState("");
+
+  const handleCountryCreated = (newCountry: any) => {
+    if (!newCountry) return;
+    const cId = newCountry._id || newCountry.id || "";
+    const cName = newCountry.name || "";
+    if (cId) {
+      setCountryId(cId);
+      setCountryName(cName);
+      setStateId("");
+      setStateName("");
+      setCityId("");
+      setCityName("");
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.country;
+        delete next.state;
+        delete next.city;
+        return next;
+      });
+    }
+    setCountryModalOpen(false);
+    setGeoInitialName("");
+  };
+
+  const handleStateCreated = (newState: any) => {
+    if (!newState) return;
+    const sId = newState._id || newState.id || "";
+    const sName = newState.name || "";
+    if (sId) {
+      setStateId(sId);
+      setStateName(sName);
+      setCityId("");
+      setCityName("");
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.state;
+        delete next.city;
+        return next;
+      });
+    }
+    setStateModalOpen(false);
+    setGeoInitialName("");
+  };
+
+  const handleCityCreated = (newCity: any) => {
+    if (!newCity) return;
+    const ciId = newCity._id || newCity.id || "";
+    const ciName = newCity.name || "";
+    if (ciId) {
+      setCityId(ciId);
+      setCityName(ciName);
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.city;
+        return next;
+      });
+    }
+    setCityModalOpen(false);
+    setGeoInitialName("");
+  };
   const [purpose, setPurpose] = useState("");
   const [notes, setNotes] = useState("");
   const [managerRemarks, setManagerRemarks] = useState("");
@@ -453,32 +544,73 @@ export function VisitFormModal({
     { skip: !open || !stateId }
   );
 
+  // Options for SearchableSelect
+  const countryOptions = useMemo(() => {
+    return countriesData.map((c) => ({
+      id: c._id || c.id || "",
+      name: c.name,
+      sublabel: c.iso_code || undefined,
+    }));
+  }, [countriesData]);
+
+  const stateOptions = useMemo(() => {
+    return statesData.map((s) => ({
+      id: s._id || s.id || "",
+      name: s.name,
+      sublabel: s.code || undefined,
+    }));
+  }, [statesData]);
+
+  const cityOptions = useMemo(() => {
+    return citiesData.map((ci) => {
+      const id = ci._id || ci.id || "";
+      const isSuggested =
+        filterCityIds.includes(id) ||
+        filterCityNames.some(
+          (n) => n.toLowerCase().trim() === ci.name.toLowerCase().trim()
+        );
+      return {
+        id,
+        name: ci.name,
+        sublabel: isSuggested ? "Suggested (Plan City)" : undefined,
+      };
+    });
+  }, [citiesData, filterCityIds, filterCityNames]);
+
   // Auto-select India by default if no country selected
   useEffect(() => {
     if (!countryId && countriesData.length > 0) {
+      const targetCountry = defaultCountryName || countryName || "India";
       const india = countriesData.find(
         (c) =>
-          c.name.trim().toLowerCase() === "india" ||
-          c.iso_code?.toUpperCase() === "IN"
+          c.name.trim().toLowerCase() === targetCountry.trim().toLowerCase() ||
+          (targetCountry.trim().toLowerCase() === "india" && c.iso_code?.toUpperCase() === "IN")
       );
       if (india) {
         setCountryId(india._id || india.id || "");
         setCountryName(india.name);
       }
     }
-  }, [countriesData, countryId]);
+  }, [countriesData, countryId, defaultCountryName, countryName]);
 
-  // Match state name to state ID if set by text from Party or Lead
+  // Match state name to state ID, or auto-select Punjab if country is India
   useEffect(() => {
-    if (stateName && !stateId && statesData.length > 0) {
-      const sMatch = statesData.find(
-        (s) => s.name.trim().toLowerCase() === stateName.trim().toLowerCase()
-      );
-      if (sMatch) {
-        setStateId(sMatch._id || sMatch.id || "");
+    if (statesData.length > 0 && !stateId) {
+      const targetStateName =
+        stateName ||
+        defaultStateName ||
+        (!countryName || countryName.trim().toLowerCase() === "india" ? "Punjab" : "");
+      if (targetStateName) {
+        const sMatch = statesData.find(
+          (s) => s.name.trim().toLowerCase() === targetStateName.trim().toLowerCase()
+        );
+        if (sMatch) {
+          setStateId(sMatch._id || sMatch.id || "");
+          setStateName(sMatch.name);
+        }
       }
     }
-  }, [statesData, stateName, stateId]);
+  }, [statesData, stateId, stateName, defaultStateName, countryName]);
 
   // If stateId is set but does not belong to the currently loaded states for this country, clear it
   useEffect(() => {
@@ -595,7 +727,9 @@ export function VisitFormModal({
       setCityFilterSearch("");
 
       if (initial) {
-        setPartyType(initial.party_type || (isPowerAudit ? "facility" : "existing"));
+        setPartyType(
+          initial.party_type === "new_party" ? "existing" : (initial.party_type || (isPowerAudit ? "facility" : "existing"))
+        );
         const pId =
           typeof initial.party === "object" && initial.party
             ? initial.party._id || (initial.party as { id?: string }).id
@@ -654,9 +788,9 @@ export function VisitFormModal({
         setContacts([{ id: "c-1", contact_person: "", contact_number: "", contact_email: "" }]);
         setAddress("");
         setCountryId(defaultCountryId || "");
-        setCountryName(defaultCountryName || "");
+        setCountryName(defaultCountryName || "India");
         setStateId(defaultStateId || "");
-        setStateName(defaultStateName || "");
+        setStateName(defaultStateName || "Punjab");
         setCityId(defaultCityId || "");
         setCityName(defaultCityName || "");
         setPurpose("");
@@ -938,10 +1072,6 @@ export function VisitFormModal({
 
   function handlePartyTypeChange(nextType: WorkPlanVisitPartyType) {
     setPartyType(nextType);
-    if (nextType === "new_party") {
-      setSelectedPartyId("");
-      setSelectedLeadId("");
-    }
     if (nextType === "existing" || nextType === "facility") {
       setSelectedLeadId("");
     }
@@ -1012,10 +1142,10 @@ export function VisitFormModal({
         ? "Enquiry name is required"
         : isExistingLead
         ? "Lead / company name is required"
-        : "Party/Company name is required";
+        : "Party / Company name is required";
     }
     if (isExistingParty && !selectedPartyId) {
-      errs.partyName = "Select an existing party from the list";
+      errs.partyName = "Select an existing party from the list or click '+ Quick Add Party'";
     }
     if (isFacility && !selectedPartyId) {
       errs.partyName = "Select a facility from the search list";
@@ -1324,9 +1454,23 @@ export function VisitFormModal({
 
           {isExistingType ? (
             <div className="relative space-y-1.5" ref={dropdownRef}>
-              <label className={labelClass}>
-                {searchLabel} <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className={labelClass}>
+                  {searchLabel} <span className="text-rose-500">*</span>
+                </label>
+                {isExistingParty && (
+                  <button
+                    type="button"
+                    onClick={() => openQuickPartyModal(partySearch || (selectedPartyId ? "" : partyName) || "")}
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:text-primary-hover transition cursor-pointer"
+                    title="Quick add a new party to Party Master"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>+ Quick Add Party</span>
+                  </button>
+                )}
+              </div>
 
               {isExistingLead && !assignedExecutiveId ? (
                 <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs text-blue-800">
@@ -1589,7 +1733,7 @@ export function VisitFormModal({
                   ) : isFacility ? (
                     facilitiesData.length === 0 ? (
                       <div className="p-3 text-center text-xs text-muted">
-                        No audit facilities found. You can switch to &quot;New Party&quot; to add manually.
+                        No audit facilities found.
                       </div>
                     ) : (
                       facilitiesData.map((facility: PowerFacility) => {
@@ -1656,7 +1800,7 @@ export function VisitFormModal({
                   ) : isEnquiry ? (
                     enquiriesData.length === 0 ? (
                       <div className="p-3 text-center text-xs text-muted">
-                        No audit enquiries found. You can switch to &quot;New Party&quot; to add manually.
+                        No audit enquiries found.
                       </div>
                     ) : (
                       enquiriesData.map((enquiry: PowerEnquiry) => {
@@ -1718,7 +1862,7 @@ export function VisitFormModal({
                   ) : isExistingLead ? (
                     leadsData.length === 0 ? (
                       <div className="p-3 text-center text-xs text-muted">
-                        No leads found. You can switch to &quot;New Party&quot; to add manually.
+                        No leads found.
                       </div>
                     ) : (
                       leadsData.map((lead: LeadRecord) => {
@@ -1757,98 +1901,107 @@ export function VisitFormModal({
                       })
                     )
                   ) : filteredParties.length === 0 ? (
-                    <div className="p-3 text-center text-xs text-muted space-y-1.5">
-                      <div>
+                    <div className="p-4 text-center text-xs text-muted space-y-2.5">
+                      <div className="font-medium text-foreground">
                         No parties found
+                        {partySearch.trim() ? ` matching "${partySearch.trim()}"` : ""}
                         {filterCityNames.length > 0
-                          ? ` in selected cities (${filterCityNames.join(", ")})`
+                          ? ` in ${filterCityNames.join(", ")}`
                           : ""}
                         .
                       </div>
                       {filterCityNames.length > 0 && (
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFilterCityIds([]);
+                              setFilterCityNames([]);
+                            }}
+                            className="text-xs text-primary font-semibold hover:underline cursor-pointer"
+                          >
+                            Clear city filters to show all parties in {stateName || "State"}
+                          </button>
+                        </div>
+                      )}
+                      <div className="pt-1 flex flex-col items-center gap-1.5">
+                        <p className="text-[11px] text-muted">
+                          Can&apos;t find this party in Party Master?
+                        </p>
                         <button
                           type="button"
-                          onClick={() => {
-                            setFilterCityIds([]);
-                            setFilterCityNames([]);
-                          }}
-                          className="text-xs text-primary font-semibold hover:underline cursor-pointer"
+                          onClick={() => openQuickPartyModal(partySearch || (selectedPartyId ? "" : partyName) || "")}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary-hover active:scale-95 transition cursor-pointer shadow-xs"
                         >
-                          Clear city filters to show all parties in {stateName || "State"}
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>Quick Add {partySearch ? `"${partySearch}"` : "Party"} to Master</span>
                         </button>
-                      )}
-                      <div>
-                        Or switch to &quot;New Party&quot; to add a new client manually.
                       </div>
                     </div>
                   ) : (
-                    filteredParties.map((party: PartyRecord) => {
-                      const pId = party._id || party.id || "";
-                      const isSelected = selectedPartyId === pId;
-                      const partyCity =
-                        party.city ||
-                        (party.billing_address as any)?.city ||
-                        (party.shipping_address as any)?.city ||
-                        party.district;
-                      return (
-                        <div
-                          key={pId}
-                          onClick={() => handleSelectParty(party)}
-                          className={`flex cursor-pointer items-start justify-between border-b border-border/50 p-2.5 text-xs hover:bg-surface-muted transition ${
-                            isSelected ? "bg-primary/10" : ""
-                          }`}
-                        >
-                          <div className="space-y-0.5 min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-semibold text-foreground truncate">
-                                {party.party_name}
-                              </span>
-                              {partyCity && (
-                                <span className="inline-flex items-center rounded bg-primary/10 px-1.5 py-0.2 text-[10px] font-medium text-primary">
-                                  {partyCity}
+                    <div>
+                      {filteredParties.map((party: PartyRecord) => {
+                        const pId = party._id || party.id || "";
+                        const isSelected = selectedPartyId === pId;
+                        const partyCity =
+                          party.city ||
+                          (party.billing_address as any)?.city ||
+                          (party.shipping_address as any)?.city ||
+                          party.district;
+                        return (
+                          <div
+                            key={pId}
+                            onClick={() => handleSelectParty(party)}
+                            className={`flex cursor-pointer items-start justify-between border-b border-border/50 p-2.5 text-xs hover:bg-surface-muted transition ${
+                              isSelected ? "bg-primary/10" : ""
+                            }`}
+                          >
+                            <div className="space-y-0.5 min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-semibold text-foreground truncate">
+                                  {party.party_name}
                                 </span>
-                              )}
+                                {partyCity && (
+                                  <span className="inline-flex items-center rounded bg-primary/10 px-1.5 py-0.2 text-[10px] font-medium text-primary">
+                                    {partyCity}
+                                  </span>
+                                )}
+                              </div>
+                              {party.contact_person ? (
+                                <div className="text-muted text-[11px] truncate">
+                                  {party.contact_person}
+                                  {party.mobile ? ` • ${party.mobile}` : ""}
+                                </div>
+                              ) : null}
+                              {formatPartyAddress(party) ? (
+                                <div className="text-muted/80 text-[11px] truncate">
+                                  {formatPartyAddress(party)}
+                                </div>
+                              ) : null}
                             </div>
-                            {party.contact_person ? (
-                              <div className="text-muted text-[11px] truncate">
-                                {party.contact_person}
-                                {party.mobile ? ` • ${party.mobile}` : ""}
-                              </div>
-                            ) : null}
-                            {formatPartyAddress(party) ? (
-                              <div className="text-muted/80 text-[11px] truncate">
-                                {formatPartyAddress(party)}
-                              </div>
-                            ) : null}
+                            {isSelected && (
+                              <Check className="h-4 w-4 text-primary shrink-0 ml-2 mt-0.5" />
+                            )}
                           </div>
-                          {isSelected && (
-                            <Check className="h-4 w-4 text-primary shrink-0 ml-2 mt-0.5" />
-                          )}
-                        </div>
-                      );
-                    })
+                        );
+                      })}
+                      <div className="sticky bottom-0 border-t border-border bg-surface-muted/95 backdrop-blur-xs px-3 py-2 flex items-center justify-between">
+                        <span className="text-[11px] text-muted">Can&apos;t find the party?</span>
+                        <button
+                          type="button"
+                          onClick={() => openQuickPartyModal(partySearch || "")}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline cursor-pointer"
+                        >
+                          <Plus className="h-3 w-3" />
+                          <span>+ Quick Add Party</span>
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
             </div>
-          ) : (
-            <div>
-              <label className={labelClass}>
-                Party / Company Name <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={partyName}
-                onChange={(e) => setPartyName(e.target.value)}
-                placeholder="e.g. Apex Health Systems"
-                disabled={isSaving}
-                className={inputClass}
-              />
-              {errors.partyName && (
-                <p className="mt-1 text-xs text-rose-500">{errors.partyName}</p>
-              )}
-            </div>
-          )}
+          ) : null}
 
           {/* Contacts Section */}
           <div className="space-y-3 rounded-xl border border-border bg-surface-muted/40 p-3.5">
@@ -1999,147 +2152,101 @@ export function VisitFormModal({
 
             {/* Country / State / City 3-column selector */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className={labelClass}>
-                  Country <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={countryId}
-                  onChange={(e) => {
-                    const cId = e.target.value;
-                    setCountryId(cId);
-                    const found = countriesData.find((c) => c._id === cId || c.id === cId);
-                    setCountryName(found?.name || "");
-                    setStateId("");
-                    setStateName("");
-                    setCityId("");
-                    setCityName("");
-                    setErrors((prev) => {
-                      const next = { ...prev };
-                      delete next.country;
-                      delete next.state;
-                      delete next.city;
-                      return next;
-                    });
-                  }}
-                  disabled={isSaving || isCountriesLoading}
-                  className={`${inputClass} ${
-                    errors.country ? "border-rose-500 focus:border-rose-500 focus:ring-rose-500/20" : ""
-                  }`}
-                >
-                  <option value="">
-                    {isCountriesLoading ? "Loading countries..." : "Select Country"}
-                  </option>
-                  {countriesData.map((c) => {
-                    const id = c._id || c.id || "";
-                    return (
-                      <option key={id} value={id}>
-                        {c.name}
-                      </option>
-                    );
-                  })}
-                </select>
-                {errors.country && (
-                  <p className="mt-1 text-[11px] text-rose-500">{errors.country}</p>
-                )}
-              </div>
+              <SearchableSelect
+                label="Country"
+                required
+                options={countryOptions}
+                valueId={countryId}
+                valueName={countryName}
+                placeholder="Select Country"
+                searchPlaceholder="Search country..."
+                disabled={isSaving}
+                isLoading={isCountriesLoading}
+                loadingText="Loading countries..."
+                error={errors.country}
+                quickAddLabel="Quick Add Country"
+                onQuickAdd={(q) => {
+                  setGeoInitialName(q || "");
+                  setCountryModalOpen(true);
+                }}
+                onSelect={(opt) => {
+                  const cId = opt?.id || "";
+                  setCountryId(cId);
+                  setCountryName(opt?.name || "");
+                  setStateId("");
+                  setStateName("");
+                  setCityId("");
+                  setCityName("");
+                  setErrors((prev) => {
+                    const next = { ...prev };
+                    delete next.country;
+                    delete next.state;
+                    delete next.city;
+                    return next;
+                  });
+                }}
+              />
 
-              <div>
-                <label className={labelClass}>
-                  State / Province <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={stateId}
-                  onChange={(e) => {
-                    const sId = e.target.value;
-                    setStateId(sId);
-                    const found = statesData.find((s) => s._id === sId || s.id === sId);
-                    setStateName(found?.name || "");
-                    setCityId("");
-                    setCityName("");
-                    setErrors((prev) => {
-                      const next = { ...prev };
-                      delete next.state;
-                      delete next.city;
-                      return next;
-                    });
-                  }}
-                  disabled={isSaving || !countryId || isStatesLoading}
-                  className={`${inputClass} ${
-                    errors.state ? "border-rose-500 focus:border-rose-500 focus:ring-rose-500/20" : ""
-                  }`}
-                >
-                  <option value="">
-                    {!countryId
-                      ? "Select Country first"
-                      : isStatesLoading
-                      ? "Loading states..."
-                      : "Select State"}
-                  </option>
-                  {countryId &&
-                    statesData.map((s) => {
-                      const id = s._id || s.id || "";
-                      return (
-                        <option key={id} value={id}>
-                          {s.name}
-                        </option>
-                      );
-                    })}
-                </select>
-                {errors.state && (
-                  <p className="mt-1 text-[11px] text-rose-500">{errors.state}</p>
-                )}
-              </div>
+              <SearchableSelect
+                label="State / Province"
+                required
+                options={stateOptions}
+                valueId={stateId}
+                valueName={stateName}
+                placeholder={!countryId ? "Select Country first" : "Select State"}
+                searchPlaceholder="Search state..."
+                disabled={isSaving || !countryId}
+                isLoading={isStatesLoading}
+                loadingText="Loading states..."
+                error={errors.state}
+                quickAddLabel="Quick Add State"
+                onQuickAdd={(q) => {
+                  setGeoInitialName(q || "");
+                  setStateModalOpen(true);
+                }}
+                onSelect={(opt) => {
+                  const sId = opt?.id || "";
+                  setStateId(sId);
+                  setStateName(opt?.name || "");
+                  setCityId("");
+                  setCityName("");
+                  setErrors((prev) => {
+                    const next = { ...prev };
+                    delete next.state;
+                    delete next.city;
+                    return next;
+                  });
+                }}
+              />
 
-              <div>
-                <label className={labelClass}>
-                  City / District <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={cityId}
-                  onChange={(e) => {
-                    const ciId = e.target.value;
-                    setCityId(ciId);
-                    const found = citiesData.find((ci) => ci._id === ciId || ci.id === ciId);
-                    setCityName(found?.name || "");
-                    setErrors((prev) => {
-                      const next = { ...prev };
-                      delete next.city;
-                      return next;
-                    });
-                  }}
-                  disabled={isSaving || !stateId || isCitiesLoading}
-                  className={`${inputClass} ${
-                    errors.city ? "border-rose-500 focus:border-rose-500 focus:ring-rose-500/20" : ""
-                  }`}
-                >
-                  <option value="">
-                    {!stateId
-                      ? "Select State first"
-                      : isCitiesLoading
-                      ? "Loading cities..."
-                      : "Select City"}
-                  </option>
-                  {stateId &&
-                    citiesData.map((ci) => {
-                      const id = ci._id || ci.id || "";
-                      const isSuggested =
-                        filterCityIds.includes(id) ||
-                        filterCityNames.some(
-                          (n) => n.toLowerCase().trim() === ci.name.toLowerCase().trim()
-                        );
-                      return (
-                        <option key={id} value={id}>
-                          {ci.name}
-                          {isSuggested ? " ★ (Plan City)" : ""}
-                        </option>
-                      );
-                    })}
-                </select>
-                {errors.city && (
-                  <p className="mt-1 text-[11px] text-rose-500">{errors.city}</p>
-                )}
-              </div>
+              <SearchableSelect
+                label="City / District"
+                required
+                options={cityOptions}
+                valueId={cityId}
+                valueName={cityName}
+                placeholder={!stateId ? "Select State first" : "Select City"}
+                searchPlaceholder="Search city..."
+                disabled={isSaving || !stateId}
+                isLoading={isCitiesLoading}
+                loadingText="Loading cities..."
+                error={errors.city}
+                quickAddLabel="Quick Add City"
+                onQuickAdd={(q) => {
+                  setGeoInitialName(q || "");
+                  setCityModalOpen(true);
+                }}
+                onSelect={(opt) => {
+                  const ciId = opt?.id || "";
+                  setCityId(ciId);
+                  setCityName(opt?.name || "");
+                  setErrors((prev) => {
+                    const next = { ...prev };
+                    delete next.city;
+                    return next;
+                  });
+                }}
+              />
             </div>
 
             {/* Street Address and GSTIN */}
@@ -2237,6 +2344,66 @@ export function VisitFormModal({
           </button>
         </div>
       </div>
+
+      {/* Quick Add Party Modal */}
+      <QuickAddPartyModal
+        open={quickPartyModalOpen}
+        initialName={quickPartyInitialName}
+        defaultPartyType="visits"
+        portalHome="Work Planner"
+        onClose={() => {
+          setQuickPartyModalOpen(false);
+          setQuickPartyInitialName("");
+        }}
+        onSuccess={handlePartyCreated}
+      />
+
+      {/* Quick Add Country Modal */}
+      {countryModalOpen && (
+        <PartyCountryDetailModal
+          open={countryModalOpen}
+          create={true}
+          initialName={geoInitialName}
+          onClose={() => {
+            setCountryModalOpen(false);
+            setGeoInitialName("");
+          }}
+          onSuccess={handleCountryCreated}
+        />
+      )}
+
+      {/* Quick Add State Modal */}
+      {stateModalOpen && (
+        <PartyStateDetailModal
+          open={stateModalOpen}
+          create={true}
+          initialName={geoInitialName}
+          defaultCountryId={countryId}
+          defaultCountryName={countryName}
+          onClose={() => {
+            setStateModalOpen(false);
+            setGeoInitialName("");
+          }}
+          onSuccess={handleStateCreated}
+        />
+      )}
+
+      {/* Quick Add City Modal */}
+      {cityModalOpen && (
+        <PartyCityDetailModal
+          open={cityModalOpen}
+          create={true}
+          initialName={geoInitialName}
+          defaultCountryId={countryId}
+          defaultStateId={stateId}
+          defaultStateName={stateName}
+          onClose={() => {
+            setCityModalOpen(false);
+            setGeoInitialName("");
+          }}
+          onSuccess={handleCityCreated}
+        />
+      )}
     </div>
   );
 }

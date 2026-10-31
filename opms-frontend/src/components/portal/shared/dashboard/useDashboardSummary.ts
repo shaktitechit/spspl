@@ -12,9 +12,9 @@ import {
 const EMPTY_ORDERS: never[] = [];
 
 /** Period controls plus the aggregated dashboard payload for that period. */
-export function useDashboardSummary() {
+export function useDashboardSummary(defaultDateFilter: string = "all") {
   const [yearSource, setYearSource] = useState<number[] | undefined>(undefined);
-  const period = usePeriodFilter(EMPTY_ORDERS, yearSource);
+  const period = usePeriodFilter(EMPTY_ORDERS, yearSource, defaultDateFilter);
   const {
     dataType,
     dateFilter,

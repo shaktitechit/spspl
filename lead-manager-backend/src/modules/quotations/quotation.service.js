@@ -808,6 +808,30 @@ async function listAll(query = {}, user) {
   if (query.lead) {
     filter.lead = query.lead;
   }
+  if (query.department && query.department !== 'all') {
+    const rawDept = String(query.department).trim();
+    const depts = rawDept.split(',').map((d) => d.trim()).filter(Boolean);
+    if (depts.length > 1) {
+      const orClauses = [];
+      for (const d of depts) {
+        const escaped = d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const deptRegex = new RegExp(`(^|,\\s*)${escaped}(\\s*,|$)`, 'i');
+        orClauses.push({ departments: { $in: [new RegExp(`^${escaped}$`, 'i')] } });
+        orClauses.push({ department: { $regex: deptRegex } });
+      }
+      conditions.push({ $or: orClauses });
+    } else if (depts.length === 1) {
+      const escaped = depts[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const deptRegex = new RegExp(`(^|,\\s*)${escaped}(\\s*,|$)`, 'i');
+      conditions.push({
+        $or: [
+          { departments: { $in: [new RegExp(`^${escaped}$`, 'i')] } },
+          { department: { $regex: deptRegex } },
+          { department: { $regex: new RegExp(escaped, 'i') } },
+        ],
+      });
+    }
+  }
   if (query.status) {
     const statusParam = String(query.status).trim();
     if (statusParam === 'in_negotiation' || statusParam === 'active_pipeline' || statusParam === 'quoted') {
@@ -973,12 +997,26 @@ async function create(leadIdOrBody, bodyOrUser, userParam) {
 
   const defaultTerms = await getDefaultTerms();
 
+  let departments = [];
+  if (Array.isArray(body.departments) && body.departments.length > 0) {
+    departments = body.departments.map((d) => String(d).trim()).filter(Boolean);
+  } else if (body.department) {
+    departments = String(body.department).split(',').map((d) => d.trim()).filter(Boolean);
+  } else if (lead && (lead.departments?.length > 0 || lead.department)) {
+    departments = Array.isArray(lead.departments) && lead.departments.length > 0
+      ? lead.departments.filter(Boolean)
+      : String(lead.department).split(',').map((d) => d.trim()).filter(Boolean);
+  }
+  const department = departments.length > 0 ? departments.join(', ') : (body.department ? String(body.department).trim() : 'UPS/Batteries');
+
   const quotationPayload = {
     quotation_no: quotationNo,
     ref_no: refNo,
     customer_ref: body.customer_ref || body.customerRef || '',
     lead: lead ? lead._id : null,
     party_id: body.party_id || (lead ? (lead.party_id || null) : null),
+    department,
+    departments,
     quotation_date: quotationDate,
     valid_until: validUntil,
     validity_days: validityDays,
@@ -1183,6 +1221,8 @@ function buildRevisionSnapshot(quotation, user, changeSummary) {
     sales_person_designation: quotation.sales_person_designation || '',
     sales_person_user: quotation.sales_person_user ? (quotation.sales_person_user._id || quotation.sales_person_user) : null,
     status: quotation.status,
+    department: quotation.department || '',
+    departments: Array.isArray(quotation.departments) ? [...quotation.departments] : [],
     approval_status: quotation.approval_status || 'pending_approval',
     approved_by: quotation.approved_by ? (quotation.approved_by._id || quotation.approved_by) : null,
     approved_at: quotation.approved_at || null,
@@ -1317,6 +1357,8 @@ async function update(id, body, user) {
     'sales_person_user',
     'approval_status',
     'status',
+    'department',
+    'departments',
     'lost_reason',
     'next_follow_up_at',
     'last_follow_up_at',
@@ -1326,6 +1368,22 @@ async function update(id, body, user) {
     if (body[field] !== undefined) {
       quotation[field] = body[field];
     }
+  }
+
+  if (body.departments !== undefined) {
+    const rawDepts = Array.isArray(body.departments)
+      ? body.departments.map((d) => String(d).trim()).filter(Boolean)
+      : typeof body.departments === 'string'
+        ? body.departments.split(',').map((d) => d.trim()).filter(Boolean)
+        : [];
+    quotation.departments = rawDepts;
+    if (rawDepts.length > 0 && body.department === undefined) {
+      quotation.department = rawDepts.join(', ');
+    }
+  } else if (body.department !== undefined) {
+    const trimmed = String(body.department).trim();
+    quotation.department = trimmed;
+    quotation.departments = trimmed ? trimmed.split(',').map((d) => d.trim()).filter(Boolean) : [];
   }
 
   // If quotation content was updated, force it back to pending_approval for signatory re-approval

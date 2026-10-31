@@ -168,6 +168,7 @@ export default function CoordinatorOverview() {
 
       <FeaturedMatrixSection
         contributions={summary?.contributions}
+        salesUsersById={summary?.salesUsersById}
         isOrdersFetching={isSummaryFetching}
         externalFilterCaption={filterCaption}
         qtyBasis={qtyBasis}

@@ -19,6 +19,7 @@ const ORDER_LIFECYCLE_STATUS = Object.freeze({
 
 const ORDER_WORKFLOW_STAGE = Object.freeze({
   SALES: 'sales',
+  COORDINATOR_REVIEW: 'coordinator_review',
   ADMIN_REVIEW: 'admin_review',
   FINANCE_REVIEW: 'finance_review',
   ACCOUNT_REVIEW: 'account_review',
@@ -31,6 +32,7 @@ const ORDER_WORKFLOW_STAGE = Object.freeze({
 const ORDER_STATUS = Object.freeze({
   DRAFT: 'draft',
   SUBMITTED: 'submitted',
+  COORDINATOR_REVIEW: 'coordinator_review',
   SALES_APPROVED: 'sales_approved',
   FINANCE_REVIEW: 'finance_review',
   FINANCE_APPROVED: 'finance_approved',
@@ -41,6 +43,7 @@ const ORDER_STATUS = Object.freeze({
   DISPATCH: 'dispatch',
   IN_TRANSIT: 'in_transit',
   DELIVERED: 'delivered',
+  CLOSED: 'closed',
   CANCELLED: 'cancelled',
   ON_HOLD: 'on_hold',
 });
@@ -143,6 +146,12 @@ function alignWorkflowStagesFromStatus(doc) {
       doc.pending_with_role = 'admin';
       doc.current_department = 'admin';
       break;
+    case 'coordinator_review':
+      doc.lifecycle_status = 'active';
+      doc.workflow_stage = 'coordinator_review';
+      doc.pending_with_role = 'coordinator';
+      doc.current_department = 'coordinator';
+      break;
     case 'sales_approved':
     case 'finance_review':
       doc.lifecycle_status = 'active';
@@ -188,6 +197,7 @@ function alignWorkflowStagesFromStatus(doc) {
       doc.current_department = 'dispatch';
       break;
     case 'delivered':
+    case 'closed':
       doc.lifecycle_status = 'fulfilled';
       doc.workflow_stage = 'completed';
       doc.pending_with_role = undefined;

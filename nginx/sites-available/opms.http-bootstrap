@@ -10,9 +10,9 @@
 # Issue certs (DNS must already point here):
 #   sudo certbot certonly --webroot -w /var/www/html \
 #     -d opms.spspl.com -d app.spspl.com -d users.spspl.com -d plans.spspl.com \
-#     -d leads.spspl.com -d api-opms.spspl.com -d auth.spspl.com \
+#     -d leads.spspl.com -d expense.spspl.com -d api-opms.spspl.com -d auth.spspl.com \
 #     -d api-products.spspl.com -d api-parties.spspl.com -d api-plans.spspl.com \
-#     -d api-leads.spspl.com -d api-message.spspl.com -d api-notification.spspl.com \
+#     -d api-leads.spspl.com -d api-expense.spspl.com -d api-message.spspl.com -d api-notification.spspl.com \
 #     --cert-name opms.spspl.com
 #
 # Then switch to HTTPS:
@@ -33,6 +33,8 @@ upstream lead_manager_frontend { server 127.0.0.1:7010; keepalive 16; }
 upstream message_service       { server 127.0.0.1:7011; keepalive 32; }
 upstream notification_service  { server 127.0.0.1:7012; keepalive 32; }
 upstream app_frontend          { server 127.0.0.1:7013; keepalive 16; }
+upstream expense_backend       { server 127.0.0.1:7015; keepalive 32; }
+upstream expense_frontend      { server 127.0.0.1:7016; keepalive 16; }
 
 server {
     listen 80;
@@ -81,6 +83,16 @@ server {
     location / {
         include /etc/nginx/snippets/proxy-upgrade.conf;
         proxy_pass http://lead_manager_frontend;
+    }
+}
+
+server {
+    listen 80;
+    server_name expense.spspl.com;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/html; }
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://expense_frontend;
     }
 }
 
@@ -178,5 +190,19 @@ server {
     location / {
         include /etc/nginx/snippets/proxy-params.conf;
         proxy_pass http://notification_service;
+    }
+}
+
+server {
+    listen 80;
+    server_name api-expense.spspl.com;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/html; }
+    location ~ ^/api/notifications/stream {
+        include /etc/nginx/snippets/proxy-sse.conf;
+        proxy_pass http://expense_backend;
+    }
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://expense_backend;
     }
 }

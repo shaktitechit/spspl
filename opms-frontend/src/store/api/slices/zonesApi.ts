@@ -83,6 +83,7 @@ export const zonesApi = medicaApi.injectEndpoints({
         { type: "Parties", id: "LIST" },
         { type: "Zones", id: `${arg.id}-parties` },
         { type: "Zones", id: arg.id },
+        { type: "Zones", id: "LIST" },
       ],
     }),
     getZoneSalesPersons: build.query<any[], string>({
@@ -104,6 +105,7 @@ export const zonesApi = medicaApi.injectEndpoints({
         "Users",
         { type: "Zones", id: `${arg.id}-sales-persons` },
         { type: "Zones", id: arg.id },
+        { type: "Zones", id: "LIST" },
       ],
     }),
   }),

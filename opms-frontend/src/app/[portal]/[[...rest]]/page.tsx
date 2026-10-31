@@ -26,6 +26,7 @@ import {
   SuperAdminOrderDetail,
   SuperAdminCreateOrderPage,
   ProfilePage,
+  UnbilledOrdersPage,
 } from "@/components/portal";
 import CreateOrderPage from "@/components/portal/sales/CreateOrderPage";
 import CoordinatorCreateOrderPage from "@/components/portal/coordinator/CreateOrderPage";
@@ -134,6 +135,25 @@ export default function PortalCatchAllPage() {
 
   if (restArr.length === 0) {
     return <PortalOverview portal={portal} />;
+  }
+
+  // ── UNBILLED ORDERS ───────────────────────────────────────────────────────
+  if (restArr.length === 1 && restArr[0] === "unbilled-orders") {
+    if (
+      portal === "admin" ||
+      portal === "coordinator" ||
+      portal === "finance" ||
+      portal === "account" ||
+      portal === "super_admin"
+    ) {
+      const portalLabel = portal.charAt(0).toUpperCase() + portal.slice(1);
+      return (
+        <UnbilledOrdersPage
+          portalHome={`/${portal}`}
+          portalLabel={portalLabel}
+        />
+      );
+    }
   }
 
   // ── LEADS & QUOTATIONS (REDIRECT TO LEAD MANAGER MICRO-FRONTEND) ───────

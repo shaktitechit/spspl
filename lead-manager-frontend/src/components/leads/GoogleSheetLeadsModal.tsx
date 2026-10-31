@@ -58,6 +58,9 @@ import {
   LEAD_PRIORITY_CONFIG,
   isUserInLeadManagerPortal,
   getLeadManagerPortalRole,
+  LEAD_DEPARTMENT_OPTIONS,
+  getDeptLabel,
+  getLeadDepartments,
 } from "./leadUtils";
 import { AssignLeadModal } from "./AssignLeadModal";
 import { FollowUpModal } from "./FollowUpModal";
@@ -76,6 +79,7 @@ type LeadRow = {
   lead_no: string;
   name: string;
   company_name?: string;
+  departments?: string;
   phone?: string;
   email?: string;
   status: LeadStatus;
@@ -133,7 +137,8 @@ const COLUMNS: {
   { key: "lead_no", label: "Lead No", headerLetter: "A", readonly: true, type: "text", widthPdf: 1.2 },
   { key: "name", label: "Contact Person*", headerLetter: "B", type: "text", widthPdf: 1.4 },
   { key: "company_name", label: "Company / Clinic", headerLetter: "C", type: "text", widthPdf: 1.5 },
-  { key: "phone", label: "Phone", headerLetter: "D", type: "text", widthPdf: 1.2 },
+  { key: "departments", label: "Departments", headerLetter: "D", type: "text", widthPdf: 1.3 },
+  { key: "phone", label: "Phone", headerLetter: "E", type: "text", widthPdf: 1.2 },
   { key: "email", label: "Email", headerLetter: "E", type: "text", widthPdf: 1.5 },
   {
     key: "status",
@@ -214,6 +219,7 @@ export function GoogleSheetLeadsModal({
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState<boolean>(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterPriority, setFilterPriority] = useState<string>("all");
+  const [filterDepartment, setFilterDepartment] = useState<string>("all");
   const [filterSource, setFilterSource] = useState<string>("all");
   const [filterSalesUser, setFilterSalesUser] = useState<string>("all");
   const [filterFollowUpState, setFilterFollowUpState] = useState<string>("all");
@@ -314,6 +320,7 @@ export function GoogleSheetLeadsModal({
           lead_no: lead.lead_no || "—",
           name: lead.name || "",
           company_name: lead.company_name || "",
+          departments: getLeadDepartments(lead).map(getDeptLabel).join(", ") || (lead.department ? getDeptLabel(lead.department) : "—"),
           phone: lead.phone || "",
           email: lead.email || "",
           status: lead.status || "new",
@@ -482,6 +489,13 @@ export function GoogleSheetLeadsModal({
           };
         } else if (colKey === "products_summary") {
           patchPayload.requirement = parsedVal;
+        } else if (colKey === "departments") {
+          const depts = String(parsedVal || "")
+            .split(",")
+            .map((d) => d.trim())
+            .filter((d) => d && d !== "—");
+          patchPayload.department = depts.join(", ");
+          patchPayload.departments = depts;
         } else {
           patchPayload[colKey] = parsedVal;
         }
@@ -564,6 +578,7 @@ export function GoogleSheetLeadsModal({
     return (
       filterStatus !== "all" ||
       filterPriority !== "all" ||
+      filterDepartment !== "all" ||
       filterSource !== "all" ||
       (isSA && filterSalesUser !== "all") ||
       filterFollowUpState !== "all" ||
@@ -578,6 +593,7 @@ export function GoogleSheetLeadsModal({
   }, [
     filterStatus,
     filterPriority,
+    filterDepartment,
     filterSource,
     filterSalesUser,
     isSA,
@@ -594,6 +610,7 @@ export function GoogleSheetLeadsModal({
   const handleClearFilters = () => {
     setFilterStatus("all");
     setFilterPriority("all");
+    setFilterDepartment("all");
     setFilterSource("all");
     setFilterSalesUser("all");
     setFilterFollowUpState("all");
@@ -618,6 +635,7 @@ export function GoogleSheetLeadsModal({
           r.lead_no?.toLowerCase().includes(q) ||
           r.name?.toLowerCase().includes(q) ||
           r.company_name?.toLowerCase().includes(q) ||
+          r.departments?.toLowerCase().includes(q) ||
           r.phone?.toLowerCase().includes(q) ||
           r.email?.toLowerCase().includes(q) ||
           r.source?.toLowerCase().includes(q) ||
@@ -639,6 +657,16 @@ export function GoogleSheetLeadsModal({
     // 3. Priority Filter
     if (filterPriority !== "all") {
       rows = rows.filter((r) => r.priority === filterPriority);
+    }
+
+    // 3b. Department Filter
+    if (filterDepartment !== "all") {
+      const target = filterDepartment.toLowerCase();
+      rows = rows.filter((r) => {
+        const rawDepts = getLeadDepartments(r.raw);
+        if (rawDepts.some((d) => d.toLowerCase() === target)) return true;
+        return (r.departments || "").toLowerCase().includes(target);
+      });
     }
 
     // 4. Source Filter
@@ -768,6 +796,7 @@ export function GoogleSheetLeadsModal({
     searchQuery,
     filterStatus,
     filterPriority,
+    filterDepartment,
     filterSource,
     filterSalesUser,
     isSA,
@@ -1294,6 +1323,39 @@ export function GoogleSheetLeadsModal({
                                     ))}
                                   </select>
                                 )
+                              ) : col.key === "departments" ? (
+                                isRowConverted ? (
+                                  <div className="flex flex-wrap items-center gap-1 truncate w-full">
+                                    {row.departments && row.departments !== "—" ? (
+                                      row.departments.split(",").map((d, dIdx) => (
+                                        <span
+                                          key={dIdx}
+                                          className="rounded bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.2 text-[10px] font-semibold text-purple-700 dark:text-purple-300 whitespace-nowrap"
+                                        >
+                                          {d.trim()}
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span className="text-slate-400 font-normal">—</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    value={row.departments !== undefined && row.departments !== null && row.departments !== "—" ? String(row.departments) : ""}
+                                    placeholder="e.g. UPS/Batteries, Solar"
+                                    onChange={(e) => {
+                                      const newVal = e.target.value;
+                                      setLocalRows((prev) =>
+                                        prev.map((r) =>
+                                          r._id === row._id ? { ...r, departments: newVal } : r
+                                        )
+                                      );
+                                    }}
+                                    onBlur={(e) => saveCell(row._id, "departments", e.target.value)}
+                                    className="w-full bg-transparent border-0 px-1 py-0.5 text-xs text-slate-800 dark:text-white focus:bg-white dark:focus:bg-slate-800 rounded focus:ring-1 focus:ring-emerald-500 truncate"
+                                  />
+                                )
                               ) : col.key === "source" ? (
                                 isRowConverted ? (
                                   <span className="text-slate-700 dark:text-slate-300 truncate">
@@ -1551,6 +1613,25 @@ export function GoogleSheetLeadsModal({
                     <option value="medium">Medium</option>
                     <option value="high">High</option>
                     <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+
+                {/* Department Filter */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Department
+                  </label>
+                  <select
+                    value={filterDepartment}
+                    onChange={(e) => setFilterDepartment(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-800 shadow-sm focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  >
+                    <option value="all">All Departments</option>
+                    {LEAD_DEPARTMENT_OPTIONS.map((d) => (
+                      <option key={d.value} value={d.value}>
+                        {d.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
 

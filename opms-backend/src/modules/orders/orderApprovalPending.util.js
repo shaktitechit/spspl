@@ -309,7 +309,7 @@ async function enrichOrdersWithApprovalPending(rows, models) {
     deletedAt: null,
   })
     .select(
-      'order is_admin_approved is_finance_approved is_account_approved rejection_reason rejected_by is_due_sheet_uploaded',
+      'order is_admin_approved is_finance_approved is_account_approved rejection_reason rejected_by is_due_sheet_uploaded remarks approval_notes hold_reason createdAt',
     )
     .lean();
 
@@ -337,8 +337,16 @@ async function enrichOrdersWithApprovalPending(rows, models) {
     const docs = byOrder.get(orderKey) || [];
     // Do not require non-rejected — leftover rejection_reason must not hide the flag.
     const fromDocs = docs.some((doc) => isTruthyFlag(doc.is_due_sheet_uploaded));
+    const latestApp = docs.length > 0 ? docs[docs.length - 1] : null;
+    const approvalRemarks = latestApp
+      ? String(latestApp.rejection_reason || latestApp.hold_reason || latestApp.approval_notes || latestApp.remarks || '').trim()
+      : '';
     return {
       ...row,
+      remarks: row.remarks || approvalRemarks || row.internal_notes || undefined,
+      approval_remarks: approvalRemarks || undefined,
+      rejection_reason: latestApp?.rejection_reason || undefined,
+      hold_reason: latestApp?.hold_reason || undefined,
       approval_pending: resolveOrderApprovalPending(docs, row),
       is_due_sheet_uploaded: fromDocs || flaggedOrderIds.has(orderKey),
     };
@@ -464,7 +472,7 @@ async function enrichOrdersParallel(rows, models) {
           deletedAt: null,
         })
           .select(
-            'order is_admin_approved is_finance_approved is_account_approved rejection_reason rejected_by is_due_sheet_uploaded'
+            'order is_admin_approved is_finance_approved is_account_approved rejection_reason rejected_by is_due_sheet_uploaded remarks approval_notes hold_reason createdAt'
           )
           .lean()
       : Promise.resolve([]),
@@ -571,8 +579,17 @@ async function enrichOrdersParallel(rows, models) {
       flag_status = hasUnresolved ? 'unresolved' : 'resolved';
     }
 
+    const latestApp = appDocs.length > 0 ? appDocs[appDocs.length - 1] : null;
+    const approvalRemarks = latestApp
+      ? String(latestApp.rejection_reason || latestApp.hold_reason || latestApp.approval_notes || latestApp.remarks || '').trim()
+      : '';
+
     return {
       ...row,
+      remarks: row.remarks || approvalRemarks || row.internal_notes || undefined,
+      approval_remarks: approvalRemarks || undefined,
+      rejection_reason: latestApp?.rejection_reason || undefined,
+      hold_reason: latestApp?.hold_reason || undefined,
       approval_pending: resolveOrderApprovalPending(appDocs, row),
       is_due_sheet_uploaded: isDueSheetUploaded,
       due_sheet_uploaded: isDueSheetUploaded,

@@ -66,7 +66,7 @@ function registerModels() {
   
       department: {
         type: String,
-        enum: ["super_admin", "admin", "sales", "finance", "account", "dispatch"],
+        enum: ["super_admin", "admin", "sales", "finance", "account", "dispatch", "coordinator"],
         required: true,
       },
   
@@ -97,7 +97,7 @@ function registerModels() {
   
       department: {
         type: String,
-        enum: ["super_admin", "admin", "sales", "finance", "account", "dispatch"],
+        enum: ["super_admin", "admin", "sales", "finance", "account", "dispatch", "coordinator"],
         required: true,
       },
   
@@ -1141,6 +1141,7 @@ function registerModels() {
         enum: [
           "draft",
           "submitted",
+          "coordinator_review",
           "sales_approved",
           "finance_review",
           "finance_approved",
@@ -1176,6 +1177,7 @@ function registerModels() {
         type: String,
         enum: [
           "sales",
+          "coordinator_review",
           "admin_review",
           "finance_review",
           "account_review",
@@ -1213,12 +1215,12 @@ function registerModels() {
       assigned_sales_user: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
       current_department: {
         type: String,
-        enum: ["super_admin", "sales", "admin", "finance", "account", "dispatch"],
+        enum: ["super_admin", "sales", "coordinator", "admin", "finance", "account", "dispatch"],
         index: true,
       },
       pending_with_role: {
         type: String,
-        enum: ["super_admin", "sales", "admin", "finance", "account", "dispatch"],
+        enum: ["super_admin", "sales", "coordinator", "admin", "finance", "account", "dispatch"],
         index: true,
       },
       subtotal: { type: Number, default: 0 },
@@ -1360,7 +1362,7 @@ function registerModels() {
       action_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
       role: {
         type: String,
-        enum: ["super_admin", "sales", "admin", "finance", "account", "dispatch"],
+        enum: ["super_admin", "sales", "coordinator", "admin", "finance", "account", "dispatch"],
         required: true,
         index: true,
       },

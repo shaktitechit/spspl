@@ -19,6 +19,7 @@ export type ListQuotationsQueryParams = {
   lead?: string;
   status?: string;
   search?: string;
+  department?: string;
   page?: number;
   limit?: number;
 };

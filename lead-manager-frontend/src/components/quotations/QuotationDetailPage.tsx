@@ -91,6 +91,7 @@ import {
   isQuotationExpiringSoon,
   getQuotationExpiryInfo,
 } from "./quotationUtils";
+import { getLeadDepartments, getDeptLabel } from "@/components/leads/leadUtils";
 
 function formatTouchpointDate(dateStr?: string, timeStr?: string): string {
   if (!dateStr) return "";
@@ -260,6 +261,8 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
       sales_person_phone: snap.sales_person_phone ?? quotation.sales_person_phone,
       sales_person_email: snap.sales_person_email ?? quotation.sales_person_email,
       sales_person_user: (snap.sales_person_user as any) ?? quotation.sales_person_user,
+      department: (snap as any).department ?? quotation.department,
+      departments: (snap as any).departments ?? quotation.departments,
       bank_name: snap.bank_name ?? quotation.bank_name,
       account_name: snap.account_name ?? quotation.account_name,
       account_number: snap.account_number ?? quotation.account_number,
@@ -1536,6 +1539,29 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
                   </div>
                 )}
 
+                {/* Departments (Internal Purpose) */}
+                {(() => {
+                  const depts = getLeadDepartments(displayedQuotation as any);
+                  if (depts.length === 0) return null;
+                  return (
+                    <div className="rounded-xl bg-purple-50/60 p-3 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/30">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-400">
+                        Departments (Internal)
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {depts.map((d) => (
+                          <span
+                            key={d}
+                            className="inline-flex items-center rounded-lg bg-white px-2 py-0.5 text-xs font-bold text-purple-800 shadow-2xs ring-1 ring-purple-200 dark:bg-purple-900 dark:text-purple-200 dark:ring-purple-700"
+                          >
+                            {getDeptLabel(d)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {quotation.created_by && (
                   <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Quotation Creator</div>
@@ -1623,6 +1649,27 @@ export default function QuotationDetailPage({ quotationId, portalHome = "/dashbo
                       "Sales Executive"}
                   </div>
                 </div>
+
+                {/* Departments in Quick Details */}
+                {(() => {
+                  const depts = getLeadDepartments(displayedQuotation as any);
+                  if (depts.length === 0) return null;
+                  return (
+                    <div className="py-1 space-y-1">
+                      <span className="text-slate-500">Departments:</span>
+                      <div className="flex flex-wrap gap-1 mt-0.5">
+                        {depts.map((d) => (
+                          <span
+                            key={d}
+                            className="inline-flex items-center rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 ring-1 ring-inset ring-purple-600/20 dark:bg-purple-950/40 dark:text-purple-300 dark:ring-purple-500/30"
+                          >
+                            {getDeptLabel(d)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="pt-2 border-t border-slate-100 dark:border-white/5 flex flex-col gap-2">

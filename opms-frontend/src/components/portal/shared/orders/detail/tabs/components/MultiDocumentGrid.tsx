@@ -24,7 +24,7 @@ export type MultiDocumentGridProps = {
   onUpload: (files: File[], remarks?: string) => Promise<void>;
   onDelete: (attachmentId: string, name: string) => Promise<void>;
   onPreview: (attachment: Record<string, unknown>) => void;
-  onDownload: (fileUrl: string, fileName: string) => void;
+  onDownload: (fileUrl: string, fileName: string, fallbackId?: string) => void;
   isUploading?: boolean;
   isDeleting?: boolean;
   disabled?: boolean;
@@ -282,7 +282,10 @@ export function MultiDocumentGrid({
                     </button>
                     <button
                       type="button"
-                      onClick={() => onDownload(url, name)}
+                      onClick={() => {
+                        const docId = String(doc._id || doc.id || doc.filename || "");
+                        onDownload(url, name, docId);
+                      }}
                       className="inline-flex items-center gap-1 rounded px-2 py-1 text-2xs font-semibold text-emerald-600 transition hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
                     >
                       <Download className="h-3 w-3" />

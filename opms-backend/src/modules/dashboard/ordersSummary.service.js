@@ -447,13 +447,30 @@ async function computeOrdersSummary(query, user, buildBaseQuery, cacheKey) {
       const cell = contributionMap.get(key) || {
         productId,
         salesUserId,
+        salesUserName: salesLabel && salesLabel !== 'Unassigned' ? salesLabel : undefined,
         partyId,
+        partyName: partyLabel && partyLabel !== 'Unknown Party' ? partyLabel : undefined,
         quantity: 0,
         volume: 0,
       };
+      if (!cell.salesUserName && salesLabel && salesLabel !== 'Unassigned') {
+        cell.salesUserName = salesLabel;
+      }
+      if (!cell.partyName && partyLabel && partyLabel !== 'Unknown Party') {
+        cell.partyName = partyLabel;
+      }
       cell.quantity += qtyValue;
       cell.volume += volValue;
       contributionMap.set(key, cell);
+    }
+  }
+
+  const salesUsersById = {};
+  for (const order of details) {
+    const sId = refId(order.assigned_sales_user);
+    const sName = salesName(order.assigned_sales_user);
+    if (sId && sName && sName !== 'Unassigned') {
+      salesUsersById[sId] = sName;
     }
   }
 
@@ -468,6 +485,7 @@ async function computeOrdersSummary(query, user, buildBaseQuery, cacheKey) {
       salesUsers: rowsFromMap(salesUsers),
     },
     contributions: Array.from(contributionMap.values()),
+    salesUsersById,
   };
   summaryCache.set(cacheKey, { expires: Date.now() + SUMMARY_TTL_MS, value });
   if (summaryCache.size > 40) {

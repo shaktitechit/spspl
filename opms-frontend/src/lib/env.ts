@@ -84,23 +84,51 @@ export function resolvePublicAssetUrl(path: string): string {
 
 /**
  * Resolves a file/attachment URL to an absolute URL using the correct public API origin.
+ * Proxies direct MinIO/S3 object storage URLs via `/api/files/:id/view` so fresh presigned
+ * URLs are obtained on demand instead of failing on expired S3 links.
  */
-export function resolveFileUrl(url: string): string {
-  if (!url) return "";
+export function resolveFileUrl(url: string, fallbackId?: string): string {
+  if (!url) {
+    if (fallbackId) return `${publicApiOrigin()}/api/files/${fallbackId}/view`;
+    return "";
+  }
   try {
     if (/^https?:\/\//i.test(url)) {
       const u = new URL(url);
-      if (
+
+      const isMinioOrStorage =
         u.hostname === "localhost" ||
         u.hostname === "127.0.0.1" ||
         u.hostname === "minio" ||
+        u.hostname.includes("minio") ||
         u.hostname.startsWith("172.") ||
         u.hostname.startsWith("192.168.") ||
-        u.pathname.includes("/api/files/") ||
-        u.pathname.startsWith("/api/")
-      ) {
+        /X-Amz-/i.test(url) ||
+        u.pathname.includes("/company-files/");
+
+      if (u.pathname.includes("/api/files/") || u.pathname.startsWith("/api/")) {
         return `${publicApiOrigin()}${u.pathname}${u.search}${u.hash}`;
       }
+
+      if (isMinioOrStorage) {
+        if (fallbackId) {
+          return `${publicApiOrigin()}/api/files/${fallbackId}/view`;
+        }
+        // Extract 24-character hex Mongo ID or UUID or last path component
+        const mongoMatch = u.pathname.match(/([0-9a-fA-F]{24})/);
+        if (mongoMatch) {
+          return `${publicApiOrigin()}/api/files/${mongoMatch[1]}/view`;
+        }
+        const uuidMatch = u.pathname.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+        if (uuidMatch) {
+          return `${publicApiOrigin()}/api/files/${uuidMatch[1]}/view`;
+        }
+        const filenameMatch = u.pathname.split("/").filter(Boolean).pop();
+        if (filenameMatch) {
+          return `${publicApiOrigin()}/api/files/${filenameMatch}/view`;
+        }
+      }
+
       return url;
     }
   } catch {
@@ -115,8 +143,8 @@ export function resolveFileUrl(url: string): string {
  * so 302 redirects to MinIO/S3 presigned URLs won't include an Authorization header (which S3 rejects).
  * Direct presigned URLs (containing X-Amz-Signature) are fetched without Authorization headers.
  */
-export async function fetchFileBlob(url: string, token?: string | null): Promise<Response> {
-  let fetchUrl = resolveFileUrl(url);
+export async function fetchFileBlob(url: string, token?: string | null, fallbackId?: string): Promise<Response> {
+  let fetchUrl = resolveFileUrl(url, fallbackId);
   const headers: Record<string, string> = {};
 
   const isPresignedUrl = /X-Amz-|X-Amz-Signature|X-Amz-Credential/i.test(fetchUrl);

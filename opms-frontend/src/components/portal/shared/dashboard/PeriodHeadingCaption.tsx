@@ -1,5 +1,6 @@
 import { formatPeriodLabel } from "./periodFilterUtils";
 import { DATE_FILTER_OPTIONS } from "../orders/list/orderListDateFilter";
+import { PERIOD_DATE_FILTER_OPTIONS } from "./PeriodFilter";
 
 interface PeriodHeadingCaptionProps {
   selectedYears: number[];
@@ -24,7 +25,11 @@ export function formatPeriodCaption(
       const toStr = customDateTo || "End";
       return `${fromStr} to ${toStr}`;
     } else {
-      return DATE_FILTER_OPTIONS.find((opt) => opt.id === dateFilter)?.label ?? dateFilter;
+      return (
+        PERIOD_DATE_FILTER_OPTIONS.find((opt) => opt.id === dateFilter)?.label ??
+        DATE_FILTER_OPTIONS.find((opt) => opt.id === dateFilter)?.label ??
+        dateFilter
+      );
     }
   } else {
     return formatPeriodLabel(selectedYears, selectedMonths);

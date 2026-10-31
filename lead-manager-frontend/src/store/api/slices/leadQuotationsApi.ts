@@ -101,6 +101,8 @@ export type QuotationRevisionSnapshot = {
   saved_by?: { _id: string; name?: string; email?: string } | null;
   saved_at?: string;
   change_summary?: string;
+  department?: string;
+  departments?: string[];
 };
 
 export type QuotationVersionComparison = {
@@ -239,6 +241,8 @@ export type LeadQuotationRecord = {
     payment_reference?: string;
     notes?: string;
   };
+  department?: string;
+  departments?: string[];
   next_follow_up_at?: string;
   last_follow_up_at?: string;
   expiry_alert_sent_at?: string;
@@ -361,6 +365,8 @@ export type CreateQuotationPayload = {
   sales_person_email?: string;
   sales_person_designation?: string;
   sales_person_user?: string;
+  department?: string;
+  departments?: string[];
   approval_status?: QuotationApprovalStatus;
   status?: QuotationStatus;
   discount_type?: "percentage" | "fixed";

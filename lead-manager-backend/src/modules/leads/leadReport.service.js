@@ -117,7 +117,28 @@ async function buildLeadReportFilter(query = {}, user) {
   }
 
   if (query.department && query.department !== 'all') {
-    andConditions.push({ department: String(query.department).trim().toLowerCase() });
+    const rawDept = String(query.department).trim();
+    const depts = rawDept.split(',').map((d) => d.trim()).filter(Boolean);
+    if (depts.length > 1) {
+      const orClauses = [];
+      for (const d of depts) {
+        const escaped = d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const deptRegex = new RegExp(`(^|,\\s*)${escaped}(\\s*,|$)`, 'i');
+        orClauses.push({ departments: { $in: [new RegExp(`^${escaped}$`, 'i')] } });
+        orClauses.push({ department: { $regex: deptRegex } });
+      }
+      andConditions.push({ $or: orClauses });
+    } else if (depts.length === 1) {
+      const escaped = depts[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const deptRegex = new RegExp(`(^|,\\s*)${escaped}(\\s*,|$)`, 'i');
+      andConditions.push({
+        $or: [
+          { departments: { $in: [new RegExp(`^${escaped}$`, 'i')] } },
+          { department: { $regex: deptRegex } },
+          { department: { $regex: new RegExp(escaped, 'i') } },
+        ],
+      });
+    }
   }
 
   // Date range / period presets

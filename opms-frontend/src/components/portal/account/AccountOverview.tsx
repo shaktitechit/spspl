@@ -746,6 +746,7 @@ export default function AccountOverview() {
 
       <FeaturedMatrixSection
         contributions={summary?.contributions}
+        salesUsersById={summary?.salesUsersById}
         isOrdersFetching={isSummaryFetching}
         externalFilterCaption={filterCaption}
         qtyBasis={qtyBasis}

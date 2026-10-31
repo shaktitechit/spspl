@@ -4,6 +4,8 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/toast";
 import {
+  type ProductGroupRecord,
+  useListProductGroupsQuery,
   useGetProductGroupProductsQuery,
   useAssociateProductGroupProductsMutation,
   useListProductsQuery,
@@ -13,6 +15,13 @@ import { useUnbilledVisibilityCatalog } from "@/components/portal/shared/product
 import { productRowShowInUnbilledList } from "@/components/portal/shared/products/productUnbilledVisibility";
 import { PortalBusyOverlay } from "@/components/portal/shared/shell/PortalBusyOverlay";
 import { ArrowLeft, Search, Plus, Trash2, Check, Package } from "lucide-react";
+
+function extractId(val: any): string {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "object" && (val._id || val.id)) return String(val._id || val.id);
+  return String(val);
+}
 
 export type GroupProductsPageProps = {
   portalHome?: string;
@@ -25,6 +34,68 @@ export default function GroupProductsPage({
   const searchParams = useSearchParams();
   const groupId = searchParams.get("groupId") || "";
   const groupName = searchParams.get("groupName") || "Group";
+
+  // Fetch all product groups to resolve other group mappings
+  const { data: allGroupsData } = useListProductGroupsQuery({ limit: 1000 });
+  const allGroups = useMemo(() => {
+    return Array.isArray(allGroupsData?.data) ? (allGroupsData.data as ProductGroupRecord[]) : [];
+  }, [allGroupsData]);
+
+  const groupIdToNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const g of allGroups) {
+      if (g?._id && g?.name) {
+        map.set(String(g._id), g.name);
+      }
+    }
+    return map;
+  }, [allGroups]);
+
+  const getProductOtherGroup = useCallback(
+    (p: any): { _id?: string; name: string } | null => {
+      if (!p) return null;
+      const rawGroup = p.product_group;
+      if (!rawGroup) return null;
+
+      let gId = "";
+      let gName = "";
+
+      if (typeof rawGroup === "object") {
+        gId = extractId(rawGroup._id || rawGroup.id);
+        gName = rawGroup.name || "";
+      } else if (typeof rawGroup === "string") {
+        const trimmed = rawGroup.trim();
+        if (groupIdToNameMap.has(trimmed)) {
+          gId = trimmed;
+          gName = groupIdToNameMap.get(trimmed)!;
+        } else {
+          const found = allGroups.find(
+            (g) => g.name.toLowerCase() === trimmed.toLowerCase() || String(g._id) === trimmed
+          );
+          if (found) {
+            gId = String(found._id);
+            gName = found.name;
+          } else {
+            gName = trimmed;
+          }
+        }
+      }
+
+      if (gId && !gName && groupIdToNameMap.has(gId)) {
+        gName = groupIdToNameMap.get(gId)!;
+      }
+
+      if (!gName && !gId) return null;
+
+      const isCurrent =
+        (gId && gId === String(groupId)) ||
+        (gName && gName.toLowerCase() === groupName.toLowerCase());
+      if (isCurrent) return null;
+
+      return { _id: gId, name: gName || "Other Group" };
+    },
+    [allGroups, groupIdToNameMap, groupId, groupName]
+  );
 
   // Fetch currently associated products
   const { data: currentProducts = [], isLoading: isLoadingCurrent, refetch } = useGetProductGroupProductsQuery(groupId, {
@@ -80,7 +151,7 @@ export default function GroupProductsPage({
     }
   };
 
-  const handleAddProduct = async (productId: string) => {
+  const handleAddProduct = async (productId: string, otherGroup?: { name: string } | null) => {
     const existingIds = currentProducts.map((p: any) => p._id);
     if (existingIds.includes(productId)) return;
 
@@ -89,7 +160,11 @@ export default function GroupProductsPage({
         id: groupId,
         productIds: [...existingIds, productId],
       }).unwrap();
-      toast.success("Product added to group");
+      if (otherGroup?.name) {
+        toast.success(`Product transferred from "${otherGroup.name}" to "${groupName}"`);
+      } else {
+        toast.success("Product added to group");
+      }
     } catch (err: any) {
       toast.error(err?.data?.message || "Failed to add product");
     }
@@ -152,14 +227,26 @@ export default function GroupProductsPage({
                 currentProducts.map((p: Record<string, unknown>) => {
                   const id = String(p._id ?? "");
                   const showInUnbilled = productRowShowInUnbilledList(p, visibilityCatalog);
+                  const otherGroup = getProductOtherGroup(p);
                   return (
-                  <div key={id} className="flex items-center justify-between gap-2 p-3.5 hover:bg-slate-55/50 dark:hover:bg-white/[0.01]">
+                  <div key={id} className="flex items-center justify-between gap-2 p-3.5 hover:bg-slate-50/50 dark:hover:bg-white/[0.01]">
                     <div className="min-w-0 pr-2 flex-1">
                       <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">{String(p.product_name ?? "")}</p>
                       <p className="text-2xs text-slate-400 truncate">
                         {p.sku ? `SKU: ${String(p.sku)} | ` : ""}
                         Base Price: ₹{String(p.base_price ?? "0.00")}
                       </p>
+                      {otherGroup && (
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          <span className="text-3xs font-medium text-amber-600 dark:text-amber-400">
+                            Also mapped to:
+                          </span>
+                          <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-3xs font-medium text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20">
+                            <Package className="size-2.5" />
+                            {otherGroup.name}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <label className="inline-flex shrink-0 items-center gap-1.5 text-2xs text-slate-600 dark:text-slate-400 cursor-pointer select-none">
                       <input
@@ -214,27 +301,47 @@ export default function GroupProductsPage({
               ) : (
                 catalogProducts.map((p: any) => {
                   const isAssociated = currentIds.has(p._id);
+                  const otherGroup = getProductOtherGroup(p);
                   return (
-                    <div key={p._id} className="flex items-center justify-between p-3 hover:bg-slate-55/50 dark:hover:bg-white/[0.01]">
+                    <div key={p._id} className="flex items-center justify-between p-3 hover:bg-slate-50/50 dark:hover:bg-white/[0.01]">
                       <div className="min-w-0 pr-4">
                         <p className="text-xs font-medium text-slate-900 dark:text-white truncate">{p.product_name}</p>
                         <p className="text-2xs text-slate-400 truncate">
                           {p.sku ? `SKU: ${p.sku} | ` : ""}
-                          Group: {p.product_group?.name || p.product_group || "None"}
+                          Base Price: ₹{String(p.base_price ?? "0.00")}
                         </p>
+                        {otherGroup && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            <span className="text-3xs font-medium text-amber-600 dark:text-amber-400">
+                              Mapped to:
+                            </span>
+                            <span
+                              className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-3xs font-medium text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20"
+                              title={`Currently in group "${otherGroup.name}"`}
+                            >
+                              <Package className="size-2.5" />
+                              {otherGroup.name}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       {isAssociated ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-green-50 px-2 py-1 text-2xs font-semibold text-green-700 dark:bg-green-500/10 dark:text-green-400">
+                        <span className="inline-flex items-center gap-1 rounded bg-green-50 px-2 py-1 text-2xs font-semibold text-green-700 dark:bg-green-500/10 dark:text-green-400 shrink-0">
                           <Check className="size-2.5" />
                           Added
                         </span>
                       ) : (
                         <button
-                          onClick={() => handleAddProduct(p._id)}
-                          className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-1 text-xs text-blue-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-blue-400 dark:hover:bg-white/5 cursor-pointer"
+                          onClick={() => handleAddProduct(p._id, otherGroup)}
+                          title={
+                            otherGroup
+                              ? `Transfer product from "${otherGroup.name}" to "${groupName}"`
+                              : "Add product to group"
+                          }
+                          className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-1 text-xs text-blue-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-blue-400 dark:hover:bg-white/5 cursor-pointer shrink-0"
                         >
                           <Plus className="size-3" />
-                          Add
+                          {otherGroup ? "Transfer" : "Add"}
                         </button>
                       )}
                     </div>

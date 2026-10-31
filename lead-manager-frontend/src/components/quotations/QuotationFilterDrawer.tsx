@@ -1,13 +1,16 @@
 "use client";
 
 import React from "react";
-import { X, Filter, RotateCcw, Check, Calendar, DollarSign, Clock, ShieldCheck, User, Building2 } from "lucide-react";
+import { X, Filter, RotateCcw, Check, Calendar, DollarSign, Clock, ShieldCheck, User, Building2, Layers } from "lucide-react";
+import { LEAD_DEPARTMENT_OPTIONS } from "@/components/leads/leadUtils";
 
 interface QuotationFilterDrawerProps {
   open: boolean;
   onClose: () => void;
   statusFilter: string;
   setStatusFilter: (val: string) => void;
+  departmentFilter?: string;
+  setDepartmentFilter?: (val: string) => void;
   validityFilter: "" | "valid" | "expiring_soon" | "expired";
   setValidityFilter: (val: "" | "valid" | "expiring_soon" | "expired") => void;
   leadSourceFilter: "" | "linked" | "direct";
@@ -35,6 +38,8 @@ export function QuotationFilterDrawer({
   onClose,
   statusFilter,
   setStatusFilter,
+  departmentFilter = "all",
+  setDepartmentFilter,
   validityFilter,
   setValidityFilter,
   leadSourceFilter,
@@ -134,6 +139,38 @@ export function QuotationFilterDrawer({
               })}
             </div>
           </div>
+
+          {/* Department Filter (Internal Purpose) */}
+          {setDepartmentFilter && (
+            <div>
+              <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                Department (Internal)
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { value: "all", label: "All Departments" },
+                  ...LEAD_DEPARTMENT_OPTIONS,
+                ].map((d) => {
+                  const selected = departmentFilter.toLowerCase() === d.value.toLowerCase();
+                  return (
+                    <button
+                      key={d.value}
+                      type="button"
+                      onClick={() => setDepartmentFilter(d.value)}
+                      className={`rounded-xl border px-3 py-2 text-xs font-semibold transition cursor-pointer text-left truncate ${
+                        selected
+                          ? "border-purple-500 bg-purple-50 text-purple-700 font-bold shadow-2xs dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-500"
+                          : "border-border bg-card text-foreground hover:bg-surface-muted"
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Validity Status */}
           <div>

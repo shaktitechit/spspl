@@ -181,6 +181,34 @@ services:
       retries: 5
       start_period: 30s
 
+  expense-backend:
+    build:
+      context: ./expense-backend
+      dockerfile: Dockerfile
+      pull: false
+    restart: unless-stopped
+    ports:
+      - "${EXPENSE_BACKEND_PORT:-7015}:${EXPENSE_BACKEND_PORT:-7015}"
+    env_file: *env_file
+    extra_hosts: *extra_hosts
+    networks:
+      - default
+      - office-internal
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${EXPENSE_BACKEND_PORT:-7015}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+      NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL:-http://notification-service:7012}
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:'+(process.env.PORT||7015)+'/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\"" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   message-service:
     build:
       context: ./message-service
@@ -409,6 +437,34 @@ services:
       lead-manager-backend:
         condition: service_healthy
 
+  expense-frontend:
+    build:
+      context: ./expense-frontend
+      dockerfile: Dockerfile
+      pull: false
+      additional_contexts:
+        session_auth: ./session-auth-client
+      args:
+        NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+        NEXT_PUBLIC_EXPENSE_SERVICE_URL: ${NEXT_PUBLIC_EXPENSE_SERVICE_URL:-http://localhost:7015}
+        NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+        NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+    restart: unless-stopped
+    ports:
+      - "${EXPENSE_FRONTEND_PORT:-7016}:3000"
+    networks:
+      - default
+      - office-internal
+    environment:
+      NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+      NEXT_PUBLIC_EXPENSE_SERVICE_URL: ${NEXT_PUBLIC_EXPENSE_SERVICE_URL:-http://localhost:7015}
+      NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+      NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+    depends_on:
+      expense-backend:
+        condition: service_healthy
+
   app-frontend:
     build:
       context: ./app-frontend
@@ -422,6 +478,7 @@ services:
         NEXT_PUBLIC_USER_MANAGER_URL: ${NEXT_PUBLIC_USER_MANAGER_URL:-http://localhost:7004/dashboard}
         NEXT_PUBLIC_WORK_PLANNER_URL: ${NEXT_PUBLIC_WORK_PLANNER_URL:-http://localhost:7008/dashboard}
         NEXT_PUBLIC_LEAD_MANAGER_URL: ${NEXT_PUBLIC_LEAD_MANAGER_URL:-http://localhost:7010/dashboard}
+        NEXT_PUBLIC_EXPENSE_URL: ${NEXT_PUBLIC_EXPENSE_URL:-http://localhost:7016/dashboard}
         NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
         NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
     restart: unless-stopped
@@ -436,6 +493,7 @@ services:
       NEXT_PUBLIC_USER_MANAGER_URL: ${NEXT_PUBLIC_USER_MANAGER_URL:-http://localhost:7004/dashboard}
       NEXT_PUBLIC_WORK_PLANNER_URL: ${NEXT_PUBLIC_WORK_PLANNER_URL:-http://localhost:7008/dashboard}
       NEXT_PUBLIC_LEAD_MANAGER_URL: ${NEXT_PUBLIC_LEAD_MANAGER_URL:-http://localhost:7010/dashboard}
+      NEXT_PUBLIC_EXPENSE_URL: ${NEXT_PUBLIC_EXPENSE_URL:-http://localhost:7016/dashboard}
       NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
       NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}

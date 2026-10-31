@@ -1,0 +1,48 @@
+const axios = require('axios');
+const { NOTIFICATION_SERVICE_URL } = require('../config/env');
+
+const targetBase = (NOTIFICATION_SERVICE_URL || 'http://notification-service:7012').replace(/\/$/, '');
+
+async function proxyToNotificationService(req, res, next) {
+  try {
+    const targetUrl = `${targetBase}${req.originalUrl}`;
+    const headers = { ...req.headers };
+    delete headers.host;
+
+    const isStream = req.headers.accept === 'text/event-stream' || req.originalUrl.includes('/stream');
+
+    const response = await axios({
+      method: req.method,
+      url: targetUrl,
+      data: req.body,
+      headers,
+      responseType: isStream ? 'stream' : 'json',
+      validateStatus: () => true,
+    });
+
+    if (isStream || response.headers['content-type']?.includes('text/event-stream')) {
+      const streamHeaders = {
+        ...response.headers,
+      };
+      if (req.headers.origin) {
+        streamHeaders['access-control-allow-origin'] = req.headers.origin;
+        streamHeaders['access-control-allow-credentials'] = 'true';
+      }
+      res.writeHead(response.status, streamHeaders);
+      response.data.pipe(res);
+      return;
+    }
+
+    res.status(response.status).send(response.data);
+  } catch (err) {
+    if (err.code === 'ECONNREFUSED') {
+      if (req.method === 'GET') {
+        return res.status(200).json({ success: true, data: [] });
+      }
+      return res.status(503).json({ success: false, message: 'Notification service temporarily unavailable' });
+    }
+    next(err);
+  }
+}
+
+module.exports = { proxyToNotificationService };

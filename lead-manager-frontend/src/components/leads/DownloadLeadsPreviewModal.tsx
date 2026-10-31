@@ -462,6 +462,21 @@ export function DownloadLeadsPreviewModal({
                                   >
                                     {LEAD_PRIORITY_CONFIG[val as keyof typeof LEAD_PRIORITY_CONFIG]?.label || val}
                                   </span>
+                                ) : col.key === "departments" || col.key === "department" ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {val && String(val) !== "—" ? (
+                                      String(val).split(",").map((d, dIdx) => (
+                                        <span
+                                          key={dIdx}
+                                          className="rounded bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.2 text-[10px] font-semibold text-purple-700 dark:text-purple-300"
+                                        >
+                                          {d.trim()}
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span className="text-slate-400 font-normal">—</span>
+                                    )}
+                                  </div>
                                 ) : (
                                   <span>{val !== undefined && val !== null && val !== "" ? String(val) : "—"}</span>
                                 )}

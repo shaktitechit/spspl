@@ -22,6 +22,7 @@ const ORDER_LIFECYCLE_STATUS = [
 
 const ORDER_WORKFLOW_STAGE = [
   "sales",
+  "coordinator_review",
   "admin_review",
   "finance_review",
   "account_review",
@@ -35,6 +36,7 @@ const ORDER_WORKFLOW_STAGE = [
 const ORDER_STATUS = [
   "draft",
   "submitted",
+  "coordinator_review",
   "sales_approved",
   "finance_review",
   "finance_approved",
@@ -45,6 +47,7 @@ const ORDER_STATUS = [
   "dispatch",
   "in_transit",
   "delivered",
+  "closed",
   "cancelled",
   "on_hold",
 ];
@@ -388,13 +391,13 @@ const orderSchema = new mongoose.Schema(
 
     current_department: {
       type: String,
-      enum: ["super_admin", "sales", "admin", "finance", "account", "dispatch"],
+      enum: ["super_admin", "sales", "coordinator", "admin", "finance", "account", "dispatch"],
       index: true,
     },
 
     pending_with_role: {
       type: String,
-      enum: ["super_admin", "sales", "admin", "finance", "account", "dispatch"],
+      enum: ["super_admin", "sales", "coordinator", "admin", "finance", "account", "dispatch"],
       index: true,
     },
 
@@ -633,6 +636,12 @@ orderSchema.pre("save", function (next) {
         doc.workflow_stage = "admin_review";
         doc.pending_with_role = "admin";
         doc.current_department = "admin";
+        break;
+      case "coordinator_review":
+        doc.lifecycle_status = "active";
+        doc.workflow_stage = "coordinator_review";
+        doc.pending_with_role = "coordinator";
+        doc.current_department = "coordinator";
         break;
       case "sales_approved":
       case "finance_review":

@@ -21,6 +21,12 @@ const DEFAULT_PORTALS = [
     description: 'Lead generation and CRM pipeline management',
     access_roles: ['super_admin', 'admin', 'manager', 'coordinator', 'executive'],
   },
+  {
+    name: 'Expense Portal',
+    code: 'expense',
+    description: 'Field staff travel & expense claims, tour advances, and passbook settlements',
+    access_roles: ['super_admin', 'admin', 'finance'],
+  },
 ];
 
 async function listPortals(query = {}) {

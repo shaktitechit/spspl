@@ -58,6 +58,8 @@ import {
   getLeadManagerPortalRole,
   isUserInLeadManagerPortal,
   getDeptLabel,
+  LEAD_DEPARTMENT_OPTIONS,
+  getLeadDepartments,
 } from "@/components/leads/leadUtils";
 import { useLeadManagerTeamScope } from "@/hooks/useLeadManagerTeamScope";
 import { isAdmin, isManager } from "@/utils/authStorage";
@@ -1152,6 +1154,22 @@ export function QuotationFormModal({
   const [salesPersonEmail, setSalesPersonEmail] = useState("");
   const [salesPersonDesignation, setSalesPersonDesignation] = useState("Sales Executive");
 
+  // Departments State (Internal Purpose)
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>(["UPS/Batteries"]);
+
+  const toggleDepartment = (dept: string) => {
+    setSelectedDepartments((prev) => {
+      if (prev.includes(dept)) {
+        if (prev.length === 1) {
+          toast.warning("Quotation must belong to at least one department");
+          return prev;
+        }
+        return prev.filter((d) => d !== dept);
+      }
+      return [...prev, dept];
+    });
+  };
+
   const [items, setItems] = useState<ItemState[]>([
     {
       product_name: "",
@@ -1243,6 +1261,11 @@ export function QuotationFormModal({
       setSalesPersonEmail(quotation.sales_person_email || "");
       setSalesPersonDesignation(quotation.sales_person_designation || "Sales Executive");
 
+      const qDepts = getLeadDepartments(quotation as any);
+      if (qDepts.length > 0) {
+        setSelectedDepartments(qDepts);
+      }
+
       if (quotation.items && quotation.items.length > 0) {
         setItems(
           quotation.items.map((i) => ({
@@ -1276,6 +1299,11 @@ export function QuotationFormModal({
           ? lead.party_id
           : "") || "";
       setSelectedPartyId(leadPartyId);
+
+      const leadDepts = getLeadDepartments(lead as any);
+      if (leadDepts.length > 0) {
+        setSelectedDepartments(leadDepts);
+      }
       setRefNo(autoNextRefNo);
       setCustomerRef("");
       setQuotationDate(new Date().toISOString().split("T")[0]);
@@ -1771,6 +1799,11 @@ export function QuotationFormModal({
       return;
     }
 
+    if (selectedDepartments.length === 0) {
+      toast.error("Please select at least one department for internal purpose");
+      return;
+    }
+
     const cleanedTerms = terms.map((t) => t.trim()).filter(Boolean);
 
     const payload: CreateQuotationPayload = {
@@ -1834,6 +1867,8 @@ export function QuotationFormModal({
       sales_person_email: salesPersonEmail.trim(),
       sales_person_designation: salesPersonDesignation.trim() || "Sales Executive",
       sales_person_user: salesPersonUserId || undefined,
+      department: selectedDepartments.join(", "),
+      departments: selectedDepartments,
       amount_in_words: calculations.amount_in_words || numberToIndianWords(calculations.grandTotal),
     };
 
@@ -2932,6 +2967,76 @@ export function QuotationFormModal({
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Internal Departments Section */}
+            <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10 bg-slate-50/40 dark:bg-slate-900/40">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-white/10">
+                <div>
+                  <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2 text-xs uppercase tracking-wider">
+                    <Layers className="h-4 w-4 text-purple-600" />
+                    Departments (Internal Purpose) <span className="text-rose-500">*</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Classify this quotation under one or more business departments for internal routing, reports, and team filtering.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {selectedDepartments.length < LEAD_DEPARTMENT_OPTIONS.length ? (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDepartments(LEAD_DEPARTMENT_OPTIONS.map((d) => d.value))}
+                      className="text-[11px] font-medium text-purple-600 hover:underline dark:text-purple-400 cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDepartments([])}
+                      className="text-[11px] font-medium text-rose-500 hover:underline cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  {selectedDepartments.length > 0 && (
+                    <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700 dark:bg-purple-950/50 dark:text-purple-300">
+                      {selectedDepartments.length} selected
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
+                {LEAD_DEPARTMENT_OPTIONS.map((dept) => {
+                  const isSelected = selectedDepartments.includes(dept.value);
+                  return (
+                    <button
+                      key={dept.value}
+                      type="button"
+                      onClick={() => toggleDepartment(dept.value)}
+                      className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-xs font-medium transition cursor-pointer text-left ${
+                        isSelected
+                          ? "border-purple-500 bg-purple-50 text-purple-700 font-bold ring-1 ring-purple-300 shadow-xs dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-500 dark:ring-purple-900"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700/60"
+                      }`}
+                    >
+                      <span className="truncate">{dept.label}</span>
+                      {isSelected ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-purple-600 dark:text-purple-400" />
+                      ) : (
+                        <Plus className="h-3.5 w-3.5 shrink-0 text-slate-400 opacity-60" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedDepartments.length === 0 && (
+                <p className="mt-2 text-[11px] font-medium text-rose-500">
+                  Please select at least one department for internal purpose.
+                </p>
+              )}
             </div>
 
             {/* Signatory / Admin Representative Section */}

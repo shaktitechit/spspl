@@ -173,6 +173,33 @@ export function wrapLines(
   return kept;
 }
 
+export function wrapLinesPreservingBreaks(
+  pdf: JsPDF,
+  text: string,
+  width: number,
+  maxLines = 25,
+): string[] {
+  const raw = String(text || "").trim();
+  if (!raw || raw === "—") return ["—"];
+  const paragraphs = raw.split(/\r?\n/).map((p) => p.trim()).filter(Boolean);
+  if (paragraphs.length === 0) return ["—"];
+  const result: string[] = [];
+  for (const para of paragraphs) {
+    const lines = pdf.splitTextToSize(para, Math.max(width, 4)) as string[];
+    for (const line of lines) {
+      result.push(line);
+      if (result.length >= maxLines) break;
+    }
+    if (result.length >= maxLines) break;
+  }
+  if (result.length <= maxLines) return result;
+  const kept = result.slice(0, maxLines);
+  const last = kept[maxLines - 1] || "";
+  kept[maxLines - 1] =
+    last.length > 3 ? `${last.slice(0, Math.max(last.length - 1, 1))}…` : last;
+  return kept;
+}
+
 export function rowHeightFromLines(
   lineSets: string[][],
   lineH = 3.2,
@@ -237,27 +264,42 @@ export function drawLetterheadHeader(pdf: JsPDF, opts: PdfChromeOpts): number {
   }
 
   const name = String(opts.letterhead.companyName || "").trim();
+  const sideReserve = Math.max(logoW > 0 ? logoMaxW : 0, opts.rightTitle ? 36 : 0);
+  const maxCenterW = Math.max(60, w - m * 2 - sideReserve * 2);
+
   pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(compact ? 10 : 13);
+  const nameFontSize = compact
+    ? name.length > 40
+      ? 8.5
+      : 10
+    : name.length > 40
+      ? 11
+      : 13;
+  pdf.setFontSize(nameFontSize);
   pdf.setTextColor(...NAVY);
+
+  let textY = y + (compact ? 3.2 : 4.2);
   if (name) {
-    pdf.text(name.toUpperCase(), w / 2, y + (compact ? 3.2 : 4.2), { align: "center" });
+    const nameLines = wrapLines(pdf, name.toUpperCase(), maxCenterW, 3);
+    for (const line of nameLines) {
+      pdf.text(line, w / 2, textY, { align: "center" });
+      textY += compact ? 3.0 : 3.8;
+    }
   }
 
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(compact ? 6 : 6.5);
   pdf.setTextColor(...TEXT);
-  const sideReserve = logoW > 0 ? logoMaxW : 0;
-  let metaY = y + (compact ? 6.8 : 8.2);
+  let metaY = Math.max(y + (compact ? 6.8 : 8.2), textY);
   if (opts.letterhead.addressLine) {
-    const addrLines = wrapLines(pdf, opts.letterhead.addressLine, w - m * 2 - sideReserve * 2, 2);
+    const addrLines = wrapLines(pdf, opts.letterhead.addressLine, maxCenterW, 2);
     for (const line of addrLines) {
       pdf.text(line, w / 2, metaY, { align: "center" });
       metaY += compact ? 2.6 : 3;
     }
   }
   if (opts.letterhead.contactLine) {
-    const contactLines = wrapLines(pdf, opts.letterhead.contactLine, w - m * 2 - sideReserve * 2, 2);
+    const contactLines = wrapLines(pdf, opts.letterhead.contactLine, maxCenterW, 2);
     for (const line of contactLines) {
       pdf.text(line, w / 2, metaY, { align: "center" });
       metaY += compact ? 2.5 : 2.8;
@@ -383,6 +425,7 @@ export function drawTableHead(
   x: number,
   y: number,
   h = 6.4,
+  fontSize = 6.4,
 ): number {
   const totalW = cols.reduce((s, c) => s + c.w, 0);
   pdf.setFillColor(...BAND);
@@ -392,7 +435,7 @@ export function drawTableHead(
   pdf.line(x, y + h, x + totalW, y + h);
 
   pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(6.4);
+  pdf.setFontSize(fontSize);
   pdf.setTextColor(...NAVY);
   let cx = x;
   for (const col of cols) {
@@ -403,7 +446,8 @@ export function drawTableHead(
         : col.align === "center"
           ? cx + col.w / 2
           : cx + 1;
-    pdf.text(label, tx, y + h - 2, { align: col.align || "left" });
+    const ty = fontSize <= 5.5 ? y + h - 1.5 : y + h - 2;
+    pdf.text(label, tx, ty, { align: col.align || "left" });
     cx += col.w;
   }
   return y + h;
@@ -418,6 +462,7 @@ export function drawTableRow(
   h: number,
   zebra: boolean,
   lineH = 3.1,
+  fontSize = 6.6,
 ) {
   const totalW = cols.reduce((s, c) => s + c.w, 0);
   if (zebra) {
@@ -429,13 +474,14 @@ export function drawTableRow(
   pdf.line(x, y + h, x + totalW, y + h);
 
   pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(6.6);
+  pdf.setFontSize(fontSize);
   pdf.setTextColor(...TEXT);
   let cx = x;
+  const startOffset = fontSize <= 5.5 ? 2.3 : fontSize <= 6.0 ? 2.7 : 3.2;
   for (let i = 0; i < cols.length; i += 1) {
     const col = cols[i]!;
     const lines = cells[i] || ["—"];
-    let ly = y + 3.2;
+    let ly = y + startOffset;
     for (const line of lines) {
       const tx =
         col.align === "right"

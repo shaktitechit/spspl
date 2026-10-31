@@ -4,6 +4,8 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/toast";
 import {
+  type ProductSubgroupRecord,
+  useListProductSubgroupsQuery,
   useGetProductSubgroupProductsQuery,
   useAssociateProductSubgroupProductsMutation,
   useListProductsQuery,
@@ -13,6 +15,13 @@ import { useUnbilledVisibilityCatalog } from "@/components/portal/shared/product
 import { productRowShowInUnbilledList } from "@/components/portal/shared/products/productUnbilledVisibility";
 import { PortalBusyOverlay } from "@/components/portal/shared/shell/PortalBusyOverlay";
 import { ArrowLeft, Search, Plus, Trash2, Check, Package } from "lucide-react";
+
+function extractId(val: any): string {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "object" && (val._id || val.id)) return String(val._id || val.id);
+  return String(val);
+}
 
 export type SubgroupProductsPageProps = {
   portalHome?: string;
@@ -25,6 +34,68 @@ export default function SubgroupProductsPage({
   const searchParams = useSearchParams();
   const subgroupId = searchParams.get("subgroupId") || "";
   const subgroupName = searchParams.get("subgroupName") || "Subgroup";
+
+  // Fetch all subgroups to resolve other subgroup mappings
+  const { data: allSubgroupsData } = useListProductSubgroupsQuery({ limit: 1000 });
+  const allSubgroups = useMemo(() => {
+    return Array.isArray(allSubgroupsData?.data) ? (allSubgroupsData.data as ProductSubgroupRecord[]) : [];
+  }, [allSubgroupsData]);
+
+  const subgroupIdToNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of allSubgroups) {
+      if (s?._id && s?.name) {
+        map.set(String(s._id), s.name);
+      }
+    }
+    return map;
+  }, [allSubgroups]);
+
+  const getProductOtherSubgroup = useCallback(
+    (p: any): { _id?: string; name: string } | null => {
+      if (!p) return null;
+      const rawSubgroup = p.product_subgroup;
+      if (!rawSubgroup) return null;
+
+      let sId = "";
+      let sName = "";
+
+      if (typeof rawSubgroup === "object") {
+        sId = extractId(rawSubgroup._id || rawSubgroup.id);
+        sName = rawSubgroup.name || "";
+      } else if (typeof rawSubgroup === "string") {
+        const trimmed = rawSubgroup.trim();
+        if (subgroupIdToNameMap.has(trimmed)) {
+          sId = trimmed;
+          sName = subgroupIdToNameMap.get(trimmed)!;
+        } else {
+          const found = allSubgroups.find(
+            (s) => s.name.toLowerCase() === trimmed.toLowerCase() || String(s._id) === trimmed
+          );
+          if (found) {
+            sId = String(found._id);
+            sName = found.name;
+          } else {
+            sName = trimmed;
+          }
+        }
+      }
+
+      if (sId && !sName && subgroupIdToNameMap.has(sId)) {
+        sName = subgroupIdToNameMap.get(sId)!;
+      }
+
+      if (!sName && !sId) return null;
+
+      const isCurrent =
+        (sId && sId === String(subgroupId)) ||
+        (sName && sName.toLowerCase() === subgroupName.toLowerCase());
+      if (isCurrent) return null;
+
+      return { _id: sId, name: sName || "Other Subgroup" };
+    },
+    [allSubgroups, subgroupIdToNameMap, subgroupId, subgroupName]
+  );
 
   // Fetch currently associated products
   const { data: currentProducts = [], isLoading: isLoadingCurrent, refetch } =
@@ -81,7 +152,7 @@ export default function SubgroupProductsPage({
     }
   };
 
-  const handleAddProduct = async (productId: string) => {
+  const handleAddProduct = async (productId: string, otherSubgroup?: { name: string } | null) => {
     const existingIds = currentProducts.map((p: any) => p._id);
     if (existingIds.includes(productId)) return;
 
@@ -90,7 +161,11 @@ export default function SubgroupProductsPage({
         id: subgroupId,
         productIds: [...existingIds, productId],
       }).unwrap();
-      toast.success("Product added to subgroup");
+      if (otherSubgroup?.name) {
+        toast.success(`Product transferred from "${otherSubgroup.name}" to "${subgroupName}"`);
+      } else {
+        toast.success("Product added to subgroup");
+      }
     } catch (err: any) {
       toast.error(err?.data?.message || "Failed to add product");
     }
@@ -153,14 +228,26 @@ export default function SubgroupProductsPage({
                 currentProducts.map((p: Record<string, unknown>) => {
                   const id = String(p._id ?? "");
                   const showInUnbilled = productRowShowInUnbilledList(p, visibilityCatalog);
+                  const otherSubgroup = getProductOtherSubgroup(p);
                   return (
-                  <div key={id} className="flex items-center justify-between gap-2 p-3.5 hover:bg-slate-55/50 dark:hover:bg-white/[0.01]">
+                  <div key={id} className="flex items-center justify-between gap-2 p-3.5 hover:bg-slate-50/50 dark:hover:bg-white/[0.01]">
                     <div className="min-w-0 pr-2 flex-1">
                       <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">{String(p.product_name ?? "")}</p>
                       <p className="text-2xs text-slate-400 truncate">
                         {p.sku ? `SKU: ${String(p.sku)} | ` : ""}
                         Base Price: ₹{String(p.base_price ?? "0.00")}
                       </p>
+                      {otherSubgroup && (
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          <span className="text-3xs font-medium text-amber-600 dark:text-amber-400">
+                            Also mapped to:
+                          </span>
+                          <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-3xs font-medium text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20">
+                            <Package className="size-2.5" />
+                            {otherSubgroup.name}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <label className="inline-flex shrink-0 items-center gap-1.5 text-2xs text-slate-600 dark:text-slate-400 cursor-pointer select-none">
                       <input
@@ -215,27 +302,47 @@ export default function SubgroupProductsPage({
               ) : (
                 catalogProducts.map((p: any) => {
                   const isAssociated = currentIds.has(p._id);
+                  const otherSubgroup = getProductOtherSubgroup(p);
                   return (
-                    <div key={p._id} className="flex items-center justify-between p-3 hover:bg-slate-55/50 dark:hover:bg-white/[0.01]">
+                    <div key={p._id} className="flex items-center justify-between p-3 hover:bg-slate-50/50 dark:hover:bg-white/[0.01]">
                       <div className="min-w-0 pr-4">
                         <p className="text-xs font-medium text-slate-900 dark:text-white truncate">{p.product_name}</p>
                         <p className="text-2xs text-slate-400 truncate">
                           {p.sku ? `SKU: ${p.sku} | ` : ""}
-                          Subgroup: {p.product_subgroup?.name || p.product_subgroup || "None"}
+                          Base Price: ₹{String(p.base_price ?? "0.00")}
                         </p>
+                        {otherSubgroup && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            <span className="text-3xs font-medium text-amber-600 dark:text-amber-400">
+                              Mapped to:
+                            </span>
+                            <span
+                              className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-3xs font-medium text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20"
+                              title={`Currently in subgroup "${otherSubgroup.name}"`}
+                            >
+                              <Package className="size-2.5" />
+                              {otherSubgroup.name}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       {isAssociated ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-green-50 px-2 py-1 text-2xs font-semibold text-green-700 dark:bg-green-500/10 dark:text-green-400">
+                        <span className="inline-flex items-center gap-1 rounded bg-green-50 px-2 py-1 text-2xs font-semibold text-green-700 dark:bg-green-500/10 dark:text-green-400 shrink-0">
                           <Check className="size-2.5" />
                           Added
                         </span>
                       ) : (
                         <button
-                          onClick={() => handleAddProduct(p._id)}
-                          className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-1 text-xs text-blue-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-blue-400 dark:hover:bg-white/5 cursor-pointer"
+                          onClick={() => handleAddProduct(p._id, otherSubgroup)}
+                          title={
+                            otherSubgroup
+                              ? `Transfer product from "${otherSubgroup.name}" to "${subgroupName}"`
+                              : "Add product to subgroup"
+                          }
+                          className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-1 text-xs text-blue-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-blue-400 dark:hover:bg-white/5 cursor-pointer shrink-0"
                         >
                           <Plus className="size-3" />
-                          Add
+                          {otherSubgroup ? "Transfer" : "Add"}
                         </button>
                       )}
                     </div>

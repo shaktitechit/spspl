@@ -13,6 +13,7 @@ import {
 export type UnbilledOrdersPdfUnbilledLine = {
   orderNo: string;
   party: string;
+  salesPerson?: string;
   statusLabel: string;
   refOrderDate: string;
   productName: string;
@@ -20,17 +21,22 @@ export type UnbilledOrdersPdfUnbilledLine = {
   approved: number;
   submittedDispatch: number;
   remaining: number;
+  amount?: number;
+  remarks?: string;
 };
 
 export type UnbilledOrdersPdfListLine = {
   orderNo: string;
   party: string;
+  salesPerson?: string;
   statusLabel: string;
   refOrderDate: string;
   productName: string;
   sku?: string;
   ordered: number;
   pending: number;
+  amount?: number;
+  remarks?: string;
 };
 
 export type UnbilledOrdersPdfTemplateProps = {
@@ -63,9 +69,13 @@ type TableKind = "unbilled" | "list";
 
 type PendingTotals = {
   unbilled: number;
+  unbilledAmount: number;
   processPending: number;
+  processPendingAmount: number;
   onHold: number;
+  onHoldAmount: number;
   total: number;
+  totalAmount: number;
 };
 
 type ContentBlock =
@@ -100,10 +110,10 @@ const pageShellStyle: CSSProperties = {
 };
 
 const thStyle: CSSProperties = {
-  padding: "8px 4px",
+  padding: "6px 4px",
   textAlign: "left",
   fontWeight: 700,
-  fontSize: "9px",
+  fontSize: "8.5px",
   textTransform: "uppercase",
   letterSpacing: "0.03em",
   color: "#1e3a5f",
@@ -119,10 +129,22 @@ const tdStyle: CSSProperties = {
   border: "none",
   borderBottom: "none",
   boxShadow: "none",
-  paddingTop: "7px",
-  paddingBottom: "7px",
+  paddingTop: "5px",
+  paddingBottom: "5px",
+  paddingLeft: "4px",
+  paddingRight: "4px",
+  fontSize: "8.5px",
   lineHeight: 1.3,
   verticalAlign: "top",
+  wordBreak: "break-word",
+};
+
+const remarksTdStyle: CSSProperties = {
+  ...tdStyle,
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
+  fontSize: "8px",
+  color: "#334155",
 };
 
 const tableStyle: CSSProperties = {
@@ -145,19 +167,34 @@ function sumListPending(lines: UnbilledOrdersPdfListLine[]): number {
   return lines.reduce((sum, line) => sum + Number(line.pending || 0), 0);
 }
 
+function sumUnbilledAmount(lines: UnbilledOrdersPdfUnbilledLine[]): number {
+  return lines.reduce((sum, line) => sum + Number(line.amount || 0), 0);
+}
+
+function sumListAmount(lines: UnbilledOrdersPdfListLine[]): number {
+  return lines.reduce((sum, line) => sum + Number(line.amount || 0), 0);
+}
+
 function buildPendingTotals(
   unbilledLines: UnbilledOrdersPdfUnbilledLine[],
   processPendingLines: UnbilledOrdersPdfListLine[],
   onHoldLines: UnbilledOrdersPdfListLine[],
 ): PendingTotals {
   const unbilled = sumUnbilledRemaining(unbilledLines);
+  const unbilledAmount = sumUnbilledAmount(unbilledLines);
   const processPending = sumListPending(processPendingLines);
+  const processPendingAmount = sumListAmount(processPendingLines);
   const onHold = sumListPending(onHoldLines);
+  const onHoldAmount = sumListAmount(onHoldLines);
   return {
     unbilled,
+    unbilledAmount,
     processPending,
+    processPendingAmount,
     onHold,
+    onHoldAmount,
     total: unbilled + processPending + onHold,
+    totalAmount: unbilledAmount + processPendingAmount + onHoldAmount,
   };
 }
 
@@ -349,14 +386,40 @@ function EmptySectionNote({ label }: { label: string }) {
   );
 }
 
+function formatMoney(amount?: number | null): string {
+  if (amount == null || Number.isNaN(amount) || amount <= 0) return "—";
+  return amount.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function TotalsSummary({ totals }: { totals: PendingTotals }) {
-  const rows: { label: string; value: number; emphasis?: boolean }[] = [
-    { label: "Un Billed quantity", value: totals.unbilled },
-    { label: "Process Pending quantity", value: totals.processPending },
-    { label: "On Hold pending quantity", value: totals.onHold },
+  const rows: {
+    label: string;
+    qty: number;
+    amount: number;
+    emphasis?: boolean;
+  }[] = [
     {
-      label: "Total pending quantity (incl. unbilled)",
-      value: totals.total,
+      label: "Un Billed",
+      qty: totals.unbilled,
+      amount: totals.unbilledAmount,
+    },
+    {
+      label: "Process Pending",
+      qty: totals.processPending,
+      amount: totals.processPendingAmount,
+    },
+    {
+      label: "On Hold pending",
+      qty: totals.onHold,
+      amount: totals.onHoldAmount,
+    },
+    {
+      label: "Total pending (incl. unbilled)",
+      qty: totals.total,
+      amount: totals.totalAmount,
       emphasis: true,
     },
   ];
@@ -381,7 +444,7 @@ function TotalsSummary({ totals }: { totals: PendingTotals }) {
           letterSpacing: "0.04em",
         }}
       >
-        Quantity summary
+        Quantity & Amount summary
       </div>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <tbody>
@@ -401,13 +464,25 @@ function TotalsSummary({ totals }: { totals: PendingTotals }) {
                 style={{
                   padding: "4px 0",
                   textAlign: "right",
-                  fontSize: row.emphasis ? "14px" : "11px",
+                  fontSize: row.emphasis ? "12px" : "11px",
                   fontWeight: 700,
                   color: row.emphasis ? "#0e7490" : "#334155",
                   fontVariantNumeric: "tabular-nums",
                 }}
               >
-                {row.value}
+                {row.qty} units
+              </td>
+              <td
+                style={{
+                  padding: "4px 0",
+                  textAlign: "right",
+                  fontSize: row.emphasis ? "12px" : "11px",
+                  fontWeight: 700,
+                  color: row.emphasis ? "#0e7490" : "#334155",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                ₹{formatMoney(row.amount)}
               </td>
             </tr>
           ))}
@@ -421,14 +496,17 @@ function UnbilledTableHead() {
   return (
     <thead>
       <tr>
-        <th style={{ ...thStyle, width: "12%" }}>Order</th>
-        <th style={{ ...thStyle, width: "11%" }}>Date</th>
-        <th style={{ ...thStyle, width: "16%" }}>Party</th>
-        <th style={{ ...thStyle, width: "12%" }}>Status</th>
-        <th style={{ ...thStyle, width: "21%" }}>Product</th>
-        <th style={{ ...thStyle, textAlign: "right" }}>Appr</th>
-        <th style={{ ...thStyle, textAlign: "right" }}>Disp</th>
-        <th style={{ ...thStyle, textAlign: "right" }}>Unbilled</th>
+        <th style={{ ...thStyle, width: "8%" }}>Order</th>
+        <th style={{ ...thStyle, width: "7%" }}>Date</th>
+        <th style={{ ...thStyle, width: "13%" }}>Party</th>
+        <th style={{ ...thStyle, width: "11%" }}>Sales Person</th>
+        <th style={{ ...thStyle, width: "8%" }}>Status</th>
+        <th style={{ ...thStyle, width: "15%" }}>Product</th>
+        <th style={{ ...thStyle, width: "4%", textAlign: "right" }}>Appr</th>
+        <th style={{ ...thStyle, width: "4%", textAlign: "right" }}>Disp</th>
+        <th style={{ ...thStyle, width: "4%", textAlign: "right" }}>Unbilled</th>
+        <th style={{ ...thStyle, width: "7%", textAlign: "right" }}>Amount</th>
+        <th style={{ ...thStyle, width: "19%" }}>Remarks</th>
       </tr>
     </thead>
   );
@@ -438,13 +516,16 @@ function ListTableHead() {
   return (
     <thead>
       <tr>
-        <th style={{ ...thStyle, width: "12%" }}>Order</th>
-        <th style={{ ...thStyle, width: "11%" }}>Date</th>
-        <th style={{ ...thStyle, width: "16%" }}>Party</th>
-        <th style={{ ...thStyle, width: "14%" }}>Status</th>
-        <th style={{ ...thStyle, width: "25%" }}>Product</th>
-        <th style={{ ...thStyle, textAlign: "right" }}>Ordered</th>
-        <th style={{ ...thStyle, textAlign: "right" }}>Pending</th>
+        <th style={{ ...thStyle, width: "9%" }}>Order</th>
+        <th style={{ ...thStyle, width: "7%" }}>Date</th>
+        <th style={{ ...thStyle, width: "13%" }}>Party</th>
+        <th style={{ ...thStyle, width: "11%" }}>Sales Person</th>
+        <th style={{ ...thStyle, width: "9%" }}>Status</th>
+        <th style={{ ...thStyle, width: "15%" }}>Product</th>
+        <th style={{ ...thStyle, width: "4%", textAlign: "right" }}>Ordered</th>
+        <th style={{ ...thStyle, width: "4%", textAlign: "right" }}>Pending</th>
+        <th style={{ ...thStyle, width: "7%", textAlign: "right" }}>Amount</th>
+        <th style={{ ...thStyle, width: "21%" }}>Remarks</th>
       </tr>
     </thead>
   );
@@ -557,6 +638,7 @@ function renderTableChunk(
           <td style={{ ...tdStyle, fontWeight: 600 }}>{line.orderNo}</td>
           <td style={tdStyle}>{line.refOrderDate}</td>
           <td style={tdStyle}>{line.party}</td>
+          <td style={tdStyle}>{line.salesPerson || "—"}</td>
           <td style={tdStyle}>{line.statusLabel}</td>
           <ProductCell name={line.productName} sku={line.sku} />
           <td style={{ ...tdStyle, textAlign: "right" }}>{line.approved}</td>
@@ -573,6 +655,18 @@ function renderTableChunk(
           >
             {line.remaining}
           </td>
+          <td
+            style={{
+              ...tdStyle,
+              textAlign: "right",
+              fontWeight: 600,
+            }}
+          >
+            {line.amount != null && line.amount > 0
+              ? `₹${formatMoney(line.amount)}`
+              : "—"}
+          </td>
+          <td style={remarksTdStyle}>{line.remarks || "—"}</td>
         </tr>,
       );
       i += 1;
@@ -585,6 +679,7 @@ function renderTableChunk(
           <td style={{ ...tdStyle, fontWeight: 600 }}>{line.orderNo}</td>
           <td style={tdStyle}>{line.refOrderDate}</td>
           <td style={tdStyle}>{line.party}</td>
+          <td style={tdStyle}>{line.salesPerson || "—"}</td>
           <td style={tdStyle}>{line.statusLabel}</td>
           <ProductCell name={line.productName} sku={line.sku} />
           <td style={{ ...tdStyle, textAlign: "right" }}>{line.ordered}</td>
@@ -598,6 +693,18 @@ function renderTableChunk(
           >
             {line.pending}
           </td>
+          <td
+            style={{
+              ...tdStyle,
+              textAlign: "right",
+              fontWeight: 600,
+            }}
+          >
+            {line.amount != null && line.amount > 0
+              ? `₹${formatMoney(line.amount)}`
+              : "—"}
+          </td>
+          <td style={remarksTdStyle}>{line.remarks || "—"}</td>
         </tr>,
       );
       i += 1;

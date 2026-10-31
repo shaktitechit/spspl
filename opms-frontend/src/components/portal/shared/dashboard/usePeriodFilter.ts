@@ -29,6 +29,7 @@ function sameNumbers(left: number[], right: number[]) {
 export function usePeriodFilter<T = unknown>(
   orders: T[] = [],
   yearSource?: number[],
+  defaultDateFilter: string = "all",
 ) {
   const [dataType, setDataType] = useState<DashboardDataType>("approved");
   const qtyBasis: QtyBasis = dataType === "billed" ? "dispatched" : "approved";
@@ -42,9 +43,18 @@ export function usePeriodFilter<T = unknown>(
   const [selectedYears, setSelectedYears] = useState<number[]>([defaults.year]);
   const [selectedMonths, setSelectedMonths] = useState<number[]>([defaults.month]);
 
-  const [dateFilter, setDateFilter] = useState<string>("today");
+  const [dateFilter, setDateFilter] = useState<string>(defaultDateFilter);
   const [customDateFrom, setCustomDateFrom] = useState<string>("");
   const [customDateTo, setCustomDateTo] = useState<string>("");
+
+  const handleDateFilterChange = (value: string) => {
+    setDateFilter(value);
+    if (value === "all") {
+      const current = getCurrentPeriodDefaults();
+      setSelectedYears([current.year]);
+      setSelectedMonths([current.month]);
+    }
+  };
 
   useEffect(() => {
     if (availableYears.length === 0) return;
@@ -108,7 +118,7 @@ export function usePeriodFilter<T = unknown>(
     selectedMonths,
     setSelectedMonths,
     dateFilter,
-    setDateFilter,
+    setDateFilter: handleDateFilterChange,
     customDateFrom,
     setCustomDateFrom,
     customDateTo,

@@ -196,6 +196,11 @@ async function associateProducts(id, productIds, user) {
     { $set: { brand: id, updated_by: user?._id } }
   );
 
+  await Product.updateMany(
+    { brand: id, _id: { $nin: productIds } },
+    { $set: { brand: null, updated_by: user?._id } }
+  );
+
   return { success: true, count: productIds.length };
 }
 

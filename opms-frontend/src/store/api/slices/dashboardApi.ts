@@ -37,10 +37,13 @@ export type DashboardOrdersSummary = {
   contributions: Array<{
     productId: string;
     salesUserId: string;
+    salesUserName?: string;
     partyId: string;
+    partyName?: string;
     quantity: number;
     volume: number;
   }>;
+  salesUsersById?: Record<string, string>;
 };
 
 /** `/api/dashboard/*` — each mount is dept-only (`requireDepartmentOnly`); no admin pass-through on other slices. */

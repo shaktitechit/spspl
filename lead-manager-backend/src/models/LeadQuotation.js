@@ -89,6 +89,8 @@ const leadQuotationSchema = new mongoose.Schema(
     sales_person_email: { type: String, trim: true, default: "" },
     sales_person_designation: { type: String, trim: true, default: "Sales Executive" },
     sales_person_user: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
+    department: { type: String, trim: true, default: "UPS/Batteries", index: true },
+    departments: [{ type: String, trim: true }],
     approval_status: {
       type: String,
       enum: ["pending_approval", "approved", "rejected"],
@@ -158,6 +160,8 @@ const leadQuotationSchema = new mongoose.Schema(
         sales_person_email: { type: String, default: "" },
         sales_person_designation: { type: String, default: "" },
         sales_person_user: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+        department: { type: String, default: "" },
+        departments: [{ type: String }],
         status: { type: String, default: "" },
         approval_status: { type: String, default: "" },
         approved_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },

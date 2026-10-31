@@ -7,7 +7,6 @@ import {
   FileText,
   LayoutDashboard,
   Plus,
-  Receipt,
   RefreshCw,
   TableProperties,
   Trash2,
@@ -75,7 +74,6 @@ import type {
   ListOrdersTabId,
 } from "./listOrdersPageConfig";
 import { type OrderWorkflowTabCategory } from "./orderWorkflowTabs";
-import { UnbilledOrdersModal } from "./UnbilledOrdersModal";
 import { useOrderListUrlState } from "./useOrderListUrlState";
 import { useOrderWorkflowCategoryOptions } from "./useOrderWorkflowCategoryOptions";
 
@@ -156,7 +154,6 @@ export default function ListOrdersPage({
 
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
-  const [isUnbilledOrdersOpen, setIsUnbilledOrdersOpen] = useState(false);
   const [viewOrderId, setViewOrderId] = useState<string | null>(null);
   const [editOrderId, setEditOrderId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
@@ -204,7 +201,7 @@ export default function ListOrdersPage({
 
   const { data, isLoading, isFetching, isError, refetch } =
     useListOrdersQuery(listQueryParams);
-  const needsBulkOrders = isSheetOpen || isUnbilledOrdersOpen;
+  const needsBulkOrders = isSheetOpen;
   const bulkListParams = {
     view: "list",
     paginate: "true",
@@ -353,17 +350,6 @@ export default function ListOrdersPage({
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {hasAction("unbilled") && (
-              <button
-                type="button"
-                onClick={() => setIsUnbilledOrdersOpen(true)}
-                className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-cyan-300 bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-cyan-700 shadow-sm transition hover:bg-cyan-100 dark:border-cyan-700/50 dark:bg-cyan-950/40 dark:text-cyan-400 dark:hover:bg-cyan-900/30"
-                title="View unbilled / partially billed orders (approved qty greater than dispatched qty)"
-              >
-                <Receipt className="h-3 w-3" />
-                Un Billed Orders
-              </button>
-            )}
             {hasAction("sheet") && (
               <button
                 type="button"
@@ -782,17 +768,6 @@ export default function ListOrdersPage({
           </>
         )}
       </div>
-
-      {hasAction("unbilled") && (
-        <UnbilledOrdersModal
-          isOpen={isUnbilledOrdersOpen}
-          onClose={() => setIsUnbilledOrdersOpen(false)}
-          orders={bulkOrders}
-          categoryOptions={categoryOptions}
-          partyNameById={partyNameById}
-          portalBasePath={portalHome}
-        />
-      )}
 
       {hasAction("sheet") &&
         sheetPortal &&

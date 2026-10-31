@@ -38,6 +38,11 @@ const STATUS_TO_WORKFLOW = Object.freeze({
     workflow_stage: ORDER_WORKFLOW_STAGE.ADMIN_REVIEW,
     current_action: 'submitted',
   },
+  [ORDER_STATUS.COORDINATOR_REVIEW || 'coordinator_review']: {
+    lifecycle_status: ORDER_LIFECYCLE_STATUS.ACTIVE,
+    workflow_stage: ORDER_WORKFLOW_STAGE.COORDINATOR_REVIEW || 'coordinator_review',
+    current_action: 'coordinator_review',
+  },
   [ORDER_STATUS.SALES_APPROVED]: {
     lifecycle_status: ORDER_LIFECYCLE_STATUS.ACTIVE,
     workflow_stage: ORDER_WORKFLOW_STAGE.FINANCE_REVIEW,
@@ -89,6 +94,11 @@ const STATUS_TO_WORKFLOW = Object.freeze({
     workflow_stage: ORDER_WORKFLOW_STAGE.COMPLETED,
     current_action: 'delivered',
     delivery_status: 'completed',
+  },
+  [ORDER_STATUS.CLOSED || 'closed']: {
+    lifecycle_status: ORDER_LIFECYCLE_STATUS.FULFILLED,
+    workflow_stage: ORDER_WORKFLOW_STAGE.COMPLETED,
+    current_action: 'closed',
   },
   [ORDER_STATUS.CANCELLED]: {
     lifecycle_status: ORDER_LIFECYCLE_STATUS.CANCELLED,

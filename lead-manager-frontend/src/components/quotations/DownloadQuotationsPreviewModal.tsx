@@ -31,6 +31,7 @@ import { usePdfCompanyLetterhead } from "@/components/portal/shared/pdfCompanyLe
 import { useAppSelector } from "@/store/hooks";
 import { readSessionFromStorage } from "@/utils/authStorage";
 import { formatCurrencyINR } from "./quotationUtils";
+import { getLeadDepartments, getDeptLabel } from "@/components/leads/leadUtils";
 import type { QuotationRecord } from "@/store/api";
 
 function formatDateDisplay(d?: string | Date): string {
@@ -57,6 +58,7 @@ export const DEFAULT_QUOTATION_COLUMNS: QuotationColumnDef[] = [
   { key: "quotation_no", label: "Quotation No*", defaultSelected: true, widthPdf: 1.2 },
   { key: "quotation_date", label: "Date*", defaultSelected: true, widthPdf: 1 },
   { key: "customer_name", label: "Customer Name*", defaultSelected: true, widthPdf: 1.8 },
+  { key: "departments", label: "Departments*", defaultSelected: true, widthPdf: 1.3 },
   { key: "kind_attn", label: "Contact Person", defaultSelected: true, widthPdf: 1.2 },
   { key: "phone", label: "Phone", defaultSelected: false, widthPdf: 1.1 },
   { key: "email", label: "Email", defaultSelected: false, widthPdf: 1.3 },
@@ -119,6 +121,7 @@ export function DownloadQuotationsPreviewModal({
         quotation_no: q.quotation_no || "—",
         quotation_date: formatDateDisplay(q.quotation_date),
         customer_name: q.customer_name || "—",
+        departments: getLeadDepartments(q as any).map(getDeptLabel).join(", ") || (q.department ? getDeptLabel(q.department) : "—"),
         kind_attn: q.kind_attn || "—",
         phone: q.phone || "—",
         email: q.email || "—",
@@ -475,11 +478,35 @@ export function DownloadQuotationsPreviewModal({
                           <td className="py-2 px-3 text-center text-slate-400 font-mono text-[10px]">
                             {idx + 1}
                           </td>
-                          {selectedColumns.map((col) => (
-                            <td key={col.key} className="py-2 px-3 whitespace-nowrap">
-                              {(row as any)[col.key] || "—"}
-                            </td>
-                          ))}
+                          {selectedColumns.map((col) => {
+                            if (col.key === "departments") {
+                              const deptsText = (row as any).departments || "";
+                              const splitDepts = deptsText ? deptsText.split(", ").filter(Boolean) : [];
+                              return (
+                                <td key={col.key} className="py-2 px-3 whitespace-nowrap">
+                                  {splitDepts.length === 0 || deptsText === "—" ? (
+                                    <span className="text-slate-400 italic">—</span>
+                                  ) : (
+                                    <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                      {splitDepts.map((d: string) => (
+                                        <span
+                                          key={d}
+                                          className="inline-flex items-center rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 ring-1 ring-inset ring-purple-600/20 dark:bg-purple-950/40 dark:text-purple-300 dark:ring-purple-500/30"
+                                        >
+                                          {d}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </td>
+                              );
+                            }
+                            return (
+                              <td key={col.key} className="py-2 px-3 whitespace-nowrap">
+                                {(row as any)[col.key] || "—"}
+                              </td>
+                            );
+                          })}
                         </tr>
                       ))
                     )}

@@ -505,6 +505,7 @@ export default function AdminOverview() {
 
       <FeaturedMatrixSection
         contributions={summary?.contributions}
+        salesUsersById={summary?.salesUsersById}
         isOrdersFetching={isSummaryFetching}
         externalFilterCaption={filterCaption}
         qtyBasis={qtyBasis}

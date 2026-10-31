@@ -84,6 +84,11 @@ import { ExtendQuotationValidityModal } from "./ExtendQuotationValidityModal";
 import { DownloadQuotationsPreviewModal } from "./DownloadQuotationsPreviewModal";
 import { QuotationFilterDrawer } from "./QuotationFilterDrawer";
 import { TableSkeletonRows, CardSkeletonFeed } from "@/components/shared/Skeletons";
+import {
+  LEAD_DEPARTMENT_OPTIONS,
+  getLeadDepartments,
+  getDeptLabel,
+} from "@/components/leads/leadUtils";
 
 type Props = {
   portalHome?: string;
@@ -137,6 +142,7 @@ export function ListQuotationsPage({
   // Query parameters state
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
   const [validityFilter, setValidityFilter] = useState<"" | "valid" | "expiring_soon" | "expired">("");
   const [leadSourceFilter, setLeadSourceFilter] = useState<"" | "linked" | "direct">("");
   const [minAmount, setMinAmount] = useState("");
@@ -162,6 +168,7 @@ export function ListQuotationsPage({
   const { data: rawQuotations, isLoading, isFetching, refetch } = useListQuotationsQuery({
     search: searchTerm || undefined,
     status: statusFilter !== "all" ? statusFilter : undefined,
+    department: departmentFilter !== "all" ? departmentFilter : undefined,
     page,
     limit,
   });
@@ -237,10 +244,19 @@ export function ListQuotationsPage({
         if (rep.name !== salesRepFilter) return false;
       }
 
+      // Department filter
+      if (departmentFilter !== "all") {
+        const depts = getLeadDepartments(q as any);
+        const matchArray = depts.some((d) => d.toLowerCase() === departmentFilter.toLowerCase());
+        const matchString = (q.department || "").toLowerCase().includes(departmentFilter.toLowerCase());
+        if (!matchArray && !matchString) return false;
+      }
+
       return true;
     });
   }, [
     baseQuotations,
+    departmentFilter,
     validityFilter,
     leadSourceFilter,
     minAmount,
@@ -255,6 +271,7 @@ export function ListQuotationsPage({
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (statusFilter !== "all") count++;
+    if (departmentFilter !== "all") count++;
     if (validityFilter) count++;
     if (leadSourceFilter) count++;
     if (minAmount) count++;
@@ -266,6 +283,7 @@ export function ListQuotationsPage({
     return count;
   }, [
     statusFilter,
+    departmentFilter,
     validityFilter,
     leadSourceFilter,
     minAmount,
@@ -278,6 +296,7 @@ export function ListQuotationsPage({
 
   const handleClearFilters = () => {
     setStatusFilter("all");
+    setDepartmentFilter("all");
     setValidityFilter("");
     setLeadSourceFilter("");
     setMinAmount("");
@@ -521,6 +540,23 @@ export function ListQuotationsPage({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Quick Department Filter */}
+            <select
+              value={departmentFilter}
+              onChange={(e) => {
+                setDepartmentFilter(e.target.value);
+                setPage(1);
+              }}
+              className="rounded-xl border border-border bg-surface-muted/50 px-3 py-2 text-xs text-foreground focus:border-primary focus:bg-card focus:outline-none transition shrink-0 font-medium cursor-pointer"
+            >
+              <option value="all">All Departments</option>
+              {LEAD_DEPARTMENT_OPTIONS.map((d) => (
+                <option key={d.value} value={d.value}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+
             {/* Filter Drawer Trigger Button */}
             <button
               type="button"
@@ -633,6 +669,7 @@ export function ListQuotationsPage({
                   </th>
                   <th className="px-4 py-3.5">Quotation / Ref</th>
                   <th className="px-4 py-3.5">Customer &amp; Source</th>
+                  <th className="px-4 py-3.5">Departments</th>
                   <th className="px-4 py-3.5">Subject</th>
                   <th className="px-4 py-3.5">Date &amp; Validity</th>
                   <th className="px-4 py-3.5 text-right">Grand Total</th>
@@ -644,10 +681,10 @@ export function ListQuotationsPage({
               </thead>
               <tbody className="divide-y divide-border">
                 {isLoading ? (
-                  <TableSkeletonRows rows={8} cols={10} />
+                  <TableSkeletonRows rows={8} cols={11} />
                 ) : quotations.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-16 text-center text-muted">
+                    <td colSpan={11} className="px-4 py-16 text-center text-muted">
                       <FileText className="mx-auto h-10 w-10 text-muted/60 mb-3" />
                       <p className="font-semibold text-foreground text-sm">No Quotations Found</p>
                       <p className="text-xs text-muted mt-1">
@@ -746,6 +783,28 @@ export function ListQuotationsPage({
                               </span>
                             )}
                             {q.email && <span className="text-[11px] text-muted truncate max-w-[140px]">• {q.email}</span>}
+                          </div>
+                        </td>
+
+                        {/* Departments (Internal) */}
+                        <td className="px-4 py-3.5">
+                          <div className="flex flex-wrap gap-1 max-w-[170px]">
+                            {(() => {
+                              const depts = getLeadDepartments(q as any);
+                              if (depts.length === 0) {
+                                return (
+                                  <span className="text-[11px] text-muted italic">—</span>
+                                );
+                              }
+                              return depts.map((d) => (
+                                <span
+                                  key={d}
+                                  className="inline-flex items-center rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 ring-1 ring-inset ring-purple-600/20 dark:bg-purple-950/40 dark:text-purple-300 dark:ring-purple-500/30"
+                                >
+                                  {getDeptLabel(d)}
+                                </span>
+                              ));
+                            })()}
                           </div>
                         </td>
 
@@ -1103,6 +1162,24 @@ export function ListQuotationsPage({
                         )}
                         {q.ref_no && <span className="text-[10px] font-mono text-muted">Ref: {q.ref_no}</span>}
                       </div>
+
+                      {/* Departments (Internal) */}
+                      {(() => {
+                        const depts = getLeadDepartments(q as any);
+                        if (depts.length === 0) return null;
+                        return (
+                          <div className="mt-2 flex items-center gap-1 flex-wrap">
+                            {depts.map((d) => (
+                              <span
+                                key={d}
+                                className="inline-flex items-center rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 ring-1 ring-inset ring-purple-600/20 dark:bg-purple-950/40 dark:text-purple-300 dark:ring-purple-500/30"
+                              >
+                                {getDeptLabel(d)}
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Value & Validity Box */}
@@ -1245,6 +1322,8 @@ export function ListQuotationsPage({
         onClose={() => setFilterDrawerOpen(false)}
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
+        departmentFilter={departmentFilter}
+        setDepartmentFilter={setDepartmentFilter}
         validityFilter={validityFilter}
         setValidityFilter={setValidityFilter}
         leadSourceFilter={leadSourceFilter}

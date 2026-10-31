@@ -7,17 +7,26 @@ async function proxyToNotificationService(req, res, next) {
     const headers = { ...req.headers };
     delete headers.host;
 
+    const isStream = req.headers.accept === 'text/event-stream' || req.originalUrl.includes('/stream');
+
     const response = await axios({
       method: req.method,
       url: targetUrl,
       data: req.body,
       headers,
-      responseType: req.headers.accept === 'text/event-stream' ? 'stream' : 'json',
+      responseType: isStream ? 'stream' : 'json',
       validateStatus: () => true,
     });
 
-    if (req.headers.accept === 'text/event-stream' || response.headers['content-type']?.includes('text/event-stream')) {
-      res.writeHead(response.status, response.headers);
+    if (isStream || response.headers['content-type']?.includes('text/event-stream')) {
+      const streamHeaders = {
+        ...response.headers,
+      };
+      if (req.headers.origin) {
+        streamHeaders['access-control-allow-origin'] = req.headers.origin;
+        streamHeaders['access-control-allow-credentials'] = 'true';
+      }
+      res.writeHead(response.status, streamHeaders);
       response.data.pipe(res);
       return;
     }

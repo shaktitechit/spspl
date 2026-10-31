@@ -39,7 +39,7 @@ import {
   buildPerformaInvoicePdf,
   type PerformaPdfItem,
 } from "@/components/portal/shared/pdf/builders/buildPerformaInvoicePdf";
-import { fetchFileBlob, resolveFileUrl } from "@/lib/env";
+import { fetchFileBlob, publicApiOrigin, resolveFileUrl } from "@/lib/env";
 import {
   FilePreviewModal,
   useFilePreview,
@@ -344,9 +344,14 @@ export default function PerformaTab({
     setModalFiles((prev) => ({ ...prev, [field]: file }));
   };
 
-  const handleDownload = async (fileUrl: string, fileName: string) => {
+  const handleDownload = async (fileUrl: string, fileName: string, fallbackId?: string) => {
     try {
-      const response = await fetchFileBlob(fileUrl, token);
+      const id = fallbackId || fileUrl.match(/\/api\/files\/([^/?#]+)/)?.[1];
+      const targetUrl = id
+        ? `${publicApiOrigin()}/api/files/${id}/download`
+        : resolveFileUrl(fileUrl, fallbackId);
+
+      const response = await fetchFileBlob(targetUrl, token, fallbackId);
       if (!response.ok) {
         toast.error(`Failed to download file (${response.status})`);
         return;
@@ -366,9 +371,15 @@ export default function PerformaTab({
   };
 
   const handlePreview = (att: Record<string, unknown>) => {
+    const docId = String(att.filename || att.fileId || att._id || att.id || "");
+    const rawUrl = String(att.url ?? "");
+    const previewUrl = docId
+      ? `${publicApiOrigin()}/api/files/${docId}/view`
+      : resolveFileUrl(rawUrl, docId);
+
     void openPreview({
       name: String(att.original_name ?? att.file_name ?? "Document"),
-      url: resolveFileUrl(String(att.url ?? "")),
+      url: previewUrl,
       mime: String(att.mime_type ?? ""),
     });
   };

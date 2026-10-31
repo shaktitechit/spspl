@@ -28,6 +28,7 @@ export type ParsedLeadRow = {
   phone: string;
   email: string;
   company_name: string;
+  departments: string;
   source: string;
   priority: string;
   city: string;
@@ -184,6 +185,7 @@ export function BulkUploadLeadsModal({ isOpen, onClose }: Props) {
         const phone = normalizeHeaderValue(row, ["phone", "mobile", "contact number", "phone number"]);
         const email = normalizeHeaderValue(row, ["email", "email address"]);
         const company_name = normalizeHeaderValue(row, ["company", "company name", "organization"]);
+        const departments = normalizeHeaderValue(row, ["departments", "department", "dept", "depts"]) || "UPS/Batteries";
         const source = normalizeHeaderValue(row, ["source", "lead source"]) || defaultSource;
         const priority = normalizeHeaderValue(row, ["priority"]).toLowerCase() || "medium";
         const city = normalizeHeaderValue(row, ["city"]);
@@ -206,6 +208,7 @@ export function BulkUploadLeadsModal({ isOpen, onClose }: Props) {
           phone,
           email,
           company_name,
+          departments,
           source,
           priority: ["low", "medium", "high", "urgent"].includes(priority) ? priority : "medium",
           city,
@@ -247,9 +250,9 @@ export function BulkUploadLeadsModal({ isOpen, onClose }: Props) {
 
   const downloadSampleTemplate = () => {
     const csvContent =
-      "Name,Phone,Email,Company,Source,Priority,City,State,Requirement,Estimated Value,Notes\n" +
-      "John Doe,9876543210,john@example.com,Acme Corp,Website,high,Mumbai,Maharashtra,Looking for enterprise software,150000,Interested in annual contract\n" +
-      "Jane Smith,9876543211,,Globex Ltd,Referral,medium,Delhi,Delhi,Need demo for 50 users,75000,Follow up next week\n";
+      "Name,Phone,Email,Company,Departments,Source,Priority,City,State,Requirement,Estimated Value,Notes\n" +
+      "John Doe,9876543210,john@example.com,Acme Corp,UPS/Batteries,Website,high,Mumbai,Maharashtra,Looking for enterprise software,150000,Interested in annual contract\n" +
+      "Jane Smith,9876543211,,Globex Ltd,\"Solar, RO\",Referral,medium,Delhi,Delhi,Need demo for 50 users,75000,Follow up next week\n";
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -268,21 +271,28 @@ export function BulkUploadLeadsModal({ isOpen, onClose }: Props) {
       return;
     }
 
-    const payloadLeads = validRows.map((r) => ({
-      name: r.name,
-      phone: r.phone || undefined,
-      email: r.email || undefined,
-      company_name: r.company_name || undefined,
-      source: r.source,
-      priority: r.priority as any,
-      city: r.city || undefined,
-      state: r.state || undefined,
-      address: r.address || undefined,
-      requirement: r.requirement || undefined,
-      estimated_value: r.estimated_value ? Number(r.estimated_value) : undefined,
-      notes: r.notes || undefined,
-      status: r.status as any,
-    }));
+    const payloadLeads = validRows.map((r) => {
+      const depts = r.departments
+        ? r.departments.split(",").map((d) => d.trim()).filter(Boolean)
+        : ["UPS/Batteries"];
+      return {
+        name: r.name,
+        phone: r.phone || undefined,
+        email: r.email || undefined,
+        company_name: r.company_name || undefined,
+        department: depts.join(", "),
+        departments: depts,
+        source: r.source,
+        priority: r.priority as any,
+        city: r.city || undefined,
+        state: r.state || undefined,
+        address: r.address || undefined,
+        requirement: r.requirement || undefined,
+        estimated_value: r.estimated_value ? Number(r.estimated_value) : undefined,
+        notes: r.notes || undefined,
+        status: r.status as any,
+      };
+    });
 
     try {
       const res = await bulkUpload({ leads: payloadLeads }).unwrap();
@@ -469,6 +479,7 @@ export function BulkUploadLeadsModal({ isOpen, onClose }: Props) {
                         <th className="px-3 py-2.5">Status</th>
                         <th className="px-3 py-2.5">Contact Name*</th>
                         <th className="px-3 py-2.5">Phone / Email*</th>
+                        <th className="px-3 py-2.5">Departments</th>
                         <th className="px-3 py-2.5">Source*</th>
                         <th className="px-3 py-2.5">Company</th>
                         <th className="px-3 py-2.5">City</th>
@@ -516,6 +527,11 @@ export function BulkUploadLeadsModal({ isOpen, onClose }: Props) {
                             ) : (
                               <span className="text-rose-500 italic">Missing Contact</span>
                             )}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className="inline-flex rounded bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 dark:text-purple-300">
+                              {row.departments || "UPS/Batteries"}
+                            </span>
                           </td>
                           <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300">
                             {row.source || <span className="text-amber-500">Default</span>}

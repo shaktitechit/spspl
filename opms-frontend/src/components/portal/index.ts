@@ -73,6 +73,7 @@ export { default as SuperAdminOrderDetail } from "./super_admin/order/SuperAdmin
 export { default as SuperAdminCreateOrderPage } from "./super_admin/SuperAdminCreateOrderPage";
 
 export { default as ProfilePage } from "./shared/profile/ProfilePage";
+export { default as UnbilledOrdersPage } from "./shared/orders/list/UnbilledOrdersPage";
 export { default as PortalOverviewShell } from "./shared/shell/PortalOverviewShell";
 export { usePortalDashboardKpi } from "./shared/hooks/usePortalDashboardKpi";
 export { pickOrders } from "./shared/lib/pickOrders";

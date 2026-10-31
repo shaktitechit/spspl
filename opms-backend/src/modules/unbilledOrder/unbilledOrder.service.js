@@ -119,7 +119,7 @@ function unbilledQuery() {
       'order',
       'order_no order_date createdAt created_at status billing_status dispatch_status lifecycle_status workflow_stage '
         + 'admin_approval_status finance_approval_status account_approval_status grand_total order_items '
-        + 'assigned_sales_user party',
+        + 'assigned_sales_user party remarks internal_notes closure_remarks',
     )
     .populate('party', 'party_name mobile email')
     .populate('customer', 'name')
@@ -450,7 +450,7 @@ async function list(query = {}) {
     const orderId = refId(row.order);
     if (!orderId) continue;
     const order = await Order.findOne({ _id: orderId, deletedAt: null })
-      .select('order_items')
+      .select('order_items remarks internal_notes closure_remarks')
       .lean();
     if (order) row.order = order;
   }

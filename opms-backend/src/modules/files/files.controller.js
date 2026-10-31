@@ -186,12 +186,82 @@ const FILE_NOT_FOUND_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="600" 
   <text x="300" y="300" font-family="system-ui, -apple-system, sans-serif" font-size="13" fill="#94a3b8" text-anchor="middle">Please re-upload or replace this attachment.</text>
 </svg>`;
 
+function isPresignedUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  return /X-Amz-Signature|X-Amz-Credential|X-Amz-Date/i.test(url);
+}
+
+function isPresignedUrlExpired(url) {
+  if (!isPresignedUrl(url)) return false;
+  try {
+    const u = new URL(url);
+    const amzDate = u.searchParams.get('X-Amz-Date');
+    const amzExpires = parseInt(u.searchParams.get('X-Amz-Expires') || '0', 10);
+    if (!amzDate || !amzExpires) return true;
+    const year = amzDate.substring(0, 4);
+    const month = amzDate.substring(4, 6);
+    const day = amzDate.substring(6, 8);
+    const hour = amzDate.substring(9, 11);
+    const min = amzDate.substring(11, 13);
+    const sec = amzDate.substring(13, 15);
+    const createdTime = Date.parse(`${year}-${month}-${day}T${hour}:${min}:${sec}Z`);
+    if (isNaN(createdTime)) return true;
+    return Date.now() >= createdTime + (amzExpires - 30) * 1000;
+  } catch {
+    return true;
+  }
+}
+
+async function resolveFileIdFromResource(att, fileId) {
+  try {
+    let resourceType = att?.entity_type;
+    let resourceId = att?.entity_id ? String(att.entity_id) : null;
+    const pathOrUrl = att?.storage_path || att?.url || att?.key || fileId || '';
+    if (!resourceType || !resourceId) {
+      const match = pathOrUrl.match(/resource\/([^/]+)\/([0-9a-fA-F]{24})/i);
+      if (match) {
+        resourceType = match[1];
+        resourceId = match[2];
+      }
+    }
+    if (resourceType && resourceId && /^[0-9a-fA-F]{24}$/.test(resourceId)) {
+      const { fmJson } = require('../../services/fileManagement/index');
+      const fmRes = await fmJson(
+        `/files?resource_type=${encodeURIComponent(resourceType)}&resource_id=${encodeURIComponent(resourceId)}`,
+        undefined,
+        'GET',
+        { timeoutMs: 6000 }
+      );
+      if (fmRes && Array.isArray(fmRes.items) && fmRes.items.length > 0) {
+        const uuidMatch = pathOrUrl.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+        const targetFilename = uuidMatch ? uuidMatch[0] : null;
+        const origName = att?.original_name || att?.file_name;
+        const matched = fmRes.items.find((it) => {
+          if (targetFilename && it.objectKey && it.objectKey.includes(targetFilename)) return true;
+          if (origName && (it.originalName === origName || it.name === origName)) return true;
+          return false;
+        }) || fmRes.items[0];
+
+        if (matched && matched.id) {
+          return matched.id;
+        }
+      }
+    }
+  } catch (_e) {
+    // Ignore fallback failure
+  }
+  return null;
+}
+
 exports.redirectToViewUrl = asyncHandler(async (req, res) => {
   const fileId = req.params.fileId;
   const att = await findAttachmentRecord(fileId);
 
   if (att && att.url && /^https?:\/\//i.test(att.url) && !att.url.includes(`/api/files/${fileId}`)) {
-    if (att.url.includes('minio') || att.url.includes('X-Amz-') || !att.url.includes('/api/files/')) {
+    if (!isPresignedUrl(att.url) && !att.url.includes('minio')) {
+      return res.redirect(302, att.url);
+    }
+    if (!isPresignedUrlExpired(att.url)) {
       return res.redirect(302, att.url);
     }
   }
@@ -209,8 +279,23 @@ exports.redirectToViewUrl = asyncHandler(async (req, res) => {
     }
   }
 
+  // Fallback: lookup file ID from file-management service by resource type & ID
+  const fallbackId = await resolveFileIdFromResource(att, fileId);
+  if (fallbackId) {
+    try {
+      const presignedUrl = await getViewPresignedUrl(fallbackId);
+      if (presignedUrl) {
+        return res.redirect(302, presignedUrl);
+      }
+    } catch (_err) {
+      // try next candidate
+    }
+  }
+
   if (att && att.url && /^https?:\/\//i.test(att.url) && !att.url.includes(`/api/files/${fileId}/view`)) {
-    return res.redirect(302, att.url);
+    if (!isPresignedUrlExpired(att.url)) {
+      return res.redirect(302, att.url);
+    }
   }
 
   // Always serve SVG placeholder with HTTP 200 for view requests when file payload is missing
@@ -224,7 +309,10 @@ exports.redirectToDownloadUrl = asyncHandler(async (req, res) => {
   const att = await findAttachmentRecord(fileId);
 
   if (att && att.url && /^https?:\/\//i.test(att.url) && !att.url.includes(`/api/files/${fileId}`)) {
-    if (att.url.includes('minio') || att.url.includes('X-Amz-') || !att.url.includes('/api/files/')) {
+    if (!isPresignedUrl(att.url) && !att.url.includes('minio')) {
+      return res.redirect(302, att.url);
+    }
+    if (!isPresignedUrlExpired(att.url)) {
       return res.redirect(302, att.url);
     }
   }
@@ -242,8 +330,23 @@ exports.redirectToDownloadUrl = asyncHandler(async (req, res) => {
     }
   }
 
+  // Fallback: lookup file ID from file-management service by resource type & ID
+  const fallbackId = await resolveFileIdFromResource(att, fileId);
+  if (fallbackId) {
+    try {
+      const presignedUrl = await getDownloadPresignedUrl(fallbackId);
+      if (presignedUrl) {
+        return res.redirect(302, presignedUrl);
+      }
+    } catch (_err) {
+      // try next candidate
+    }
+  }
+
   if (att && att.url && /^https?:\/\//i.test(att.url) && !att.url.includes(`/api/files/${fileId}/download`)) {
-    return res.redirect(302, att.url);
+    if (!isPresignedUrlExpired(att.url)) {
+      return res.redirect(302, att.url);
+    }
   }
 
   throw new ApiError(404, 'File not found or file-management service unable to resolve download URL');

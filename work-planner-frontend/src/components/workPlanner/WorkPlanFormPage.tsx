@@ -81,6 +81,10 @@ import {
 } from "./workPlanUtils";
 import { VisitFormModal } from "./VisitFormModal";
 import { WorkFormModal } from "./WorkFormModal";
+import { SearchableSelect } from "@/components/portal/shared/parties/components/SearchableSelect";
+import PartyCountryDetailModal from "@/components/portal/shared/parties/modals/PartyCountryDetailModal";
+import PartyStateDetailModal from "@/components/portal/shared/parties/modals/PartyStateDetailModal";
+import PartyCityDetailModal from "@/components/portal/shared/parties/modals/PartyCityDetailModal";
 import { WorkPlanCreateMailModal, type CreateEmailPayload } from "./WorkPlanCreateMailModal";
 import { SelectPreviousPendingItemsModal } from "./SelectPreviousPendingItemsModal";
 import { ImportNotesModal } from "./notes/ImportNotesModal";
@@ -348,32 +352,109 @@ export function WorkPlanFormPage({ planId, copyId, initialDate }: WorkPlanFormPa
     { skip: !requiresGeo || !stateId }
   );
 
+  const [countryModalOpen, setCountryModalOpen] = useState(false);
+  const [stateModalOpen, setStateModalOpen] = useState(false);
+  const [cityModalOpen, setCityModalOpen] = useState(false);
+  const [geoInitialName, setGeoInitialName] = useState("");
+
+  const handleCountryCreated = (newCountry: any) => {
+    if (!newCountry) return;
+    const cId = newCountry._id || newCountry.id || "";
+    const cName = newCountry.name || "";
+    if (cId) {
+      setCountryId(cId);
+      setCountryName(cName);
+      setStateId("");
+      setStateName("");
+      setCityId("");
+      setCityName("");
+      setSelectedCityIds([]);
+      setSelectedCityNames([]);
+    }
+    setCountryModalOpen(false);
+    setGeoInitialName("");
+  };
+
+  const handleStateCreated = (newState: any) => {
+    if (!newState) return;
+    const sId = newState._id || newState.id || "";
+    const sName = newState.name || "";
+    if (sId) {
+      setStateId(sId);
+      setStateName(sName);
+      setCityId("");
+      setCityName("");
+      setSelectedCityIds([]);
+      setSelectedCityNames([]);
+    }
+    setStateModalOpen(false);
+    setGeoInitialName("");
+  };
+
+  const handleCityCreated = (newCity: any) => {
+    if (!newCity) return;
+    const ciId = newCity._id || newCity.id || "";
+    const ciName = newCity.name || "";
+    if (ciId && ciName) {
+      setSelectedCityIds((prev) => (prev.includes(ciId) ? prev : [...prev, ciId]));
+      setSelectedCityNames((prev) => (prev.includes(ciName) ? prev : [...prev, ciName]));
+      if (!cityId) setCityId(ciId);
+      if (!cityName) setCityName(ciName);
+    }
+    setCityModalOpen(false);
+    setGeoInitialName("");
+  };
+
+  // Options for SearchableSelect
+  const countryOptions = useMemo(() => {
+    return countriesData.map((c) => ({
+      id: c._id || c.id || "",
+      name: c.name,
+      sublabel: c.iso_code || undefined,
+    }));
+  }, [countriesData]);
+
+  const stateOptions = useMemo(() => {
+    return statesData.map((s) => ({
+      id: s._id || s.id || "",
+      name: s.name,
+      sublabel: s.code || undefined,
+    }));
+  }, [statesData]);
+
   // Auto-select India by default if no country selected
   useEffect(() => {
     if (requiresGeo && !countryId && countriesData.length > 0) {
+      const targetCountry = countryName || "India";
       const india = countriesData.find(
         (c) =>
-          c.name.trim().toLowerCase() === "india" ||
-          c.iso_code?.toUpperCase() === "IN"
+          c.name.trim().toLowerCase() === targetCountry.trim().toLowerCase() ||
+          (targetCountry.trim().toLowerCase() === "india" && c.iso_code?.toUpperCase() === "IN")
       );
       if (india) {
         setCountryId(india._id || india.id || "");
         setCountryName(india.name);
       }
     }
-  }, [requiresGeo, countriesData, countryId]);
+  }, [requiresGeo, countriesData, countryId, countryName]);
 
-  // Match state name to state ID if set by text from plan
+  // Match state name to state ID, or auto-select Punjab if country is India
   useEffect(() => {
-    if (stateName && !stateId && statesData.length > 0) {
-      const sMatch = statesData.find(
-        (s) => s.name.trim().toLowerCase() === stateName.trim().toLowerCase()
-      );
-      if (sMatch) {
-        setStateId(sMatch._id || sMatch.id || "");
+    if (requiresGeo && statesData.length > 0 && !stateId) {
+      const targetStateName =
+        stateName ||
+        (!countryName || countryName.trim().toLowerCase() === "india" ? "Punjab" : "");
+      if (targetStateName) {
+        const sMatch = statesData.find(
+          (s) => s.name.trim().toLowerCase() === targetStateName.trim().toLowerCase()
+        );
+        if (sMatch) {
+          setStateId(sMatch._id || sMatch.id || "");
+          setStateName(sMatch.name);
+        }
       }
     }
-  }, [statesData, stateName, stateId]);
+  }, [requiresGeo, statesData, stateName, stateId, countryName]);
 
   // If stateId is set but does not belong to the currently loaded states for this country, clear it
   useEffect(() => {
@@ -2771,79 +2852,62 @@ export function WorkPlanFormPage({ planId, copyId, initialDate }: WorkPlanFormPa
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {/* Country */}
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-muted">
-                  Country <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={countryId}
-                  onChange={(e) => {
-                    const cId = e.target.value;
-                    setCountryId(cId);
-                    const found = countriesData.find((c) => c._id === cId || c.id === cId);
-                    setCountryName(found?.name || "");
-                    setStateId("");
-                    setStateName("");
-                    setCityId("");
-                    setCityName("");
-                    setSelectedCityIds([]);
-                    setSelectedCityNames([]);
-                  }}
-                  disabled={isPlanCompleted || isCountriesLoading}
-                  className="w-full rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs font-medium text-foreground outline-none focus:border-primary disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  <option value="">
-                    {isCountriesLoading ? "Loading countries..." : "Select Country"}
-                  </option>
-                  {countriesData.map((c) => {
-                    const id = c._id || c.id || "";
-                    return (
-                      <option key={id} value={id}>
-                        {c.name}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
+              <SearchableSelect
+                label="Country"
+                required
+                options={countryOptions}
+                valueId={countryId}
+                valueName={countryName}
+                placeholder="Select Country"
+                searchPlaceholder="Search country..."
+                disabled={isPlanCompleted}
+                isLoading={isCountriesLoading}
+                loadingText="Loading countries..."
+                quickAddLabel="Quick Add Country"
+                onQuickAdd={(q) => {
+                  setGeoInitialName(q || "");
+                  setCountryModalOpen(true);
+                }}
+                onSelect={(opt) => {
+                  const cId = opt?.id || "";
+                  setCountryId(cId);
+                  setCountryName(opt?.name || "");
+                  setStateId("");
+                  setStateName("");
+                  setCityId("");
+                  setCityName("");
+                  setSelectedCityIds([]);
+                  setSelectedCityNames([]);
+                }}
+              />
 
               {/* State */}
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-muted">
-                  State / Province <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={stateId}
-                  onChange={(e) => {
-                    const sId = e.target.value;
-                    setStateId(sId);
-                    const found = statesData.find((s) => s._id === sId || s.id === sId);
-                    setStateName(found?.name || "");
-                    setCityId("");
-                    setCityName("");
-                    setSelectedCityIds([]);
-                    setSelectedCityNames([]);
-                  }}
-                  disabled={isPlanCompleted || !countryId || isStatesLoading}
-                  className="w-full rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs font-medium text-foreground outline-none focus:border-primary disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  <option value="">
-                    {!countryId
-                      ? "Select Country first"
-                      : isStatesLoading
-                      ? "Loading states..."
-                      : "Select State"}
-                  </option>
-                  {countryId &&
-                    statesData.map((s) => {
-                      const id = s._id || s.id || "";
-                      return (
-                        <option key={id} value={id}>
-                          {s.name}
-                        </option>
-                      );
-                    })}
-                </select>
-              </div>
+              <SearchableSelect
+                label="State / Province"
+                required
+                options={stateOptions}
+                valueId={stateId}
+                valueName={stateName}
+                placeholder={!countryId ? "Select Country first" : "Select State"}
+                searchPlaceholder="Search state..."
+                disabled={isPlanCompleted || !countryId}
+                isLoading={isStatesLoading}
+                loadingText="Loading states..."
+                quickAddLabel="Quick Add State"
+                onQuickAdd={(q) => {
+                  setGeoInitialName(q || "");
+                  setStateModalOpen(true);
+                }}
+                onSelect={(opt) => {
+                  const sId = opt?.id || "";
+                  setStateId(sId);
+                  setStateName(opt?.name || "");
+                  setCityId("");
+                  setCityName("");
+                  setSelectedCityIds([]);
+                  setSelectedCityNames([]);
+                }}
+              />
 
               {/* City / District (Multi-Select) */}
               <div className="relative" ref={cityDropdownRef}>
@@ -2851,20 +2915,35 @@ export function WorkPlanFormPage({ planId, copyId, initialDate }: WorkPlanFormPa
                   <label className="block text-[11px] font-medium text-muted">
                     City / District <span className="text-rose-500">*</span>
                   </label>
-                  {selectedCityIds.length > 0 && !isPlanCompleted && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedCityIds([]);
-                        setSelectedCityNames([]);
-                        setCityId("");
-                        setCityName("");
-                      }}
-                      className="text-[10px] text-muted hover:text-rose-500 transition cursor-pointer"
-                    >
-                      Clear all
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {stateId && !isPlanCompleted && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGeoInitialName("");
+                          setCityModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline cursor-pointer"
+                      >
+                        <Plus className="h-3 w-3" />
+                        <span>Quick Add City</span>
+                      </button>
+                    )}
+                    {selectedCityIds.length > 0 && !isPlanCompleted && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCityIds([]);
+                          setSelectedCityNames([]);
+                          setCityId("");
+                          setCityName("");
+                        }}
+                        className="text-[10px] text-muted hover:text-rose-500 transition cursor-pointer"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Dropdown Trigger Button */}
@@ -2941,6 +3020,22 @@ export function WorkPlanFormPage({ planId, copyId, initialDate }: WorkPlanFormPa
                           cities available
                         </span>
                         <div className="flex items-center gap-2">
+                          {stateId && !isPlanCompleted && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setGeoInitialName(citySearchQuery.trim());
+                                  setCityModalOpen(true);
+                                }}
+                                className="text-primary hover:underline font-semibold cursor-pointer inline-flex items-center gap-0.5"
+                              >
+                                <Plus className="h-3 w-3" />
+                                Quick Add
+                              </button>
+                              <span className="text-muted">•</span>
+                            </>
+                          )}
                           <button
                             type="button"
                             onClick={() => {
@@ -3024,7 +3119,20 @@ export function WorkPlanFormPage({ planId, copyId, initialDate }: WorkPlanFormPa
                         ci.name.toLowerCase().includes(citySearchQuery.toLowerCase().trim())
                       ).length === 0 && (
                         <div className="p-3 text-center text-xs text-muted">
-                          No cities matching &quot;{citySearchQuery}&quot;
+                          <p className="mb-2">No cities matching &quot;{citySearchQuery}&quot;</p>
+                          {stateId && !isPlanCompleted && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setGeoInitialName(citySearchQuery.trim());
+                                setCityModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 rounded bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition cursor-pointer"
+                            >
+                              <Plus className="h-3 w-3" />
+                              <span>Add &quot;{citySearchQuery.trim() || "New City"}&quot;</span>
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -3964,6 +4072,53 @@ export function WorkPlanFormPage({ planId, copyId, initialDate }: WorkPlanFormPa
             if (!isDeletingItem) setDeleteItemTarget(null);
           }}
           onConfirm={handleConfirmDeleteItem}
+        />
+      )}
+
+      {/* Quick Add Country Modal */}
+      {countryModalOpen && (
+        <PartyCountryDetailModal
+          open={countryModalOpen}
+          create={true}
+          initialName={geoInitialName}
+          onClose={() => {
+            setCountryModalOpen(false);
+            setGeoInitialName("");
+          }}
+          onSuccess={handleCountryCreated}
+        />
+      )}
+
+      {/* Quick Add State Modal */}
+      {stateModalOpen && (
+        <PartyStateDetailModal
+          open={stateModalOpen}
+          create={true}
+          initialName={geoInitialName}
+          defaultCountryId={countryId}
+          defaultCountryName={countryName}
+          onClose={() => {
+            setStateModalOpen(false);
+            setGeoInitialName("");
+          }}
+          onSuccess={handleStateCreated}
+        />
+      )}
+
+      {/* Quick Add City Modal */}
+      {cityModalOpen && (
+        <PartyCityDetailModal
+          open={cityModalOpen}
+          create={true}
+          initialName={geoInitialName}
+          defaultCountryId={countryId}
+          defaultStateId={stateId}
+          defaultStateName={stateName}
+          onClose={() => {
+            setCityModalOpen(false);
+            setGeoInitialName("");
+          }}
+          onSuccess={handleCityCreated}
         />
       )}
     </div>

@@ -68,6 +68,18 @@ services:
     healthcheck:
       start_period: 30s
 
+  expense-backend:
+    build:
+      context: ./expense-backend
+      dockerfile: Dockerfile.dev
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./expense-backend/src:/app/src:ro
+    command: ["node", "--watch", "src/server.js"]
+    healthcheck:
+      start_period: 30s
+
   message-service:
     build:
       context: ./message-service
@@ -228,6 +240,33 @@ services:
     healthcheck:
       disable: true
 
+  expense-frontend:
+    build:
+      context: ./expense-frontend
+      dockerfile: Dockerfile.dev
+      additional_contexts:
+        session_auth: ./session-auth-client
+      args:
+        NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+        NEXT_PUBLIC_EXPENSE_SERVICE_URL: ${NEXT_PUBLIC_EXPENSE_SERVICE_URL:-http://localhost:7015}
+        NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+        NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"
+      NEXT_PUBLIC_AUTH_SERVICE_URL: ${NEXT_PUBLIC_AUTH_SERVICE_URL:-http://localhost:7003}
+      NEXT_PUBLIC_EXPENSE_SERVICE_URL: ${NEXT_PUBLIC_EXPENSE_SERVICE_URL:-http://localhost:7015}
+      NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
+      NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
+    volumes:
+      - ./expense-frontend/src:/app/src:ro
+      - ./expense-frontend/public:/app/public:ro
+      - ./session-auth-client:/app/session-auth-client:ro
+    command: ["npm", "run", "dev"]
+    healthcheck:
+      disable: true
+
   app-frontend:
     build:
       context: ./app-frontend
@@ -240,6 +279,7 @@ services:
         NEXT_PUBLIC_USER_MANAGER_URL: ${NEXT_PUBLIC_USER_MANAGER_URL:-http://localhost:7004/dashboard}
         NEXT_PUBLIC_WORK_PLANNER_URL: ${NEXT_PUBLIC_WORK_PLANNER_URL:-http://localhost:7008/dashboard}
         NEXT_PUBLIC_LEAD_MANAGER_URL: ${NEXT_PUBLIC_LEAD_MANAGER_URL:-http://localhost:7010/dashboard}
+        NEXT_PUBLIC_EXPENSE_URL: ${NEXT_PUBLIC_EXPENSE_URL:-http://localhost:7016/dashboard}
         NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
         NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
     environment:
@@ -250,6 +290,7 @@ services:
       NEXT_PUBLIC_USER_MANAGER_URL: ${NEXT_PUBLIC_USER_MANAGER_URL:-http://localhost:7004/dashboard}
       NEXT_PUBLIC_WORK_PLANNER_URL: ${NEXT_PUBLIC_WORK_PLANNER_URL:-http://localhost:7008/dashboard}
       NEXT_PUBLIC_LEAD_MANAGER_URL: ${NEXT_PUBLIC_LEAD_MANAGER_URL:-http://localhost:7010/dashboard}
+      NEXT_PUBLIC_EXPENSE_URL: ${NEXT_PUBLIC_EXPENSE_URL:-http://localhost:7016/dashboard}
       NEXT_PUBLIC_COMPANY_NAME: ${NEXT_PUBLIC_COMPANY_NAME:-}
       NEXT_PUBLIC_COMPANY_LOGO_URL: ${NEXT_PUBLIC_COMPANY_LOGO_URL:-}
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}

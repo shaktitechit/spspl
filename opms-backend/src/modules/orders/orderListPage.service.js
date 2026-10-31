@@ -160,6 +160,8 @@ const SLIM_SELECT = [
   'last_admin_approval',
   'last_finance_approval',
   'last_account_approval',
+  'remarks',
+  'internal_notes',
 ].join(' ');
 
 const PAGE_SELECT = [
@@ -196,6 +198,9 @@ const PAGE_SELECT = [
   'taxable_amount',
   'gst_amount',
   'grand_total',
+  'remarks',
+  'internal_notes',
+  'closure_remarks',
   'has_open_flags',
   'open_flag_count',
   'highest_flag_severity',

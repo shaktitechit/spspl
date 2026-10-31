@@ -30,6 +30,10 @@ import {
   type FeaturedMatrixCatalog,
 } from "./useFeaturedMatrixCatalog";
 
+function isMongoId(val: string): boolean {
+  return /^[a-fA-F0-9]{24}$/.test(String(val).trim());
+}
+
 interface FeaturedProductGroupSalesUserTableProps {
   orders: any[];
   isOrdersFetching: boolean;
@@ -46,6 +50,8 @@ interface FeaturedProductGroupSalesUserTableProps {
   catalog?: FeaturedMatrixCatalog;
   enabled?: boolean;
   contributions?: DashboardOrdersSummary["contributions"];
+  salesUsersById?: Record<string, string>;
+  userNameById?: Record<string, string>;
 }
 
 export default function FeaturedProductGroupSalesUserTable({
@@ -61,6 +67,8 @@ export default function FeaturedProductGroupSalesUserTable({
   catalog: propCatalog,
   enabled = true,
   contributions,
+  salesUsersById,
+  userNameById,
 }: FeaturedProductGroupSalesUserTableProps) {
   const [metricState, setMetric] = useState<MatrixMetric>("quantity");
   const metric = forceMetric ?? metricState;
@@ -86,7 +94,7 @@ export default function FeaturedProductGroupSalesUserTable({
   const catalog = propCatalog ?? catalogFallback;
 
   const { data: usersData, isFetching: isUsersFetching } = useListUsersQuery(
-    { department: "sales" },
+    {},
     { skip: !enabled },
   );
 
@@ -95,42 +103,141 @@ export default function FeaturedProductGroupSalesUserTable({
   const productsByGroup = catalog.productsByGroup;
   const isCatalogFetching = catalog.isCatalogFetching;
 
+  const combinedNameById = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {
+      ...buildUserNameById(usersData),
+      ...(userNameById ?? {}),
+      ...(salesUsersById ?? {}),
+    };
+
+    // Extract names from orders if assigned_sales_user is an object or has name fields
+    for (const order of filteredOrders ?? []) {
+      const u = order?.assigned_sales_user;
+      const id = resolveOrderSalesUserId(order);
+      if (id && !map[id]) {
+        if (u && typeof u === "object") {
+          const name = String(u.name || u.username || u.full_name || "").trim();
+          if (name && !isMongoId(name)) map[id] = name;
+        } else if (order.sales_user_name || order.assigned_sales_user_name) {
+          const name = String(order.sales_user_name || order.assigned_sales_user_name).trim();
+          if (name && !isMongoId(name)) map[id] = name;
+        }
+      }
+    }
+
+    // Extract names from contributions if salesUserName is populated
+    for (const cell of contributions ?? []) {
+      const id = cell.salesUserId;
+      if (id && !map[id] && cell.salesUserName && cell.salesUserName !== "Unassigned") {
+        if (!isMongoId(cell.salesUserName)) {
+          map[id] = cell.salesUserName;
+        }
+      }
+    }
+
+    return map;
+  }, [usersData, userNameById, salesUsersById, filteredOrders, contributions]);
+
+  const formatSalesDisplayName = (id: string, fallbackName?: string): string => {
+    const candidate = combinedNameById[id] || fallbackName || "";
+    if (candidate && !isMongoId(candidate) && candidate !== "—") {
+      return candidate;
+    }
+    if (isMongoId(id)) {
+      return `Sales User (${id.slice(-4)})`;
+    }
+    return id || "Unassigned";
+  };
+
   const salesUsers = useMemo<MatrixEntity[]>(() => {
-    const nameById = buildUserNameById(usersData);
     if (forceSalesUserId) {
-      const name = forceSalesUserName || nameById[forceSalesUserId] || forceSalesUserId;
+      const name = forceSalesUserName || formatSalesDisplayName(forceSalesUserId);
       return [{ id: forceSalesUserId, name }];
     }
 
-    const fromList = pickUsersList(usersData)
-      .map((u) => {
-        if (!u || typeof u !== "object") return null;
-        const o = u as Record<string, unknown>;
+    const allUsersList = pickUsersList(usersData);
+
+    const isSalesUser = (u: Record<string, unknown>) => {
+      const dept = String(u.department ?? "").toLowerCase().trim();
+      const role = String(u.access_role ?? u.role ?? "").toLowerCase().trim();
+      if (dept === "sales" || role === "sales" || role.includes("sales")) return true;
+      if (Array.isArray(u.portals)) {
+        return u.portals.some((p: any) =>
+          String(p?.portal_code ?? "").toLowerCase().includes("sales") ||
+          (Array.isArray(p?.access_roles) &&
+            p.access_roles.some((r: any) => String(r).toLowerCase().includes("sales")))
+        );
+      }
+      return false;
+    };
+
+    // 1. Initialise with users whose department or role is sales
+    const fromList: MatrixEntity[] = allUsersList
+      .filter((u): u is Record<string, unknown> =>
+        Boolean(u && typeof u === "object" && isSalesUser(u as Record<string, unknown>))
+      )
+      .map((o) => {
         const id = o._id != null ? String(o._id) : o.id != null ? String(o.id) : "";
         if (!id) return null;
+        const rawName = String(o.name ?? o.username ?? "");
         return {
           id,
-          name: nameById[id] || String(o.name ?? o.username ?? id),
+          name: formatSalesDisplayName(id, rawName),
         };
       })
       .filter((u): u is MatrixEntity => Boolean(u));
 
     const seen = new Set(fromList.map((u) => u.id));
+
+    // 2. Add any user from filteredOrders that has sales activity
     for (const order of filteredOrders) {
       const id = resolveOrderSalesUserId(order);
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      fromList.push({ id, name: nameById[id] || id });
+      if (!id) continue;
+      if (!seen.has(id)) {
+        seen.add(id);
+        const orderUserObj = order?.assigned_sales_user;
+        const orderUserName =
+          (typeof orderUserObj === "object" && orderUserObj
+            ? String(orderUserObj.name || orderUserObj.username || "")
+            : "") ||
+          String(order?.sales_user_name || order?.assigned_sales_user_name || "");
+
+        fromList.push({
+          id,
+          name: formatSalesDisplayName(id, orderUserName),
+        });
+      }
     }
+
+    // 3. Add any user from contributions that has sales activity
     for (const cell of contributions ?? []) {
       const id = cell.salesUserId;
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      fromList.push({ id, name: nameById[id] || id });
+      if (!id) continue;
+      if (!seen.has(id)) {
+        seen.add(id);
+        fromList.push({
+          id,
+          name: formatSalesDisplayName(id, cell.salesUserName),
+        });
+      }
+    }
+
+    // Ensure no name displays as a raw Mongo ID
+    for (const item of fromList) {
+      if (isMongoId(item.name)) {
+        item.name = formatSalesDisplayName(item.id);
+      }
     }
 
     return fromList.sort((a, b) => a.name.localeCompare(b.name));
-  }, [usersData, filteredOrders, forceSalesUserId, forceSalesUserName, contributions]);
+  }, [
+    usersData,
+    filteredOrders,
+    forceSalesUserId,
+    forceSalesUserName,
+    contributions,
+    combinedNameById,
+  ]);
 
   const groupIds = useMemo(() => featuredGroups.map((g) => g.id), [featuredGroups]);
   const salesIds = useMemo(() => salesUsers.map((u) => u.id), [salesUsers]);
