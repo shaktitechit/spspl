@@ -26,7 +26,7 @@ export const LEAD_MANAGER_FRONTEND_URL = (
 ).replace(/\/+$/, "");
 
 export const EXPENSE_FRONTEND_URL = (
-  process.env.NEXT_PUBLIC_EXPENSE_URL || "http://localhost:7016/dashboard"
+  process.env.NEXT_PUBLIC_EXPENSE_URL || "http://localhost:7016"
 ).replace(/\/+$/, "");
 
 export function resolvePublicAssetUrl(path: string): string {

@@ -13,6 +13,7 @@ import {
   resetSessionTerminated,
   subscribeAuthLogout,
 } from "@session-auth/sessionTerminator";
+import { AUTH_SERVICE_URL } from "@/lib/env";
 
 const LEGACY_COOKIES = [
   "shakti_session",
@@ -363,8 +364,34 @@ export function readSessionFromStorage(): UserSession | null {
       return null;
     }
 
-    // 0. Check URL query token parameter (SSO handoff)
     const urlParams = new URLSearchParams(window.location.search);
+
+    // 0a. Handle ?handoff= SSO code (primary path from app-frontend SSO launch)
+    const handoffCode = urlParams.get("handoff");
+    if (handoffCode) {
+      // Kick off async exchange; middleware should have already handled this
+      // on the server side, but handle it client-side too as a fallback so
+      // the handoff param is never silently dropped.
+      void exchangeHandoffCode(handoffCode).then((result) => {
+        if (!result?.token) return;
+        const userFromJwt = parseJwtUser(result.token);
+        if (userFromJwt && hasExpensePortalAccess(userFromJwt)) {
+          saveSessionToStorage({
+            token: result.token,
+            refreshToken: result.refreshToken,
+            refreshExpiresAt: result.refreshExpiresAt,
+            user: userFromJwt,
+          });
+          // Remove handoff param from URL then reload into the dashboard
+          const clean = new URL(window.location.href);
+          clean.searchParams.delete("handoff");
+          clean.searchParams.delete("token");
+          window.location.replace(clean.toString());
+        }
+      });
+    }
+
+    // 0b. Check URL query ?token= parameter (legacy/fallback SSO handoff)
     const urlToken = urlParams.get("token");
     if (urlToken) {
       const userFromJwt = parseJwtUser(urlToken);
