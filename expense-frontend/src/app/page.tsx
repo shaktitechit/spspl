@@ -11,6 +11,7 @@ import {
   hasExpensePortalAccess,
   readSessionFromStorage,
   revokeRefreshToken,
+  saveSessionToStorage,
 } from "@/utils/authStorage";
 import { useTheme } from "@/hooks/useTheme";
 import { resolvePublicAssetUrl } from "@/lib/env";
@@ -34,8 +35,6 @@ export default function LoginPage() {
       } else {
         router.replace("/dashboard");
       }
-    } else {
-      clearSessionFromStorage();
     }
   }, [router]);
 
@@ -102,9 +101,10 @@ export default function LoginPage() {
 
     try {
       const res = await loginMut({ email, password }).unwrap();
-      if (!hasExpensePortalAccess(res.user)) {
-        clearSessionFromStorage();
-        void revokeRefreshToken();
+      const loginUser = (res as any)?.user || (res as any)?.data?.user;
+      const loginToken = (res as any)?.token || (res as any)?.data?.token;
+
+      if (!loginUser || !hasExpensePortalAccess(loginUser)) {
         throw new Error(
           "Access denied: You do not have permission for the Expense Portal. Only expense portal assigned users can log in.",
         );
@@ -112,7 +112,18 @@ export default function LoginPage() {
 
       applySessionAfterAuth();
 
-      toast.success(`Welcome back, ${res.user.name || res.user.email}`);
+      if (loginToken) {
+        saveSessionToStorage({
+          token: loginToken,
+          refreshToken: (res as any)?.refreshToken || (res as any)?.data?.refreshToken,
+          refreshExpiresAt: (res as any)?.refreshExpiresIn
+            ? Date.now() + (res as any).refreshExpiresIn * 1000
+            : undefined,
+          user: loginUser,
+        });
+      }
+
+      toast.success(`Welcome back, ${loginUser.name || loginUser.email}`);
       if (typeof window !== "undefined") {
         window.location.href = "/dashboard";
       } else {

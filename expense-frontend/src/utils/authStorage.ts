@@ -59,6 +59,7 @@ function parseJwtUser(token: string): AuthUser | null {
     );
     const decoded = JSON.parse(jsonPayload);
     return {
+      ...decoded,
       _id: decoded._id || decoded.sub || decoded.id || "user",
       name: decoded.name || decoded.email || "User",
       email: decoded.email || "",
@@ -70,6 +71,7 @@ function parseJwtUser(token: string): AuthUser | null {
       roles: decoded.roles || [],
       role_codes: decoded.role_codes || [],
       portals: decoded.portals || [],
+      is_super_admin: decoded.is_super_admin || decoded.isSuperAdmin,
     } as any;
   } catch {
     return null;
@@ -112,7 +114,12 @@ export function isSuperAdmin(user: AuthUser | any | null | undefined): boolean {
   const role = String(user.role || "").toLowerCase().trim();
   if (["super_admin", "superadmin"].includes(role)) return true;
   if (Array.isArray(user.role_codes) && user.role_codes.some((r: any) => ["super_admin", "superadmin"].includes(String(r).toLowerCase()))) return true;
+  if (Array.isArray(user.role_names) && user.role_names.some((r: any) => ["super admin", "super_admin", "superadmin"].includes(String(r).toLowerCase()))) return true;
   if (Array.isArray(user.roles) && user.roles.some((r: any) => ["super_admin", "superadmin"].includes(String(r.code || r.name || r).toLowerCase()))) return true;
+  const dept = String(
+    (typeof user.department === "object" ? user.department?.code || user.department?.name : user.department) || ""
+  ).toLowerCase().trim();
+  if (dept === "super_admin" || dept === "superadmin") return true;
   return false;
 }
 
@@ -151,10 +158,31 @@ export function getExpenseAccessRoles(user: AuthUser | any | null | undefined): 
   const uAny = user as any;
   if (uAny.is_active === false || uAny.active === false) return [];
 
+  if (isSuperAdmin(user)) {
+    return ["admin", "finance"];
+  }
+
   const expPortal = getExpensePortalEntry(user);
   if (!expPortal) {
-    // Only explicitly assigned users can have roles. No department or global role fallbacks.
-    return [];
+    // If not explicitly assigned in portals array, fallback to global admin/finance roles or departments
+    const globalRoles: string[] = [
+      ...(Array.isArray(uAny.roles) ? uAny.roles.map((r: any) => String(r?.code || r?.name || r).toLowerCase().trim()) : []),
+      ...(Array.isArray(uAny.role_codes) ? uAny.role_codes.map((r: any) => String(r || "").toLowerCase().trim()) : []),
+      String(uAny.role || "").toLowerCase().trim(),
+    ].filter(Boolean);
+
+    const dept = String(
+      (typeof uAny.department === "object" ? uAny.department?.code || uAny.department?.name : uAny.department) || ""
+    ).toLowerCase().trim();
+
+    const result: string[] = [];
+    if (globalRoles.includes("admin") || globalRoles.includes("super_admin") || dept === "admin") {
+      result.push("admin");
+    }
+    if (globalRoles.includes("finance") || dept === "finance" || dept === "account" || dept === "accounts") {
+      result.push("finance");
+    }
+    return result;
   }
 
   const roles: string[] = Array.isArray(expPortal.access_roles)
@@ -169,7 +197,7 @@ export function getExpenseAccessRoles(user: AuthUser | any | null | undefined): 
     .map((r) => String(r || "").toLowerCase().trim())
     .filter((r) => EXPENSE_ROLES.includes(r as ExpenseRole) || r === "super_admin" || r === "superadmin");
 
-  if (isSuperAdmin(user) || valid.includes("super_admin") || valid.includes("superadmin")) {
+  if (valid.includes("super_admin") || valid.includes("superadmin")) {
     return Array.from(new Set([...valid.filter((r) => EXPENSE_ROLES.includes(r as ExpenseRole)), "admin", "finance"]));
   }
 
@@ -190,8 +218,7 @@ export function isExpenseFinance(user: AuthUser | any | null | undefined): boole
 
 export function hasExpensePortalAccess(user: AuthUser | any | null | undefined): boolean {
   if (!user) return false;
-  const expPortal = getExpensePortalEntry(user);
-  if (!expPortal) return false;
+  if (isSuperAdmin(user)) return true;
   return getExpenseAccessRoles(user).length > 0;
 }
 

@@ -23,60 +23,6 @@ function authServiceBase(): string {
   ).replace(/\/+$/, "");
 }
 
-function parseJwtPayload(token: string): any {
-  try {
-    const parts = token.split(".");
-    if (parts.length < 2) return null;
-    const base64Url = parts[1];
-    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-    const jsonStr = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
-    return JSON.parse(jsonStr);
-  } catch {
-    return null;
-  }
-}
-
-function hasExpensePortalAccessFromToken(token: string | null | undefined): boolean {
-  if (!token) return false;
-  const payload = parseJwtPayload(token);
-  if (!payload) return false;
-
-  const portals = Array.isArray(payload.portals)
-    ? payload.portals
-    : Array.isArray(payload.portal_access)
-    ? payload.portal_access
-    : [];
-
-  const expPortal = portals.find((p: any) => {
-    if (!p) return false;
-    const code = String(
-      p.portal_code ||
-      p.code ||
-      (typeof p.portal === "object" ? p.portal?.code || p.portal?.portal_code : p.portal) ||
-      ""
-    ).toLowerCase().trim();
-    return ["expense", "expenses", "expense_portal", "expense_management"].includes(code);
-  });
-
-  if (!expPortal) return false;
-
-  const rawRoles = Array.isArray(expPortal.access_roles)
-    ? expPortal.access_roles
-    : expPortal.access_role
-    ? [expPortal.access_role]
-    : Array.isArray(expPortal.roles)
-    ? expPortal.roles
-    : [];
-
-  const roles = rawRoles.map((r: any) => String(r || "").toLowerCase().trim());
-  return roles.some((r: string) => ["admin", "finance", "super_admin", "superadmin"].includes(r));
-}
-
 async function exchangeHandoff(code: string): Promise<IssuedSession | null> {
   try {
     const res = await fetch(`${authServiceBase()}/api/auth/handoff/exchange`, {
@@ -116,36 +62,22 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  let cookieToken: string | null | undefined = effectiveAccessToken(request);
-  let urlToken = searchParams.get("token")?.trim() || "";
+  let cookieToken = effectiveAccessToken(request);
+  const urlToken = searchParams.get("token")?.trim() || "";
   const handoffCode = searchParams.get("handoff")?.trim() || "";
-
-  // If cookieToken exists but does not have Expense Portal access, treat as unauthenticated for this portal
-  if (cookieToken && !hasExpensePortalAccessFromToken(cookieToken)) {
-    cookieToken = null;
-  }
-
-  // If urlToken exists but does not have Expense Portal access, discard it
-  if (urlToken && !hasExpensePortalAccessFromToken(urlToken)) {
-    urlToken = "";
-  }
 
   let exchanged: IssuedSession | null = null;
   if (handoffCode) {
     exchanged = await exchangeHandoff(handoffCode);
-    if (exchanged?.token && !hasExpensePortalAccessFromToken(exchanged.token)) {
-      exchanged = null;
-    }
   }
   const exchangedToken = exchanged?.token || null;
 
   let refreshedSession: IssuedSession | null = null;
   if (!cookieToken && !exchangedToken && !urlToken && !isRefreshCookieExpired(request)) {
     refreshedSession = await refreshSession(request);
-    if (refreshedSession && hasExpensePortalAccessFromToken(refreshedSession.token)) {
+    if (refreshedSession) {
       cookieToken = refreshedSession.token;
     } else {
-      refreshedSession = null;
       const isProtectedRoute = pathname.startsWith("/dashboard");
       const response = isProtectedRoute
         ? NextResponse.redirect(new URL("/", request.url))
@@ -204,9 +136,7 @@ export async function middleware(request: NextRequest) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/";
     redirectUrl.searchParams.set("redirect", pathname);
-    const response = NextResponse.redirect(redirectUrl);
-    clearAuthCookies(response);
-    return response;
+    return NextResponse.redirect(redirectUrl);
   }
 
   if (isAuthRoute && effectiveToken) {
