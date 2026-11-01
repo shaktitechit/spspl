@@ -29,7 +29,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     const existing = readSessionFromStorage();
-    if (existing?.token && hasExpensePortalAccess(existing?.user)) {
+    if (existing?.token) {
       if (typeof window !== "undefined") {
         window.location.href = "/dashboard";
       } else {

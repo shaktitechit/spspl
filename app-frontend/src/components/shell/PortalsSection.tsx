@@ -165,19 +165,7 @@ function resolvePortalDetails(
     name = name || "Expense Portal";
     subtitle = "Micro-frontend";
     description = "Field staff claims, tour advances, and passbook settlements.";
-    getUrl = () => {
-      let base = EXPENSE_FRONTEND_URL;
-      if (typeof window !== "undefined" && window.location.hostname && window.location.hostname !== "localhost") {
-        try {
-          const parsed = new URL(base);
-          parsed.hostname = window.location.hostname;
-          base = parsed.toString().replace(/\/+$/, "");
-        } catch {
-          /* keep base */
-        }
-      }
-      return base;
-    };
+    getUrl = () => EXPENSE_FRONTEND_URL;
     storageKey = "shakti.expense.session";
     icon = Receipt;
     iconBg = "bg-emerald-600 text-white";

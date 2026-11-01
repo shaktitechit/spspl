@@ -88,8 +88,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     const s = readSessionFromStorage();
-    if (!s?.token || !hasExpensePortalAccess(s.user)) {
-      void logoutAndRedirect("/");
+    if (!s?.token) {
+      router.push("/");
     } else {
       setSession(s);
     }
