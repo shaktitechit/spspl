@@ -13,7 +13,7 @@ import {
   resetSessionTerminated,
   subscribeAuthLogout,
 } from "@session-auth/sessionTerminator";
-import { AUTH_SERVICE_URL } from "@/lib/env";
+import { exchangeHandoffCode } from "@/lib/ssoHandoff";
 
 const LEGACY_COOKIES = [
   "shakti_session",
