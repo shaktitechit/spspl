@@ -559,6 +559,8 @@ async function create(body, user, options = {}) {
     await doc.save();
   }
 
+  await recalculateOrderDispatchState(body.order, user);
+
   if (dispatchStatus === 'submitted') {
     await workflowService.transitionOrderStatus({
       orderId: body.order,
@@ -723,6 +725,8 @@ async function patch(id, patchBody, user) {
 
   const becameSubmitted =
     previousStatus !== 'submitted' && existing.dispatch_status === 'submitted';
+  await recalculateOrderDispatchState(existing.order, user);
+
   if (becameSubmitted) {
     await workflowService.transitionOrderStatus({
       orderId: existing.order,
@@ -733,9 +737,11 @@ async function patch(id, patchBody, user) {
     });
     await enqueuePostDispatchJobs(existing.order, user._id);
     await linkDispatchToActiveTransportPlan(existing, user);
+  } else {
+    const { scheduleProcessStageRefresh } = require('../orders/processStage.jobs');
+    await scheduleProcessStageRefresh(existing.order, 'dispatch_patched');
   }
 
-  await recalculateOrderDispatchState(existing.order, user);
   return toPlain(existing.toObject());
 }
 
@@ -757,6 +763,8 @@ async function softDelete(id, user) {
     message: `Order dispatch ${plain.dispatch_no} soft-deleted`,
   });
   await recalculateOrderDispatchState(plain.order, user);
+  const { scheduleProcessStageRefresh } = require('../orders/processStage.jobs');
+  await scheduleProcessStageRefresh(plain.order, 'dispatch_deleted');
   return plain;
 }
 
@@ -771,6 +779,8 @@ async function restore(id, user) {
     message: `Order dispatch ${plain.dispatch_no} restored`,
   });
   await recalculateOrderDispatchState(plain.order, user);
+  const { scheduleProcessStageRefresh } = require('../orders/processStage.jobs');
+  await scheduleProcessStageRefresh(plain.order, 'dispatch_restored');
   return plain;
 }
 

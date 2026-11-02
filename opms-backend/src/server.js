@@ -19,6 +19,10 @@ db.connect()
     app.listen(PORT, () => {
       logger.info(`Server listening on port ${PORT}`);
     });
+    const { backfillProcessStages } = require('./modules/orders/orderListPage.service');
+    backfillProcessStages()
+      .then((res) => logger.info(`[startup] Order process stage backfill completed (matched: ${res.matched}, modified: ${res.modified})`))
+      .catch((err) => logger.warn(`[startup] Order process stage backfill warning: ${err.message}`));
   })
   .catch((err) => {
     logger.error(err);

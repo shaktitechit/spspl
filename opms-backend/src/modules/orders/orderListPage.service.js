@@ -157,6 +157,8 @@ const SLIM_SELECT = [
   'is_finance_approved',
   'is_account_approved',
   'is_due_sheet_uploaded',
+  'due_sheet_uploaded',
+  'process_stage',
   'last_admin_approval',
   'last_finance_approval',
   'last_account_approval',
@@ -185,6 +187,12 @@ const PAGE_SELECT = [
   'current_action',
   'current_department',
   'pending_with_role',
+  'process_stage',
+  'is_due_sheet_uploaded',
+  'due_sheet_uploaded',
+  'is_admin_approved',
+  'is_finance_approved',
+  'is_account_approved',
   'admin_approval_status',
   'finance_approval_status',
   'account_approval_status',
@@ -601,9 +609,14 @@ async function refreshOrderProcessStage(orderId) {
     is_due_sheet_uploaded: uploaded,
   });
   const stage = classifyOrder(enriched, context, false);
+  const updateFields = { process_stage: stage };
+  if (uploaded) {
+    updateFields.is_due_sheet_uploaded = true;
+    updateFields.due_sheet_uploaded = true;
+  }
   await models.Order.updateOne(
     { _id: row._id },
-    { $set: { process_stage: stage } },
+    { $set: updateFields },
     { runValidators: false },
   );
   return stage;
@@ -614,10 +627,15 @@ async function bulkWriteProcessStages(classified) {
   for (const item of classified) {
     const id = item.row && item.row._id;
     if (!id) continue;
+    const updateSet = { process_stage: item.tab || null };
+    if (item.row.due_sheet_uploaded || item.row.is_due_sheet_uploaded) {
+      updateSet.is_due_sheet_uploaded = true;
+      updateSet.due_sheet_uploaded = true;
+    }
     ops.push({
       updateOne: {
         filter: { _id: id },
-        update: { $set: { process_stage: item.tab || null } },
+        update: { $set: updateSet },
       },
     });
   }
@@ -635,20 +653,59 @@ async function bulkWriteProcessStages(classified) {
   return { matched, modified };
 }
 
-/** Classify and persist process_stage for orders in scope that are still unstaged. */
+/** Classify and persist process_stage for orders in scope that are unstaged or have drifted. */
 async function ensureProcessStagesForScope(scopeQuery, salesTabs) {
+  const models = getModels();
+  const driftOr = [
+    { process_stage: null },
+    { process_stage: { $exists: false } },
+    // Due sheet uploaded or past finance, but still marked due_sheet_pending
+    { process_stage: 'due_sheet_pending', is_due_sheet_uploaded: true },
+    { process_stage: 'due_sheet_pending', due_sheet_uploaded: true },
+    { process_stage: 'due_sheet_pending', finance_approval_status: 'approved' },
+    { process_stage: 'due_sheet_pending', account_approval_status: 'approved' },
+    { process_stage: 'due_sheet_pending', status: { $in: Array.from(POST_FINANCE_STATUSES) } },
+    // Admin approved but still marked pending_admin_approval
+    { process_stage: 'pending_admin_approval', is_admin_approved: true },
+    { process_stage: 'pending_admin_approval', admin_approval_status: { $in: ['approved', 'full'] } },
+    { process_stage: 'pending_admin_approval', status: { $in: Array.from(POST_ADMIN_STATUSES) } },
+    // Finance approved but still marked pending_finance_approval
+    { process_stage: 'pending_finance_approval', is_finance_approved: true },
+    { process_stage: 'pending_finance_approval', finance_approval_status: 'approved' },
+    { process_stage: 'pending_finance_approval', status: { $in: Array.from(POST_FINANCE_STATUSES) } },
+    // Account approved but still marked pending_account_approval
+    { process_stage: 'pending_account_approval', is_account_approved: true },
+    { process_stage: 'pending_account_approval', account_approval_status: { $in: ['approved', 'full'] } },
+    // Dispatch/transport finished but still marked open_dispatched or transport_pending
+    { process_stage: { $in: ['open_dispatched', 'transport_pending'] }, status: { $in: ['in_transit', 'delivered', 'closed'] } },
+    { process_stage: { $in: ['open_dispatched', 'transport_pending'] }, delivery_status: 'completed' },
+    { process_stage: 'in_transit', status: { $in: ['delivered', 'closed'] } },
+    { process_stage: 'in_transit', delivery_status: 'completed' },
+  ];
+
   const staleFilter = {
     $and: [
       scopeQuery,
-      { $or: [{ process_stage: null }, { process_stage: { $exists: false } }] },
+      { $or: driftOr },
     ],
   };
-  const staleCount = await getModels().Order.countDocuments(staleFilter);
-  if (!staleCount) return { updated: 0 };
 
-  const { classified } = await computeVisibleOrders(scopeQuery, salesTabs);
-  const result = await bulkWriteProcessStages(classified);
-  return { updated: result.modified };
+  const staleOrders = await models.Order.find(staleFilter)
+    .select('_id')
+    .limit(100)
+    .lean();
+
+  if (!staleOrders.length) return { updated: 0 };
+
+  for (const doc of staleOrders) {
+    try {
+      await refreshOrderProcessStage(doc._id);
+    } catch (_e) {
+      // ignore
+    }
+  }
+
+  return { updated: staleOrders.length };
 }
 
 /** One-time (re-runnable) write of process_stage for existing orders. */
@@ -684,6 +741,25 @@ function stageListFilter(scopeQuery, query) {
 
   if (tab && tab.toLowerCase() !== 'all') {
     filter.process_stage = tab;
+
+    // Defense-in-depth: exclude obvious contradictory records from tab queries
+    if (tab === 'due_sheet_pending') {
+      filter.is_due_sheet_uploaded = { $ne: true };
+      filter.due_sheet_uploaded = { $ne: true };
+      filter.finance_approval_status = { $ne: 'approved' };
+      filter.account_approval_status = { $ne: 'approved' };
+      filter.status = { $nin: Array.from(POST_FINANCE_STATUSES) };
+    } else if (tab === 'pending_admin_approval') {
+      filter.is_admin_approved = { $ne: true };
+      filter.admin_approval_status = { $nin: ['approved', 'full'] };
+      filter.status = { $nin: Array.from(POST_ADMIN_STATUSES) };
+    } else if (tab === 'pending_finance_approval') {
+      filter.is_finance_approved = { $ne: true };
+      filter.account_approval_status = { $ne: 'approved' };
+    } else if (tab === 'open_dispatched' || tab === 'transport_pending') {
+      filter.delivery_status = { $ne: 'completed' };
+      filter.status = { $nin: ['delivered', 'closed'] };
+    }
   } else if (!salesTabs) {
     filter.process_stage = { $nin: ['draft', null] };
   }
@@ -774,7 +850,7 @@ async function loadWorkflowContext() {
   };
 }
 
-const INDEX_TTL_MS = 20_000;
+const INDEX_TTL_MS = 0;
 const indexCache = new Map();
 const indexInflight = new Map();
 
@@ -1026,14 +1102,36 @@ async function listOrdersPage(query, user, buildBaseQuery) {
   const tabById = new Map(ids.map((row) => [String(row._id), row.process_stage]));
   const plain = pageDocs.map((row) => applyDerivedPriorityToOrder(toPlain(row)));
   const enriched = await enrichOrdersParallel(plain, getModels());
-  const data = enriched.map((row) => {
+  const context = await loadWorkflowContextForOrders(ids.map((row) => row._id));
+
+  const data = [];
+  for (const row of enriched) {
     const summary = summarizeOrder(row);
-    return {
+    const liveStage = classifyOrder(row, context, salesTabs);
+    const currentStage = row.process_stage || tabById.get(String(row._id));
+
+    // Self-heal DB in real time if stage drifted
+    if (liveStage && liveStage !== currentStage) {
+      getModels().Order.updateOne(
+        { _id: row._id },
+        { $set: { process_stage: liveStage } },
+      ).catch(() => {});
+      row.process_stage = liveStage;
+    }
+
+    // Exclude row from tab if live classifier shows it no longer belongs here
+    if (query.tab && query.tab.toLowerCase() !== 'all') {
+      if (liveStage && liveStage !== query.tab) {
+        continue;
+      }
+    }
+
+    data.push({
       ...row,
       ...summary,
-      workflow_tab: tabById.get(String(row._id)) || row.process_stage || null,
-    };
-  });
+      workflow_tab: liveStage || currentStage || null,
+    });
+  }
 
   return {
     total,

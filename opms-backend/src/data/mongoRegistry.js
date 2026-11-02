@@ -1208,6 +1208,8 @@ function registerModels() {
         ],
         default: null,
       },
+      is_due_sheet_uploaded: { type: Boolean, default: false },
+      due_sheet_uploaded: { type: Boolean, default: false },
       current_action: { type: String, default: "drafted", index: true },
       current_revision: { type: Number, default: 1 },
       is_locked: { type: Boolean, default: false },

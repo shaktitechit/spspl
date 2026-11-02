@@ -51,26 +51,18 @@ export function filterListOrders<T = unknown>(
 
   return orders.filter((o) => {
     if (!searchQuery.trim()) {
-      const stored = (o as { process_stage?: unknown; workflow_tab?: unknown })
-        .process_stage ??
-        (o as { workflow_tab?: unknown }).workflow_tab;
-      if (typeof stored === "string" && stored) {
-        if (activeTab !== "all" && stored !== activeTab) return false;
-        if (activeTab === "all" && stored === "draft" && !includeDraftTab) return false;
-      } else {
-        const matches = includeDraftTab
-          ? orderMatchesSalesTab(
-              o,
-              activeTab as SalesOrderTabCategory,
-              categoryOptions,
-            )
-          : orderMatchesWorkflowTab(
-              o,
-              activeTab as OrderWorkflowTabCategory,
-              categoryOptions,
-            );
-        if (!matches) return false;
-      }
+      const matches = includeDraftTab
+        ? orderMatchesSalesTab(
+            o,
+            activeTab as SalesOrderTabCategory,
+            categoryOptions,
+          )
+        : orderMatchesWorkflowTab(
+            o,
+            activeTab as OrderWorkflowTabCategory,
+            categoryOptions,
+          );
+      if (!matches) return false;
     } else {
       const query = searchQuery.toLowerCase();
       const id = orderKey(o);

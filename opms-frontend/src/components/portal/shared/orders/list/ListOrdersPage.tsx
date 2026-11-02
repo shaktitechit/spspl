@@ -73,7 +73,10 @@ import type {
   ListOrdersPageConfig,
   ListOrdersTabId,
 } from "./listOrdersPageConfig";
-import { type OrderWorkflowTabCategory } from "./orderWorkflowTabs";
+import {
+  orderMatchesWorkflowTab,
+  type OrderWorkflowTabCategory,
+} from "./orderWorkflowTabs";
 import { useOrderListUrlState } from "./useOrderListUrlState";
 import { useOrderWorkflowCategoryOptions } from "./useOrderWorkflowCategoryOptions";
 
@@ -200,7 +203,11 @@ export default function ListOrdersPage({
   ]);
 
   const { data, isLoading, isFetching, isError, refetch } =
-    useListOrdersQuery(listQueryParams);
+    useListOrdersQuery(listQueryParams, {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+      pollingInterval: 10000,
+    });
   const needsBulkOrders = isSheetOpen;
   const bulkListParams = {
     view: "list",
@@ -210,7 +217,10 @@ export default function ListOrdersPage({
     tab: processStage,
     ...(includeDraftTab ? { sales_tabs: "true" } : { exclude_status: "draft" }),
   };
-  const bulkQ = useListOrdersQuery(bulkListParams, { skip: !needsBulkOrders });
+  const bulkQ = useListOrdersQuery(bulkListParams, {
+    skip: !needsBulkOrders,
+    refetchOnMountOrArgChange: true,
+  });
   const partiesQ = useListPartiesQuery({});
   const salesUsersQ = useListUsersQuery({ department: "sales" });
   const categoryOptions = useOrderWorkflowCategoryOptions();
@@ -220,15 +230,37 @@ export default function ListOrdersPage({
       ? (data as ListOrdersPagePayload)
       : null;
 
-  const orders = useMemo(
+  const rawOrders = useMemo(
     () => pickOrders(data) as OrderListRow[],
     [data],
   );
 
-  const bulkOrders = useMemo(
+  const orders = useMemo(() => {
+    if (processStage === "all") return rawOrders;
+    return rawOrders.filter((o) => {
+      return orderMatchesWorkflowTab(
+        o,
+        processStage as OrderWorkflowTabCategory,
+        categoryOptions,
+      );
+    });
+  }, [rawOrders, processStage, categoryOptions]);
+
+  const rawBulkOrders = useMemo(
     () => pickOrders(bulkQ.data) as OrderListRow[],
     [bulkQ.data],
   );
+
+  const bulkOrders = useMemo(() => {
+    if (processStage === "all") return rawBulkOrders;
+    return rawBulkOrders.filter((o) => {
+      return orderMatchesWorkflowTab(
+        o,
+        processStage as OrderWorkflowTabCategory,
+        categoryOptions,
+      );
+    });
+  }, [rawBulkOrders, processStage, categoryOptions]);
 
   const getActiveTransportInfoForOrder = useCallback((o: Record<string, unknown>) => {
     const at = o.active_transport as
@@ -774,7 +806,10 @@ export default function ListOrdersPage({
         (useSuperAdminSheet ? (
           <SuperAdminOrdersSheetModal
             isOpen={isSheetOpen}
-            onClose={() => setIsSheetOpen(false)}
+            onClose={() => {
+              setIsSheetOpen(false);
+              void refetch();
+            }}
             partyNameById={partyNameById}
             config={config}
             orders={bulkOrders}
@@ -801,7 +836,10 @@ export default function ListOrdersPage({
         ) : (
           <GoogleSheetOrdersModal
             isOpen={isSheetOpen}
-            onClose={() => setIsSheetOpen(false)}
+            onClose={() => {
+              setIsSheetOpen(false);
+              void refetch();
+            }}
             partyNameById={partyNameById}
             config={config}
             orders={bulkOrders}
@@ -837,14 +875,20 @@ export default function ListOrdersPage({
         <OrderDetailModal
           orderId={viewOrderId}
           partyNameById={partyNameById}
-          onClose={() => setViewOrderId(null)}
+          onClose={() => {
+            setViewOrderId(null);
+            void refetch();
+          }}
         />
       )}
 
       {transportPlanOrderId && selectedTransportOrder && (
         <TransportPlanModal
           isOpen={!!transportPlanOrderId}
-          onClose={() => setTransportPlanOrderId(null)}
+          onClose={() => {
+            setTransportPlanOrderId(null);
+            void refetch();
+          }}
           orderId={transportPlanOrderId}
           orderNo={
             typeof selectedTransportOrder.order_no === "string"

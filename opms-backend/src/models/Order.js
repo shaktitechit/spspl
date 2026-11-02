@@ -351,6 +351,15 @@ const orderSchema = new mongoose.Schema(
       default: null,
     },
 
+    is_due_sheet_uploaded: {
+      type: Boolean,
+      default: false,
+    },
+    due_sheet_uploaded: {
+      type: Boolean,
+      default: false,
+    },
+
     status: {
       type: String,
       enum: ORDER_STATUS,

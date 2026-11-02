@@ -341,6 +341,11 @@ async function enrichOrdersWithApprovalPending(rows, models) {
     const approvalRemarks = latestApp
       ? String(latestApp.rejection_reason || latestApp.hold_reason || latestApp.approval_notes || latestApp.remarks || '').trim()
       : '';
+    const uploaded =
+      fromDocs ||
+      flaggedOrderIds.has(orderKey) ||
+      isTruthyFlag(row.is_due_sheet_uploaded) ||
+      isTruthyFlag(row.due_sheet_uploaded);
     return {
       ...row,
       remarks: row.remarks || approvalRemarks || row.internal_notes || undefined,
@@ -348,7 +353,8 @@ async function enrichOrdersWithApprovalPending(rows, models) {
       rejection_reason: latestApp?.rejection_reason || undefined,
       hold_reason: latestApp?.hold_reason || undefined,
       approval_pending: resolveOrderApprovalPending(docs, row),
-      is_due_sheet_uploaded: fromDocs || flaggedOrderIds.has(orderKey),
+      is_due_sheet_uploaded: uploaded,
+      due_sheet_uploaded: uploaded || isTruthyFlag(row.due_sheet_uploaded),
     };
   });
 }
@@ -363,15 +369,14 @@ async function enrichOrdersWithDueSheetStatus(rows, models) {
   if (orderIds.length === 0) {
     return rows.map((row) => ({
       ...row,
-      due_sheet_uploaded: false,
+      due_sheet_uploaded: isTruthyFlag(row.due_sheet_uploaded) || isTruthyFlag(row.is_due_sheet_uploaded),
     }));
   }
 
   const activeDueSheets = await models.OrderDueSheet.find({
     order: { $in: orderIds },
-    is_current: true,
-    status: 'active',
     deletedAt: null,
+    status: { $ne: 'archived' },
   })
     .select('order')
     .lean();
@@ -380,12 +385,14 @@ async function enrichOrdersWithDueSheetStatus(rows, models) {
 
   return rows.map((row) => {
     const uploaded =
-      uploadedOrderIds.has(String(row._id)) || isTruthyFlag(row.is_due_sheet_uploaded);
+      uploadedOrderIds.has(String(row._id)) ||
+      isTruthyFlag(row.is_due_sheet_uploaded) ||
+      isTruthyFlag(row.due_sheet_uploaded);
     return {
       ...row,
       // Keep list tabs / badges in sync: physical sheet OR approval DB flag.
       due_sheet_uploaded: uploaded,
-      is_due_sheet_uploaded: uploaded || isTruthyFlag(row.is_due_sheet_uploaded),
+      is_due_sheet_uploaded: uploaded,
     };
   });
 }

@@ -331,30 +331,32 @@ async function settleReleaseAfterTransportCreated(dispatchId, user, settleBody =
 
 async function enqueuePostTransportJobs(orderId, userId, extras = {}) {
   const oid = String(orderId);
-  const { scheduleProcessStageRefresh } = require('../orders/processStage.jobs');
-  await scheduleProcessStageRefresh(oid, 'transport');
-  await orderQueue.enqueue({
-    type: 'post_transport_shipment',
-    payload: {
+  try {
+    await processPostTransportShipmentJob({
       orderId: oid,
       userId: userId ? String(userId) : undefined,
       ...extras,
-    },
-  });
+    });
+  } catch (err) {
+    logger.error?.(`[transport] processPostTransportShipmentJob inline error: ${err.message}`);
+  }
+  const { scheduleProcessStageRefresh } = require('../orders/processStage.jobs');
+  await scheduleProcessStageRefresh(oid, 'transport');
 }
 
 async function processPostTransportShipmentJob(payload = {}) {
   const orderId = payload.orderId;
   if (!orderId) throw new Error('post_transport_shipment requires orderId');
-  if (!payload.userId) throw new Error('post_transport_shipment requires userId');
 
-  const { Order, User } = getModels();
+  const { Order, User, OrderWorkflow } = getModels();
   const orderBefore = await Order.findById(orderId).lean();
   if (!orderBefore) return { orderId, skipped: true };
 
-  const actor = await User.findById(payload.userId).lean();
-  if (!actor) throw new Error(`post_transport_shipment user not found: ${payload.userId}`);
-  const user = toPlain(actor);
+  let user = null;
+  if (payload.userId) {
+    const actor = await User.findById(payload.userId).lean();
+    if (actor) user = toPlain(actor);
+  }
 
   const orderState = await recalculateOrderShipmentState(orderId, user);
   if (!orderState) return { orderId, skipped: true };
@@ -367,19 +369,25 @@ async function processPostTransportShipmentJob(payload = {}) {
     || orderState.current_action
     || 'partially_transported';
 
-  await getModels().OrderWorkflow.create({
-    order: orderId,
-    action_by: payload.userId,
-    role: workflowRoleForUser(user),
-    action,
-    from_stage: orderBefore.workflow_stage,
-    to_stage: orderState.workflow_stage || ORDER_WORKFLOW_STAGE.DISPATCH,
-    from_status: orderBefore.status,
-    to_status: orderState.status || ORDER_STATUS.IN_TRANSIT,
-    remarks: payload.remarks || '',
-    revision_number: orderState.current_revision || orderBefore.current_revision || 1,
-    metadata: payload.metadata || undefined,
-  });
+  if (OrderWorkflow) {
+    try {
+      await OrderWorkflow.create({
+        order: orderId,
+        action_by: payload.userId,
+        role: user ? workflowRoleForUser(user) : 'dispatch',
+        action,
+        from_stage: orderBefore.workflow_stage,
+        to_stage: orderState.workflow_stage || ORDER_WORKFLOW_STAGE.DISPATCH,
+        from_status: orderBefore.status,
+        to_status: orderState.status || ORDER_STATUS.IN_TRANSIT,
+        remarks: payload.remarks || '',
+        revision_number: orderState.current_revision || orderBefore.current_revision || 1,
+        metadata: payload.metadata || undefined,
+      });
+    } catch (_wfErr) {
+      // ignore
+    }
+  }
 
   const { scheduleProcessStageRefresh } = require('../orders/processStage.jobs');
   await scheduleProcessStageRefresh(orderId, 'post_transport_shipment');

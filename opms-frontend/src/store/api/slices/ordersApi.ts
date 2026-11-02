@@ -44,6 +44,7 @@ export const ordersApi = medicaApi.injectEndpoints({
       }),
       transformResponse: (raw: ApiEnvelope<unknown>) => unwrapEnvelope(raw),
       providesTags: [{ type: "Orders", id: "LIST" }],
+      keepUnusedDataFor: 0,
     }),
     getOrdersStats: build.query<unknown, Record<string, string | undefined> | void>({
       query: (params) => ({
@@ -52,6 +53,7 @@ export const ordersApi = medicaApi.injectEndpoints({
       }),
       transformResponse: (raw: ApiEnvelope<unknown>) => unwrapEnvelope(raw),
       providesTags: [{ type: "Orders", id: "STATS" }],
+      keepUnusedDataFor: 0,
     }),
     getOrderWorkflowContext: build.query<{
       activeTransportOrderIds: string[];
@@ -69,6 +71,7 @@ export const ordersApi = medicaApi.injectEndpoints({
         submittedDispatchOrderIds: string[];
       }>) => unwrapEnvelope(raw),
       providesTags: [{ type: "Orders", id: "WORKFLOW_CONTEXT" }],
+      keepUnusedDataFor: 0,
     }),
     listOrdersDeleted: build.query<
       unknown,

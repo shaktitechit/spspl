@@ -178,31 +178,33 @@ async function assertFullDeliveryMatchesDispatch(body, deliveredLines) {
 
 async function enqueuePostShipmentDeliveryJobs(orderId, userId, extras = {}) {
   const oid = String(orderId);
-  const { scheduleProcessStageRefresh } = require('../orders/processStage.jobs');
-  await scheduleProcessStageRefresh(oid, 'delivery');
-  await orderQueue.enqueue({
-    type: 'post_shipment_delivery',
-    payload: {
+  try {
+    await processPostShipmentDeliveryJob({
       orderId: oid,
       userId: userId ? String(userId) : undefined,
       ...extras,
-    },
-  });
+    });
+  } catch (err) {
+    logger.error?.(`[orderDelivery] processPostShipmentDeliveryJob inline error: ${err.message}`);
+  }
+  const { scheduleProcessStageRefresh } = require('../orders/processStage.jobs');
+  await scheduleProcessStageRefresh(oid, 'delivery');
 }
 
 async function processPostShipmentDeliveryJob(payload = {}) {
   const orderId = payload.orderId;
   if (!orderId) throw new Error('post_shipment_delivery requires orderId');
-  if (!payload.userId) throw new Error('post_shipment_delivery requires userId');
   if (!payload.transportId) throw new Error('post_shipment_delivery requires transportId');
 
-  const { Order, User } = getModels();
+  const { Order, User, OrderWorkflow } = getModels();
   const orderBefore = await Order.findById(orderId).lean();
   if (!orderBefore) return { orderId, skipped: true };
 
-  const actor = await User.findById(payload.userId).lean();
-  if (!actor) throw new Error(`post_shipment_delivery user not found: ${payload.userId}`);
-  const user = toPlain(actor);
+  let user = null;
+  if (payload.userId) {
+    const actor = await User.findById(payload.userId).lean();
+    if (actor) user = toPlain(actor);
+  }
 
   await transportService.applyTransportDeliveryOutcome(
     payload.transportId,
@@ -219,24 +221,30 @@ async function processPostShipmentDeliveryJob(payload = {}) {
   const workflowAction =
     transportService.workflowActionForShipmentStatus(payload.transportStatus || 'delivered');
 
-  await getModels().OrderWorkflow.create({
-    order: orderId,
-    action_by: payload.userId,
-    role: transportService.workflowRoleForUser(user),
-    action: workflowAction,
-    from_stage: orderBefore.workflow_stage,
-    to_stage: orderState.workflow_stage || ORDER_WORKFLOW_STAGE.DISPATCH,
-    from_status: orderBefore.status,
-    to_status: orderState.status || ORDER_STATUS.DELIVERED,
-    remarks: payload.statusRemarks || '',
-    revision_number: orderState.current_revision || orderBefore.current_revision || 1,
-    metadata: {
-      transport_shipment_id: String(payload.transportId),
-      delivery_id: payload.deliveryId ? String(payload.deliveryId) : undefined,
-      delivery_type: payload.deliveryType,
-      event: 'shipment_delivery_logged',
-    },
-  });
+  if (OrderWorkflow) {
+    try {
+      await OrderWorkflow.create({
+        order: orderId,
+        action_by: payload.userId || undefined,
+        role: user ? transportService.workflowRoleForUser(user) : 'system',
+        action: workflowAction,
+        from_stage: orderBefore.workflow_stage,
+        to_stage: orderState.workflow_stage || ORDER_WORKFLOW_STAGE.DISPATCH,
+        from_status: orderBefore.status,
+        to_status: orderState.status || ORDER_STATUS.DELIVERED,
+        remarks: payload.statusRemarks || '',
+        revision_number: orderState.current_revision || orderBefore.current_revision || 1,
+        metadata: {
+          transport_shipment_id: String(payload.transportId),
+          delivery_id: payload.deliveryId ? String(payload.deliveryId) : undefined,
+          delivery_type: payload.deliveryType,
+          event: 'shipment_delivery_logged',
+        },
+      });
+    } catch {
+      // Non-blocking
+    }
+  }
 
   const { scheduleProcessStageRefresh } = require('../orders/processStage.jobs');
   await scheduleProcessStageRefresh(orderId, 'post_shipment_delivery');
@@ -328,6 +336,9 @@ async function patch(id, patchBody, user) {
   });
 
   await fulfillmentService.recalculateFromExecutions(doc.order, user);
+  await transportService.recalculateOrderShipmentState(doc.order, user);
+  const { scheduleProcessStageRefresh } = require('../orders/processStage.jobs');
+  await scheduleProcessStageRefresh(doc.order, 'delivery_updated');
 
   return toPlain(doc.toObject());
 }
@@ -349,6 +360,12 @@ async function softDelete(id, user) {
     action: 'deleted',
     message: `Delivery record ${plain.delivery_no} soft-deleted`,
   });
+  if (plain.order) {
+    await fulfillmentService.recalculateFromExecutions(plain.order, user);
+    await transportService.recalculateOrderShipmentState(plain.order, user);
+    const { scheduleProcessStageRefresh } = require('../orders/processStage.jobs');
+    await scheduleProcessStageRefresh(plain.order, 'delivery_deleted');
+  }
   return plain;
 }
 
@@ -362,6 +379,12 @@ async function restore(id, user) {
     action: 'restored',
     message: `Delivery record ${plain.delivery_no} restored`,
   });
+  if (plain.order) {
+    await fulfillmentService.recalculateFromExecutions(plain.order, user);
+    await transportService.recalculateOrderShipmentState(plain.order, user);
+    const { scheduleProcessStageRefresh } = require('../orders/processStage.jobs');
+    await scheduleProcessStageRefresh(plain.order, 'delivery_restored');
+  }
   return plain;
 }
 

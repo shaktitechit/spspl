@@ -14,13 +14,20 @@ async function scheduleProcessStageRefresh(orderId, source = 'workflow') {
   const oid = orderId != null ? String(orderId) : '';
   if (!oid) return;
 
+  // Always refresh inline immediately so live API queries have zero delay
+  try {
+    const { refreshOrderProcessStage } = require('./orderListPage.service');
+    await refreshOrderProcessStage(oid);
+  } catch (inlineErr) {
+    logger.warn?.(
+      `[processStage] inline refresh failed for order ${oid}: ${inlineErr.message}`,
+    );
+  }
+
   try {
     await processStageQueue.enqueue({ orderId: oid, source });
   } catch (err) {
-    logger.warn?.(
-      `[processStage] queue unavailable (${source}), refreshing inline for order ${oid}: ${err.message}`,
-    );
-    await refreshOrderProcessStage(oid);
+    // Redis down is fine since inline refresh already ran
   }
 }
 

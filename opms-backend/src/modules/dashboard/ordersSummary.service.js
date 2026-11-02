@@ -222,7 +222,7 @@ function rowsFromMap(map) {
   return Array.from(map.values()).sort((a, b) => b.quantity.total - a.quantity.total);
 }
 
-const SUMMARY_TTL_MS = 20_000;
+const SUMMARY_TTL_MS = 0;
 const summaryCache = new Map();
 const summaryInflight = new Map();
 
