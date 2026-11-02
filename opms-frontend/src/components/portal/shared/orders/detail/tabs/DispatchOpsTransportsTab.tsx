@@ -192,8 +192,16 @@ export function DispatchOpsTransportsTab({
         ) : (
           <div className="space-y-6 font-sans">
             {transports.map((tr: any) => {
-              const trId          = String(tr._id ?? tr.id ?? "");
-              const shipmentStatus = String(tr.shipment_status ?? tr.status ?? "created");
+              const trId           = String(tr._id ?? tr.id ?? "");
+              const rawStatus      = String(tr.shipment_status ?? tr.status ?? "created");
+              const isDelivered    =
+                rawStatus === "delivered" ||
+                Boolean(
+                  (tr.actual_delivery_date || tr.delivered_at) &&
+                    rawStatus !== "returned" &&
+                    rawStatus !== "delivery_failed",
+                );
+              const shipmentStatus = isDelivered ? "delivered" : rawStatus;
               const vehicleNumber  = tr.vehicle_number ?? tr.vehicle_no;
               const driverMobile   = tr.driver_mobile ?? tr.driver_phone;
               const isTerminal     = TERMINAL_STATUSES.includes(shipmentStatus);
@@ -202,7 +210,7 @@ export function DispatchOpsTransportsTab({
               const dispatchId: string | undefined =
                 dispatchIdFromTransport(tr as Record<string, unknown>) || undefined;
 
-              const nextStatus = NEXT_STATUS_MAP[shipmentStatus] ?? null;
+              const nextStatus = isTerminal ? null : (NEXT_STATUS_MAP[shipmentStatus] ?? null);
 
               return (
                 <div

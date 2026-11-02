@@ -49,7 +49,15 @@ export function TransportShipmentCard({
   showRemarksHistory = true,
 }: TransportShipmentCardProps) {
   const trId = String(tr._id ?? tr.id ?? "");
-  const shipmentStatus = String(tr.shipment_status ?? tr.status ?? "created");
+  const rawStatus = String(tr.shipment_status ?? tr.status ?? "created");
+  const isDelivered =
+    rawStatus === "delivered" ||
+    Boolean(
+      (tr.actual_delivery_date || tr.delivered_at) &&
+        rawStatus !== "returned" &&
+        rawStatus !== "delivery_failed",
+    );
+  const shipmentStatus = isDelivered ? "delivered" : rawStatus;
   const vehicleNumber = tr.vehicle_number ?? tr.vehicle_no;
   const driverMobile = tr.driver_mobile ?? tr.driver_phone;
   const isTerminal = TERMINAL_STATUSES.includes(shipmentStatus);

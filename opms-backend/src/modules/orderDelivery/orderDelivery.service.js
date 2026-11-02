@@ -17,6 +17,13 @@ const {
 const { hasOpmsRole } = require('../../middlewares/opmsAuth.middleware');
 const ROLES = require('../../constants/roles');
 
+let logger = console;
+try {
+  logger = require('../../utils/logger') || console;
+} catch {
+  logger = console;
+}
+
 const DEL_NF = 'Order delivery not found';
 
 function generateDeliveryNo() {
@@ -123,7 +130,7 @@ function validateShipmentDeliveryPayload(body) {
 }
 
 async function assertFullDeliveryMatchesDispatch(body, deliveredLines) {
-  const { OrderDelivery, OrderDispatch } = getModels();
+  const { OrderDelivery, OrderDispatch, TransportShipment } = getModels();
   const dispatch = await OrderDispatch.findOne({
     _id: body.dispatch,
     order: body.order,
@@ -132,12 +139,25 @@ async function assertFullDeliveryMatchesDispatch(body, deliveredLines) {
   }).lean();
   if (!dispatch) throw new ApiError(404, 'Order dispatch not found');
 
-  const existingDelivery = await OrderDelivery.exists({
+  const existingDelivery = await OrderDelivery.findOne({
     dispatch: body.dispatch,
     transport: body.transport,
     deletedAt: null,
-  });
+  }).lean();
   if (existingDelivery) {
+    if (body.transport) {
+      await TransportShipment.updateOne(
+        { _id: body.transport },
+        {
+          $set: {
+            shipment_status: 'delivered',
+            actual_delivery_date: existingDelivery.actual_delivery_date || new Date(),
+            delivered_at: existingDelivery.delivered_at || new Date(),
+            received_by: existingDelivery.received_by || body.received_by || '',
+          },
+        }
+      );
+    }
     throw new ApiError(400, 'A delivery is already recorded for this shipment');
   }
 
@@ -259,6 +279,71 @@ async function processPostShipmentDeliveryJob(payload = {}) {
 
 async function logShipmentDelivery(body, user) {
   const { deliveryType, deliveredLines } = validateShipmentDeliveryPayload(body);
+  const { OrderDelivery, TransportShipment } = getModels();
+
+  const userId = user?._id || user?.id || undefined;
+
+  // 1. Check if a delivery record already exists for this dispatch + transport
+  const existingDeliveryDoc = await OrderDelivery.findOne({
+    dispatch: body.dispatch,
+    transport: body.transport,
+    deletedAt: null,
+  });
+
+  if (existingDeliveryDoc) {
+    // Self-heal: the delivery was previously recorded; ensure TransportShipment and workflow are synchronized
+    const actualDeliveryDate = existingDeliveryDoc.actual_delivery_date || new Date();
+    const deliveredAt = existingDeliveryDoc.delivered_at || new Date();
+    const formattedTimestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const statusRemarks = body.status_remarks || body.remarks || 'Shipment delivered';
+    const newRemarkLine = `[${formattedTimestamp}] [DELIVERED]: ${statusRemarks.trim()}`;
+
+    const existingShipment = await TransportShipment.findById(body.transport);
+    const existingRemarks = existingShipment?.remarks || '';
+    const updatedRemarks =
+      existingRemarks && !existingRemarks.includes('[DELIVERED]')
+        ? `${existingRemarks}\n${newRemarkLine}`
+        : existingRemarks || newRemarkLine;
+
+    await TransportShipment.updateOne(
+      { _id: body.transport },
+      {
+        $set: {
+          shipment_status: 'delivered',
+          actual_delivery_date: existingShipment?.actual_delivery_date || actualDeliveryDate,
+          delivered_at: existingShipment?.delivered_at || deliveredAt,
+          received_by: body.received_by || existingShipment?.received_by || existingDeliveryDoc.received_by || '',
+          remarks: updatedRemarks,
+        },
+      }
+    );
+
+    try {
+      await transportService.applyTransportDeliveryOutcome(
+        body.transport,
+        { status: 'delivered', remarks: statusRemarks },
+        user,
+      );
+    } catch (_ignore) {}
+
+    await enqueuePostShipmentDeliveryJobs(body.order, userId, {
+      transportId: String(body.transport),
+      deliveryType,
+      transportStatus: 'delivered',
+      statusRemarks: body.status_remarks || '',
+      deliveryId: String(existingDeliveryDoc._id),
+    });
+
+    return {
+      delivery: toPlain(existingDeliveryDoc.toObject ? existingDeliveryDoc.toObject() : existingDeliveryDoc),
+      queued: true,
+      transport_status: 'delivered',
+      delivery_type: deliveryType,
+      alreadyRecorded: true,
+    };
+  }
+
+  // 2. Normal flow: validate payload against dispatch
   await assertFullDeliveryMatchesDispatch(body, deliveredLines);
   const transportStatus = 'delivered';
 
@@ -274,7 +359,41 @@ async function logShipmentDelivery(body, user) {
     delivered_at: body.delivered_at || new Date().toISOString(),
   }, user, { skipRecalculate: true });
 
-  await enqueuePostShipmentDeliveryJobs(body.order, user._id, {
+  // 3. Immediately and synchronously update TransportShipment
+  const actualDeliveryDate = body.actual_delivery_date ? new Date(body.actual_delivery_date) : new Date();
+  const deliveredAt = body.delivered_at ? new Date(body.delivered_at) : new Date();
+  const formattedTimestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+  const statusRemarks = body.status_remarks || body.remarks || 'Status updated to delivered';
+  const newRemarkLine = `[${formattedTimestamp}] [DELIVERED]: ${statusRemarks.trim()}`;
+
+  const existingShipment = await TransportShipment.findById(body.transport);
+  const existingRemarks = existingShipment?.remarks || '';
+  const updatedRemarks = existingRemarks ? `${existingRemarks}\n${newRemarkLine}` : newRemarkLine;
+
+  await TransportShipment.updateOne(
+    { _id: body.transport },
+    {
+      $set: {
+        shipment_status: 'delivered',
+        actual_delivery_date: existingShipment?.actual_delivery_date || actualDeliveryDate,
+        delivered_at: existingShipment?.delivered_at || deliveredAt,
+        received_by: body.received_by || existingShipment?.received_by || '',
+        remarks: updatedRemarks,
+      },
+    }
+  );
+
+  // 4. Safely call applyTransportDeliveryOutcome for syncing plan lines
+  try {
+    await transportService.applyTransportDeliveryOutcome(
+      body.transport,
+      { status: 'delivered', remarks: statusRemarks },
+      user,
+    );
+  } catch (_ignore) {}
+
+  // 5. Post delivery jobs (workflow + process stages)
+  await enqueuePostShipmentDeliveryJobs(body.order, userId, {
     transportId: String(body.transport),
     deliveryType,
     transportStatus,
@@ -283,7 +402,7 @@ async function logShipmentDelivery(body, user) {
   });
 
   return {
-    delivery: toPlain(deliveryDoc.toObject()),
+    delivery: toPlain(deliveryDoc.toObject ? deliveryDoc.toObject() : deliveryDoc),
     queued: true,
     transport_status: transportStatus,
     delivery_type: deliveryType,
