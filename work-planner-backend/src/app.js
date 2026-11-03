@@ -34,6 +34,35 @@ app.get(['/health', '/api/health'], (req, res) => {
   res.json({ status: 'ok', service: 'work-planner-backend', timestamp: new Date().toISOString() });
 });
 
+// Company Info endpoint proxy to auth-service
+app.get(['/api/company-info', '/api/company-info/'], async (req, res) => {
+  try {
+    const axios = require('axios');
+    const { AUTH_SERVICE_URL } = require('./config/env');
+    const targetUrl = `${(AUTH_SERVICE_URL || 'http://auth-service:7003').replace(/\/$/, '')}/api/company-info`;
+    const resp = await axios.get(targetUrl, { timeout: 5000 });
+    return res.status(resp.status).json(resp.data);
+  } catch (err) {
+    return res.json({
+      success: true,
+      data: {
+        legal_name: 'Medica Enterprises',
+        trade_name: 'Medica Enterprises',
+        gstin: '03ABCFM6125F1ZQ',
+        email: 'sales@medicaent.in',
+        phone: '9216811111',
+        address: '15, Pandori Waraich, Industrial Area, Opp. Nayara Petrol Pump, Majitha Road',
+        city: 'Amritsar',
+        state: 'Punjab',
+        pincode: '143008',
+        country: 'India',
+        website: 'https://medicaent.in',
+        invoice_footer_note: 'All disputes are subject to Amritsar Jurisdiction. Standard delivery and return policies apply.',
+      },
+    });
+  }
+});
+
 app.get(
   [
     '/api/files/:fileId/preview',

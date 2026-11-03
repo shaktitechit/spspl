@@ -22,7 +22,7 @@ export const companyApiSlice = baseApi.injectEndpoints({
   overrideExisting: true,
   endpoints: (builder) => ({
     getCompanyInfo: builder.query<CompanyInfoRecord, void>({
-      query: () => `${AUTH_SERVICE_URL}/api/company-info`,
+      query: () => "/company-info",
       transformResponse: (res: any) => res?.data || res,
       providesTags: ["CompanyInfo"],
     }),

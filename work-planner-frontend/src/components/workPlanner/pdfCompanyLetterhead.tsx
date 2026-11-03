@@ -20,32 +20,48 @@ export type PdfCompanyLetterhead = {
   footerNote: string;
 };
 
+export const DEFAULT_COMPANY_LETTERHEAD: PdfCompanyLetterhead = {
+  companyName: "Medica Enterprises",
+  logoUrl: "",
+  addressLine: "15, Pandori Waraich, Industrial Area, Opp. Nayara Petrol Pump, Majitha Road, Amritsar, Punjab - 143008, India",
+  contactLine: "Phone: 9216811111  |  Email: sales@medicaent.in  |  GSTIN: 03ABCFM6125F1ZQ  |  https://medicaent.in",
+  phone: "9216811111",
+  email: "sales@medicaent.in",
+  gstin: "03ABCFM6125F1ZQ",
+  website: "https://medicaent.in",
+  footerNote: "All disputes are subject to Amritsar Jurisdiction. Standard delivery and return policies apply.",
+};
+
 export function companyInfoToLetterhead(
   company?: CompanyInfoRecord | null,
 ): PdfCompanyLetterhead {
-  const companyName = String(company?.trade_name || company?.legal_name || "").trim();
+  const companyName = String(
+    company?.trade_name || company?.legal_name || DEFAULT_COMPANY_LETTERHEAD.companyName,
+  ).trim();
   const logoRaw = String(company?.logo_url || "").trim();
   const logoUrl = logoRaw ? resolvePublicAssetUrl(logoRaw) : "";
 
   const statePin =
     company?.state && company?.pincode
       ? `${company.state} - ${company.pincode}`
-      : String(company?.state || company?.pincode || "").trim();
+      : String(company?.state || company?.pincode || "Punjab - 143008").trim();
 
-  const addressLine = [
-    company?.address,
-    company?.city,
-    statePin,
-    company?.country,
-  ]
-    .map((part) => String(part || "").trim())
-    .filter(Boolean)
-    .join(", ");
+  const addressLine = company?.address
+    ? [
+        company.address,
+        company.city,
+        statePin,
+        company.country,
+      ]
+        .map((part) => String(part || "").trim())
+        .filter(Boolean)
+        .join(", ")
+    : DEFAULT_COMPANY_LETTERHEAD.addressLine;
 
-  const phone = String(company?.phone || "").trim();
-  const email = String(company?.email || "").trim();
-  const gstin = String(company?.gstin || "").trim();
-  const website = String(company?.website || "").trim();
+  const phone = String(company?.phone || DEFAULT_COMPANY_LETTERHEAD.phone).trim();
+  const email = String(company?.email || DEFAULT_COMPANY_LETTERHEAD.email).trim();
+  const gstin = String(company?.gstin || DEFAULT_COMPANY_LETTERHEAD.gstin).trim();
+  const website = String(company?.website || DEFAULT_COMPANY_LETTERHEAD.website).trim();
 
   const contactLine = [
     phone ? `Phone: ${phone}` : "",
@@ -54,15 +70,17 @@ export function companyInfoToLetterhead(
     website,
   ]
     .filter(Boolean)
-    .join("  |  ");
+    .join("  |  ") || DEFAULT_COMPANY_LETTERHEAD.contactLine;
 
-  const footerNote = String(company?.invoice_footer_note || "").trim();
+  const footerNote = String(
+    company?.invoice_footer_note || DEFAULT_COMPANY_LETTERHEAD.footerNote,
+  ).trim();
 
   return {
-    companyName,
+    companyName: companyName || DEFAULT_COMPANY_LETTERHEAD.companyName,
     logoUrl,
-    addressLine,
-    contactLine,
+    addressLine: addressLine || DEFAULT_COMPANY_LETTERHEAD.addressLine,
+    contactLine: contactLine || DEFAULT_COMPANY_LETTERHEAD.contactLine,
     phone,
     email,
     gstin,
