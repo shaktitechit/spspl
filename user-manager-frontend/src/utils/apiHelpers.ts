@@ -1,11 +1,12 @@
-export const API_BASE =
+export const API_BASE = (
   process.env.NEXT_PUBLIC_AUTH_SERVICE_URL ||
   process.env.NEXT_PUBLIC_API_ORIGIN ||
-  "http://localhost:7003";
+  "http://localhost:7003"
+).trim().replace(/\/+$/, "");
 
 /** Notifications are proxied by auth-service (`/api/notifications`). */
 export function publicNotificationServiceOrigin(): string {
-  return API_BASE.replace(/\/+$/, "");
+  return API_BASE;
 }
 
 export function getAuthHeaders(token?: string | null): Record<string, string> {

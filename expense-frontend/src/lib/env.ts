@@ -23,39 +23,6 @@ export const LEAD_MANAGER_SERVICE_URL =
  */
 export function publicExpenseApiOrigin(): string {
   const envUrl = (process.env.NEXT_PUBLIC_EXPENSE_SERVICE_URL || "").trim();
-
-  if (typeof window !== "undefined") {
-    const hostname = window.location.hostname;
-    const protocol = window.location.protocol;
-    const isLocalhost =
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname === "0.0.0.0";
-
-    if (!isLocalhost) {
-      // If deployed on remote host and envUrl is set to a non-localhost URL, respect it
-      if (envUrl && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1")) {
-        return envUrl.replace(/\/+$/, "");
-      }
-      // On standard spspl.com domain
-      if (hostname.includes("spspl.com")) {
-        return `${protocol}//api-expense.spspl.com`;
-      }
-      // Standard reverse proxy default or custom domain
-      if (window.location.port === "" || window.location.port === "80" || window.location.port === "443") {
-        return `${protocol}//api-${hostname}`;
-      }
-      return `${protocol}//${hostname}:7015`;
-    }
-
-    // Local development
-    if (envUrl) {
-      return envUrl.replace(/\/+$/, "");
-    }
-    return `http://${hostname}:7015`;
-  }
-
-  // Server-side
   if (envUrl) return envUrl.replace(/\/+$/, "");
   return "http://localhost:7015";
 }
@@ -65,9 +32,7 @@ export function publicExpenseApiOrigin(): string {
  */
 export function publicWorkPlannerApiOrigin(): string {
   const wpEnv = (process.env.NEXT_PUBLIC_WORK_PLANNER_SERVICE_URL || "").trim();
-  if (wpEnv && !wpEnv.includes("localhost") && !wpEnv.includes("127.0.0.1")) {
-    return wpEnv.replace(/\/+$/, "");
-  }
+  if (wpEnv) return wpEnv.replace(/\/+$/, "");
   return publicExpenseApiOrigin();
 }
 
@@ -76,24 +41,6 @@ export function publicWorkPlannerApiOrigin(): string {
  */
 export function publicAuthServiceOrigin(): string {
   const authEnv = (process.env.NEXT_PUBLIC_AUTH_SERVICE_URL || "").trim();
-  if (typeof window !== "undefined") {
-    const hostname = window.location.hostname;
-    const protocol = window.location.protocol;
-    const isLocalhost =
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname === "0.0.0.0";
-
-    if (!isLocalhost) {
-      if (authEnv && !authEnv.includes("localhost") && !authEnv.includes("127.0.0.1")) {
-        return authEnv.replace(/\/+$/, "");
-      }
-      if (hostname.includes("spspl.com")) {
-        return `${protocol}//auth.spspl.com`;
-      }
-      return `${protocol}//${hostname}:7003`;
-    }
-  }
   if (authEnv) return authEnv.replace(/\/+$/, "");
   return "http://localhost:7003";
 }
