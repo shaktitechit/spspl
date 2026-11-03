@@ -10,9 +10,9 @@
 # Issue certs (DNS must already point here):
 #   sudo certbot certonly --webroot -w /var/www/html \
 #     -d opms.medicaent.in -d app.medicaent.in -d users.medicaent.in -d plans.medicaent.in \
-#     -d leads.medicaent.in -d api.medicaent.in -d auth.medicaent.in \
+#     -d leads.medicaent.in -d expense.medicaent.in -d api.medicaent.in -d auth.medicaent.in \
 #     -d api-products.medicaent.in -d api-parties.medicaent.in -d api-plans.medicaent.in \
-#     -d api-leads.medicaent.in \
+#     -d api-leads.medicaent.in -d api-expense.medicaent.in \
 #     --cert-name opms.medicaent.in
 #
 # Then switch to HTTPS:
@@ -32,6 +32,8 @@ upstream medica_lead_manager_backend  { server 127.0.0.1:5009; keepalive 32; }
 upstream medica_lead_manager_frontend { server 127.0.0.1:5010; keepalive 16; }
 upstream medica_notification_service  { server 127.0.0.1:5012; keepalive 32; }
 upstream medica_app_frontend          { server 127.0.0.1:5013; keepalive 16; }
+upstream medica_expense_backend       { server 127.0.0.1:5015; keepalive 32; }
+upstream medica_expense_frontend      { server 127.0.0.1:5016; keepalive 16; }
 
 server {
     listen 80;
@@ -80,6 +82,16 @@ server {
     location / {
         include /etc/nginx/snippets/proxy-upgrade.conf;
         proxy_pass http://medica_lead_manager_frontend;
+    }
+}
+
+server {
+    listen 80;
+    server_name expense.medicaent.in;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/html; }
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://medica_expense_frontend;
     }
 }
 
@@ -153,5 +165,19 @@ server {
     location / {
         include /etc/nginx/snippets/proxy-params.conf;
         proxy_pass http://medica_lead_manager_backend;
+    }
+}
+
+server {
+    listen 80;
+    server_name api-expense.medicaent.in;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/html; }
+    location ~ ^/api/notifications/stream {
+        include /etc/nginx/snippets/proxy-sse.conf;
+        proxy_pass http://medica_expense_backend;
+    }
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://medica_expense_backend;
     }
 }

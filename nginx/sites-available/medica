@@ -39,6 +39,8 @@ upstream medica_lead_manager_backend  { server 127.0.0.1:5009; keepalive 32; }
 upstream medica_lead_manager_frontend { server 127.0.0.1:5010; keepalive 16; }
 upstream medica_notification_service  { server 127.0.0.1:5012; keepalive 32; }
 upstream medica_app_frontend          { server 127.0.0.1:5013; keepalive 16; }
+upstream medica_expense_backend       { server 127.0.0.1:5015; keepalive 32; }
+upstream medica_expense_frontend      { server 127.0.0.1:5016; keepalive 16; }
 
 # -----------------------------------------------------------------------------
 # HTTP → HTTPS (+ ACME challenge)
@@ -52,12 +54,14 @@ server {
         users.medicaent.in
         plans.medicaent.in
         leads.medicaent.in
+        expense.medicaent.in
         api.medicaent.in
         auth.medicaent.in
         api-products.medicaent.in
         api-parties.medicaent.in
         api-plans.medicaent.in
-        api-leads.medicaent.in;
+        api-leads.medicaent.in
+        api-expense.medicaent.in;
 
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/html;
@@ -135,6 +139,19 @@ server {
     location / {
         include /etc/nginx/snippets/proxy-upgrade.conf;
         proxy_pass http://medica_lead_manager_frontend;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name expense.medicaent.in;
+    include /etc/nginx/snippets/medica-ssl.conf;
+    client_max_body_size 50m;
+
+    location / {
+        include /etc/nginx/snippets/proxy-upgrade.conf;
+        proxy_pass http://medica_expense_frontend;
     }
 }
 
@@ -239,6 +256,25 @@ server {
     location / {
         include /etc/nginx/snippets/proxy-params.conf;
         proxy_pass http://medica_lead_manager_backend;
+        proxy_read_timeout 120s;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name api-expense.medicaent.in;
+    include /etc/nginx/snippets/medica-ssl.conf;
+    client_max_body_size 50m;
+
+    location ~ ^/api/notifications/stream {
+        include /etc/nginx/snippets/proxy-sse.conf;
+        proxy_pass http://medica_expense_backend;
+    }
+
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://medica_expense_backend;
         proxy_read_timeout 120s;
     }
 }
