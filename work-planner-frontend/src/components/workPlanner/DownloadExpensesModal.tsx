@@ -56,6 +56,9 @@ export type DownloadExpensesModalProps = {
   open: boolean;
   expenses?: WorkPlanExpenseRecord[];
   onClose: () => void;
+  lockToUserId?: string;
+  defaultTab?: ReportTab;
+  title?: string;
 };
 
 type ReportDatePreset = "all" | DateFilterPreset;
@@ -81,13 +84,22 @@ export function DownloadExpensesModal({
   open,
   expenses: initialExpenses = [],
   onClose,
+  lockToUserId,
+  defaultTab = "claims",
+  title,
 }: DownloadExpensesModalProps) {
   const letterhead = usePdfCompanyLetterhead();
   const sessionUser = useMemo(() => readSessionFromStorage()?.user, []);
   const adminRole = isWpAdmin(sessionUser);
   const elevatedRole = isWpElevated(sessionUser);
 
-  const [activeTab, setActiveTab] = useState<ReportTab>("claims");
+  const [activeTab, setActiveTab] = useState<ReportTab>(defaultTab);
+
+  useEffect(() => {
+    if (open && defaultTab) {
+      setActiveTab(defaultTab);
+    }
+  }, [open, defaultTab]);
 
   const [downloadingCsv, setDownloadingCsv] = useState(false);
   const [downloadingExcel, setDownloadingExcel] = useState(false);
@@ -202,7 +214,9 @@ export function DownloadExpensesModal({
         params.from = range.from;
         params.to = range.to;
       }
-      if (elevatedRole) {
+      if (lockToUserId) {
+        params.sales_user = lockToUserId;
+      } else if (elevatedRole) {
         params.scope = "team";
       }
 
@@ -268,6 +282,7 @@ export function DownloadExpensesModal({
   const filteredClaims = useMemo(() => {
     return claimsItems.filter((e) => {
       const uid = extractOwnerId(e);
+      if (lockToUserId && uid && uid !== lockToUserId) return false;
       if (selectedTeamMemberIds && uid && !selectedTeamMemberIds.has(uid)) return false;
       if (executiveFilter !== "all" && uid !== executiveFilter) return false;
       if (subCategoryFilter !== "all" && e.sub_category !== subCategoryFilter) return false;
@@ -305,6 +320,7 @@ export function DownloadExpensesModal({
     });
   }, [
     claimsItems,
+    lockToUserId,
     selectedTeamMemberIds,
     executiveFilter,
     subCategoryFilter,
@@ -317,6 +333,7 @@ export function DownloadExpensesModal({
   const filteredAdvances = useMemo(() => {
     return advancesItems.filter((adv) => {
       const uid = extractOwnerId(adv);
+      if (lockToUserId && uid && uid !== lockToUserId) return false;
       if (selectedTeamMemberIds && uid && !selectedTeamMemberIds.has(uid)) return false;
       if (executiveFilter !== "all" && uid !== executiveFilter) return false;
       if (paymentModeFilter !== "all" && adv.payment_method !== paymentModeFilter) return false;
@@ -337,12 +354,13 @@ export function DownloadExpensesModal({
       }
       return true;
     });
-  }, [advancesItems, selectedTeamMemberIds, executiveFilter, paymentModeFilter, searchQuery]);
+  }, [advancesItems, lockToUserId, selectedTeamMemberIds, executiveFilter, paymentModeFilter, searchQuery]);
 
   // Filtered Settlements
   const filteredSettlements = useMemo(() => {
     return settlementsItems.filter((set) => {
       const uid = extractOwnerId(set);
+      if (lockToUserId && uid && uid !== lockToUserId) return false;
       if (selectedTeamMemberIds && uid && !selectedTeamMemberIds.has(uid)) return false;
       if (executiveFilter !== "all" && uid !== executiveFilter) return false;
       if (paymentModeFilter !== "all" && set.payment_method !== paymentModeFilter) return false;
@@ -361,7 +379,7 @@ export function DownloadExpensesModal({
       }
       return true;
     });
-  }, [settlementsItems, selectedTeamMemberIds, executiveFilter, paymentModeFilter, searchQuery]);
+  }, [settlementsItems, lockToUserId, selectedTeamMemberIds, executiveFilter, paymentModeFilter, searchQuery]);
 
   // Active filters count badge
   const activeFiltersCount = useMemo(() => {
@@ -736,14 +754,18 @@ export function DownloadExpensesModal({
               ? `${customFrom} to ${customTo}`
               : datePreset.toUpperCase(),
         },
-        {
-          label: "Team Filter",
-          value: teamFilter === "all" ? "All Teams" : "Selected Team",
-        },
-        {
-          label: "Executive",
-          value: executiveFilter === "all" ? "All Representatives" : executiveFilter,
-        },
+        ...(lockToUserId
+          ? [{ label: "Scope", value: "Personal Records Only (Self)" }]
+          : [
+              {
+                label: "Team Filter",
+                value: teamFilter === "all" ? "All Teams" : "Selected Team",
+              },
+              {
+                label: "Executive",
+                value: executiveFilter === "all" ? "All Representatives" : executiveFilter,
+              },
+            ]),
         {
           label: "Payment Mode",
           value: paymentModeFilter === "all" ? "All Modes" : paymentModeFilter.toUpperCase(),
@@ -933,10 +955,10 @@ export function DownloadExpensesModal({
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-sm sm:text-base font-bold text-foreground truncate">
-                    Financial & Expenses Master Hub
+                    {title || "Financial & Expenses Master Hub"}
                   </h2>
                   <span className="rounded bg-teal-500/10 text-teal-600 dark:text-teal-400 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
-                    Interactive Sheet
+                    {lockToUserId ? "My Personal Records" : "Interactive Sheet"}
                   </span>
                 </div>
                 <p className="text-[11px] sm:text-xs text-muted truncate">
@@ -1101,7 +1123,7 @@ export function DownloadExpensesModal({
                 </div>
 
                 {/* 2. Hierarchy Team Filter */}
-                {elevatedRole && teamOptions.length > 0 && (
+                {!lockToUserId && elevatedRole && teamOptions.length > 0 && (
                   <div className="space-y-1">
                     <label className="text-[11px] font-semibold text-muted">Reporting Team</label>
                     <select
@@ -1123,7 +1145,7 @@ export function DownloadExpensesModal({
                 )}
 
                 {/* 3. Executive Filter */}
-                {elevatedRole && executiveOptions.length > 0 && (
+                {!lockToUserId && elevatedRole && executiveOptions.length > 0 && (
                   <div className="space-y-1">
                     <label className="text-[11px] font-semibold text-muted">Sales Executive</label>
                     <select

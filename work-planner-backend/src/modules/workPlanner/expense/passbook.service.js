@@ -322,6 +322,8 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
     })
       .populate('approved_by', 'name email')
       .populate('disbursed_by', 'name email')
+      .populate('attachments')
+      .populate('disbursement_attachments')
       .lean(),
     WorkPlanExpense.find({
       deletedAt: null,
@@ -399,6 +401,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
       const refAmount = Number(adv.refunded_amount);
       rawLedger.push({
         id: `ADV-REF-${adv._id}`,
+        advance_id: String(adv._id),
         entry_type: 'advance_refund',
         date: adv.refunded_at || adv.updatedAt || adv.createdAt,
         reference: adv.advance_number || `ADV-${String(adv._id).slice(-6).toUpperCase()}`,
@@ -410,6 +413,31 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
         transaction_reference: adv.refund_reference,
         actor_name: adv.refunded_by?.name || 'Finance Authority',
         details: adv.refund_notes || 'Unspent advance refunded back to company',
+      });
+    }
+
+    // 3. Rejected Advance event
+    if (adv.status === 'rejected') {
+      const rejDate = adv.approved_at || adv.updatedAt || adv.createdAt;
+      const rejAmount = Number(adv.amount || 0);
+      rawLedger.push({
+        id: `ADV-REJ-${adv._id}`,
+        advance_id: String(adv._id),
+        entry_type: 'advance_rejected',
+        advance_status: 'rejected',
+        date: rejDate,
+        reference: adv.advance_number || `ADV-${String(adv._id).slice(-6).toUpperCase()}`,
+        title: `Rejected Tour Advance (${adv.purpose || 'Advance'})`,
+        amount: rejAmount,
+        impact_advance_balance: 0,
+        impact_claim_receivable: 0,
+        payment_method: 'Advance Request',
+        actor_name: adv.approved_by?.name || 'Manager / Authority',
+        details: adv.rejection_reason ? `Rejected: ${adv.rejection_reason}` : (adv.purpose || 'Tour advance request rejected'),
+        rejection_reason: adv.rejection_reason || 'Advance request rejected',
+        remarks: adv.rejection_reason || 'Advance request rejected',
+        attachments: adv.attachments || [],
+        attachment_details: adv.attachment_details || (Array.isArray(adv.attachments) ? adv.attachments : []),
       });
     }
   }

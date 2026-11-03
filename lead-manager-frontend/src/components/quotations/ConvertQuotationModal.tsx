@@ -94,7 +94,7 @@ type LineRow = {
   quantity: number;
   free_qty: number;
   unit_price: number;
-  rate_type: "SR" | "SRA" | "CR";
+  rate_type: "SR" | "SRA" | "CR" | "MANUAL";
   discount_percent: number;
   discount_amount: number;
   gst_percent: number;
@@ -656,6 +656,7 @@ export function ConvertQuotationModal({
     isPOEnabled,
     isBuyBackEnabled,
     canSalesMapQuantity,
+    canSalesMapVolume,
     canSalesMapPrice,
   } = usePortalSettings();
 
@@ -675,6 +676,11 @@ export function ConvertQuotationModal({
 
   const priceRestricted = isSales && !canSalesMapPrice;
   const quantityRestricted = isSales && !canSalesMapQuantity;
+  const volumeRestricted = isSales && !canSalesMapVolume;
+
+  const showPriceColumn = !isSales || canSalesMapVolume || canSalesMapPrice;
+  const canEditPrice = !isSales || canSalesMapPrice;
+  const showFinancialTotals = !isSales || canSalesMapVolume;
 
   const [step, setStep] = useState<1 | 2>(1);
 
@@ -1112,16 +1118,30 @@ export function ConvertQuotationModal({
 
   const handleRateTypeChange = (
     index: number,
-    newRateType: "SR" | "SRA" | "CR",
+    newRateType: "SR" | "SRA" | "CR" | "MANUAL",
   ) => {
     const line = lines[index];
     const p = products.find(
       (x) => String(x._id ?? x.id) === String(line.productId),
     );
-    const price = resolvePriceForLine(line.productId, newRateType, p);
+    const price =
+      newRateType === "MANUAL"
+        ? line.unit_price
+        : resolvePriceForLine(line.productId, newRateType, p);
     setLines((prev) =>
       prev.map((l, i) =>
-        i === index ? { ...l, rate_type: newRateType, unit_price: price } : l,
+        i === index
+          ? {
+              ...l,
+              rate_type: newRateType,
+              unit_price:
+                newRateType === "MANUAL"
+                  ? l.unit_price
+                  : price > 0
+                  ? price
+                  : l.unit_price,
+            }
+          : l,
       ),
     );
   };
@@ -1187,7 +1207,11 @@ export function ConvertQuotationModal({
             return {
               ...row,
               unit_price: result.negotiatedRate,
-              rate_type: result.appliedRateType as "SR" | "SRA" | "CR",
+              rate_type: result.appliedRateType as
+                | "SR"
+                | "SRA"
+                | "CR"
+                | "MANUAL",
               rate_mapped: true,
               approval_required: false,
             };
@@ -1233,7 +1257,7 @@ export function ConvertQuotationModal({
       const p = products.find(
         (x) => String(x._id ?? x.id) === item.productId,
       );
-      const rateType: "SR" | "SRA" | "CR" = item.rate_type || "SR";
+      const rateType: "SR" | "SRA" | "CR" | "MANUAL" = item.rate_type || "SR";
       const resolvedPrice =
         Number(item.unit_price) > 0
           ? Number(item.unit_price)
@@ -1320,6 +1344,7 @@ export function ConvertQuotationModal({
   }, [lines]);
 
   const allItemsNegotiated = useMemo(() => {
+    if (priceRestricted) return true;
     const active = lines.filter((l) => l.productId && l.quantity > 0);
     if (active.length === 0) return false;
     return active.every((l) => {
@@ -1328,7 +1353,7 @@ export function ConvertQuotationModal({
       );
       return resolveRateDisplayStatus(rateItem, l.unit_price) === "negotiated";
     });
-  }, [lines, rateItemByLine]);
+  }, [lines, rateItemByLine, priceRestricted]);
 
   const validateStep1 = () => {
     if (!partyId) {
@@ -1352,17 +1377,19 @@ export function ConvertQuotationModal({
       toast.error("Add at least one product line");
       return false;
     }
-    const unmappedLines = validLines.filter((l) => {
-      const rateItem = rateItemByLine.get(
-        rateLookupKey(l.productId, l.rate_type || "SR"),
-      );
-      return resolveRateDisplayStatus(rateItem, l.unit_price) !== "negotiated";
-    });
-    if (unmappedLines.length > 0) {
-      toast.error(
-        `${unmappedLines.length} item(s) do not have a valid negotiated rate. Click "Map Rate" on each line first.`,
-      );
-      return false;
+    if (!priceRestricted) {
+      const unmappedLines = validLines.filter((l) => {
+        const rateItem = rateItemByLine.get(
+          rateLookupKey(l.productId, l.rate_type || "SR"),
+        );
+        return resolveRateDisplayStatus(rateItem, l.unit_price) !== "negotiated";
+      });
+      if (unmappedLines.length > 0) {
+        toast.error(
+          `${unmappedLines.length} item(s) do not have a valid negotiated rate. Click "Map Rate" on each line first.`,
+        );
+        return false;
+      }
     }
     return true;
   };
@@ -1927,28 +1954,36 @@ export function ConvertQuotationModal({
                       <table className="w-full table-fixed text-left text-xs">
                         <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
                           <tr>
-                            <th className="w-[28%] px-3 py-2.5">Product</th>
-                            <th className="w-[8%] px-1.5 py-2.5 text-center">
+                            <th className="px-3 py-2.5">Product</th>
+                            <th className="w-[10%] px-1.5 py-2.5 text-center">
                               Rate
                             </th>
-                            <th className="w-[8%] px-1.5 py-2.5 text-center">
+                            <th className="w-[9%] px-1.5 py-2.5 text-center">
                               Qty
                             </th>
-                            <th className="w-[8%] px-1.5 py-2.5 text-center">
+                            <th className="w-[9%] px-1.5 py-2.5 text-center">
                               Free
                             </th>
-                            <th className="w-[13%] px-1.5 py-2.5 text-right">
-                              Price (₹)
-                            </th>
-                            <th className="w-[9%] px-1.5 py-2.5 text-right">
-                              Disc %
-                            </th>
-                            <th className="w-[8%] px-1.5 py-2.5 text-right">
-                              GST %
-                            </th>
-                            <th className="w-[13%] px-2 py-2.5 text-right">
-                              Total (₹)
-                            </th>
+                            {showPriceColumn && (
+                              <th className="w-[14%] px-1.5 py-2.5 text-right">
+                                Price (₹)
+                              </th>
+                            )}
+                            {showFinancialTotals && (
+                              <th className="w-[9%] px-1.5 py-2.5 text-right">
+                                Disc %
+                              </th>
+                            )}
+                            {showFinancialTotals && (
+                              <th className="w-[8%] px-1.5 py-2.5 text-right">
+                                GST %
+                              </th>
+                            )}
+                            {showFinancialTotals && (
+                              <th className="w-[13%] px-2 py-2.5 text-right">
+                                Total (₹)
+                              </th>
+                            )}
                             <th className="w-[5%] px-1.5 py-2.5"></th>
                           </tr>
                         </thead>
@@ -2051,7 +2086,7 @@ export function ConvertQuotationModal({
                                     onChange={(e) =>
                                       void handleRateTypeChange(
                                         i,
-                                        e.target.value as "SR" | "SRA" | "CR",
+                                        e.target.value as "SR" | "SRA" | "CR" | "MANUAL",
                                       )
                                     }
                                     className="h-[34px] w-full rounded border border-slate-300 bg-white px-1 text-center text-xs font-medium focus:border-teal-500 focus:outline-none"
@@ -2059,6 +2094,7 @@ export function ConvertQuotationModal({
                                     <option value="SR">SR</option>
                                     <option value="SRA">SRA</option>
                                     <option value="CR">CR</option>
+                                    <option value="MANUAL">MANUAL</option>
                                   </select>
                                 </td>
                                 <td className="px-1.5 py-2.5">
@@ -2118,78 +2154,98 @@ export function ConvertQuotationModal({
                                     className="h-[34px] w-full rounded border border-slate-300 px-1.5 text-center text-xs focus:border-teal-500 focus:outline-none"
                                   />
                                 </td>
-                                <td className="px-1.5 py-2.5">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    step="0.01"
-                                    value={
-                                      line.unit_price === 0
-                                        ? ""
-                                        : line.unit_price
-                                    }
-                                    placeholder="0"
-                                    disabled={priceRestricted}
-                                    title={priceRestricted ? "Price editing is disabled for Sales by Super Admin" : undefined}
-                                    onFocus={(e) => e.currentTarget.select()}
-                                    onChange={(e) =>
-                                      updateLine(i, {
-                                        unit_price:
-                                          e.target.value === ""
-                                            ? 0
-                                            : Math.max(
-                                              0,
-                                              Number(e.target.value),
-                                            ),
-                                      })
-                                    }
-                                    className={`h-[34px] w-full rounded border px-1.5 text-right text-xs focus:border-teal-500 focus:outline-none ${
-                                      priceRestricted
-                                        ? "border-slate-200 bg-slate-100 text-slate-500 cursor-not-allowed"
-                                        : line.productId &&
-                                        rateUiState !== "negotiated"
-                                        ? "border-rose-300 bg-rose-50/40 text-rose-900"
-                                        : "border-slate-300"
-                                    }`}
-                                  />
-                                </td>
-                                <td className="px-1.5 py-2.5">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    step="0.1"
-                                    value={
-                                      line.discount_percent === 0
-                                        ? ""
-                                        : line.discount_percent
-                                    }
-                                    placeholder="0"
-                                    onFocus={(e) => e.currentTarget.select()}
-                                    onChange={(e) =>
-                                      updateLine(i, {
-                                        discount_percent:
-                                          e.target.value === ""
-                                            ? 0
-                                            : Math.max(
-                                              0,
-                                              Number(e.target.value),
-                                            ),
-                                      })
-                                    }
-                                    className="h-[34px] w-full rounded border border-slate-300 px-1.5 text-right text-xs focus:border-teal-500 focus:outline-none"
-                                  />
-                                </td>
-                                <td className="px-1.5 py-2.5 text-right font-medium text-slate-600">
-                                  <div className="flex h-[34px] items-center justify-end">
-                                    {line.gst_percent}%
-                                  </div>
-                                </td>
-                                <td className="px-2 py-2.5 text-right font-semibold text-slate-900">
-                                  <div className="flex h-[34px] items-center justify-end">
-                                    {inr(lineTotal)}
-                                  </div>
-                                </td>
+                                {showPriceColumn && (
+                                  <td className="px-1.5 py-2.5">
+                                    {canEditPrice ? (
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step="0.01"
+                                        value={
+                                          line.unit_price === 0
+                                            ? ""
+                                            : line.unit_price
+                                        }
+                                        placeholder="0"
+                                        disabled={priceRestricted}
+                                        title={
+                                          priceRestricted
+                                            ? "Price editing is disabled for Sales by Super Admin"
+                                            : undefined
+                                        }
+                                        onFocus={(e) =>
+                                          e.currentTarget.select()
+                                        }
+                                        onChange={(e) =>
+                                          updateLine(i, {
+                                            unit_price:
+                                              e.target.value === ""
+                                                ? 0
+                                                : Math.max(
+                                                    0,
+                                                    Number(e.target.value),
+                                                  ),
+                                          })
+                                        }
+                                        className={`h-[34px] w-full rounded border px-1.5 text-right text-xs focus:border-teal-500 focus:outline-none ${
+                                          priceRestricted
+                                            ? "border-slate-200 bg-slate-100 text-slate-500 cursor-not-allowed"
+                                            : line.productId &&
+                                              rateUiState !== "negotiated"
+                                            ? "border-rose-300 bg-rose-50/40 text-rose-900"
+                                            : "border-slate-300"
+                                        }`}
+                                      />
+                                    ) : (
+                                      <div className="flex h-[34px] items-center justify-end rounded border border-slate-200 bg-slate-50 px-2 text-xs font-semibold tabular-nums text-slate-700">
+                                        ₹{formatMoney(line.unit_price)}
+                                      </div>
+                                    )}
+                                  </td>
+                                )}
+                                {showFinancialTotals && (
+                                  <td className="px-1.5 py-2.5">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      step="0.1"
+                                      value={
+                                        line.discount_percent === 0
+                                          ? ""
+                                          : line.discount_percent
+                                      }
+                                      placeholder="0"
+                                      onFocus={(e) => e.currentTarget.select()}
+                                      onChange={(e) =>
+                                        updateLine(i, {
+                                          discount_percent:
+                                            e.target.value === ""
+                                              ? 0
+                                              : Math.max(
+                                                0,
+                                                Number(e.target.value),
+                                              ),
+                                        })
+                                      }
+                                      className="h-[34px] w-full rounded border border-slate-300 px-1.5 text-right text-xs focus:border-teal-500 focus:outline-none"
+                                    />
+                                  </td>
+                                )}
+                                {showFinancialTotals && (
+                                  <td className="px-1.5 py-2.5 text-right font-medium text-slate-600">
+                                    <div className="flex h-[34px] items-center justify-end">
+                                      {line.gst_percent}%
+                                    </div>
+                                  </td>
+                                )}
+                                {showFinancialTotals && (
+                                  <td className="px-2 py-2.5 text-right font-semibold text-slate-900">
+                                    <div className="flex h-[34px] items-center justify-end">
+                                      {inr(lineTotal)}
+                                    </div>
+                                  </td>
+                                )}
                                 <td className="px-1.5 py-2.5 text-center">
                                   <button
                                     type="button"
@@ -2276,38 +2332,47 @@ export function ConvertQuotationModal({
                           {lines.filter((l) => l.productId).length}
                         </span>
                       </div>
-                      <div className="flex justify-between text-slate-600">
-                        <span>Subtotal</span>
-                        <span className="font-medium text-slate-900">
-                          {inr(totals.subtotal)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-slate-600">
-                        <span>Discount</span>
-                        <span className="font-medium text-emerald-700">
-                          -{inr(totals.totalDiscount)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-slate-600">
-                        <span>Taxable Amount</span>
-                        <span className="font-medium text-slate-900">
-                          {inr(totals.totalTaxable)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-slate-600">
-                        <span>GST (Estimated)</span>
-                        <span className="font-medium text-slate-900">
-                          {inr(totals.totalGst)}
-                        </span>
-                      </div>
-                      <div className="border-t border-slate-200 pt-2.5">
-                        <div className="flex justify-between text-sm font-bold text-slate-900">
-                          <span>Estimated Total</span>
-                          <span className="text-teal-700">
-                            {inr(totals.grandTotal)}
-                          </span>
+                      {showFinancialTotals ? (
+                        <>
+                          <div className="flex justify-between text-slate-600">
+                            <span>Subtotal</span>
+                            <span className="font-medium text-slate-900">
+                              {inr(totals.subtotal)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-slate-600">
+                            <span>Discount</span>
+                            <span className="font-medium text-emerald-700">
+                              -{inr(totals.totalDiscount)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-slate-600">
+                            <span>Taxable Amount</span>
+                            <span className="font-medium text-slate-900">
+                              {inr(totals.totalTaxable)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-slate-600">
+                            <span>GST (Estimated)</span>
+                            <span className="font-medium text-slate-900">
+                              {inr(totals.totalGst)}
+                            </span>
+                          </div>
+                          <div className="border-t border-slate-200 pt-2.5">
+                            <div className="flex justify-between text-sm font-bold text-slate-900">
+                              <span>Estimated Total</span>
+                              <span className="text-teal-700">
+                                {inr(totals.grandTotal)}
+                              </span>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-[11px] text-slate-500">
+                          <span className="font-semibold text-slate-700 block mb-0.5">Commercial Values Hidden</span>
+                          Order financial totals are restricted for Sales role by Super Admin policy.
                         </div>
-                      </div>
+                      )}
                     </div>
 
                     {!assignedSales && (
@@ -2316,7 +2381,7 @@ export function ConvertQuotationModal({
                       </p>
                     )}
 
-                    {!allItemsNegotiated &&
+                    {!priceRestricted && !allItemsNegotiated &&
                       lines.some((l) => l.productId) && (
                         <p className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-medium text-rose-800">
                           All products must have an active{" "}

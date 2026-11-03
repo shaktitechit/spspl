@@ -294,9 +294,11 @@ export type PassbookLedgerEntry = {
   id: string;
   settlement_id?: string;
   expense_id?: string;
+  advance_id?: string;
   entry_type:
     | "advance_disbursement"
     | "advance_refund"
+    | "advance_rejected"
     | "expense_approved"
     | "expense_submitted"
     | "expense_rejected"
@@ -304,6 +306,7 @@ export type PassbookLedgerEntry = {
     | "settlement_voucher"
     | "payment_entry";
   claim_status?: string;
+  advance_status?: string;
   category?: string;
   sub_category?: string;
   vendor_name?: string;
@@ -326,6 +329,8 @@ export type PassbookLedgerEntry = {
   transaction_reference?: string;
   actor_name?: string;
   details?: string;
+  rejection_reason?: string;
+  remarks?: string;
   attachments?: string[] | any[];
   attachment_details?: ExpenseAttachmentItem[];
 };

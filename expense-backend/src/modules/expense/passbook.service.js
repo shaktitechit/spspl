@@ -551,6 +551,35 @@ async function getExecutivePassbook(targetUserId, query = {}) {
         actor_name: adv.refunded_by?.name || 'Finance Authority',
       });
     }
+
+    // 3. Rejected Advance event
+    if (adv.status === 'rejected') {
+      const rejAmount = Number(adv.amount || 0);
+      ledgerEntries.push({
+        id: `ADV-REJ-${adv._id}`,
+        advance_id: String(adv._id),
+        date: adv.approved_at || adv.updatedAt || adv.createdAt,
+        type: 'ADVANCE_REJECTED',
+        entry_type: 'advance_rejected',
+        category: 'Tour Advance',
+        reference_number: adv.advance_number,
+        reference: adv.advance_number || `ADV-${String(adv._id).slice(-6).toUpperCase()}`,
+        description: adv.rejection_reason ? `Rejected: ${adv.rejection_reason}` : (adv.purpose || 'Tour advance rejected'),
+        title: `Rejected Tour Advance (${adv.purpose || 'Advance'})`,
+        details: adv.rejection_reason ? `Rejected: ${adv.rejection_reason}` : (adv.purpose || 'Tour advance rejected'),
+        rejection_reason: adv.rejection_reason || 'Advance request rejected',
+        remarks: adv.rejection_reason || 'Advance request rejected',
+        payment_method: 'Advance Request',
+        amount: rejAmount,
+        debit: 0,
+        credit: 0,
+        status: 'rejected',
+        approved_by: adv.approved_by,
+        actor_name: adv.approved_by?.name || 'Manager / Authority',
+        attachments: adv.attachments || [],
+        attachment_details: adv.attachment_details || (Array.isArray(adv.attachments) ? adv.attachments : []),
+      });
+    }
   });
 
   // Approved Expenses (Credit: Company reimburses employee)

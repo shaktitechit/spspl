@@ -14,6 +14,13 @@ const fallbackWorkflowFlags = {
       max_age_months: 36,
       requires_inspection: true,
     },
+    role_access_settings: {
+      sales_mapping: {
+        can_see_and_map_quantity: true,
+        can_see_and_map_volume: false,
+        can_see_and_map_price: false,
+      },
+    },
   },
 };
 

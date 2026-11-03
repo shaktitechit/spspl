@@ -21,6 +21,7 @@ import {
   XCircle,
   FileText,
   Download,
+  FileSpreadsheet,
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePdfCompanyLetterhead } from "./pdfCompanyLetterhead";
@@ -41,6 +42,7 @@ import { ExpenseAttachmentList } from "./expense/ExpenseAttachmentList";
 import { FilePreviewModal, useFilePreview } from "./FilePreviewModal";
 import { SettlementVoucherModal } from "./expense/SettlementVoucherModal";
 import { RequestAdvanceModal } from "./expense/RequestAdvanceModal";
+import { DownloadExpensesModal } from "./DownloadExpensesModal";
 import type { PassbookLedgerEntry } from "@/types/workPlanner";
 import { calculateDateRange } from "./DashboardDateFilter";
 
@@ -55,6 +57,7 @@ export function ExpensesPage() {
   const [fromDate, setFromDate] = useState<string>(defaultRange.from);
   const [toDate, setToDate] = useState<string>(defaultRange.to);
   const [typeFilter, setTypeFilter] = useState<"all" | "advance" | "payment" | "expense" | "settlement">("all");
+  const [advanceSubFilter, setAdvanceSubFilter] = useState<"all" | "disbursed" | "refund" | "rejected">("all");
   const [claimSubFilter, setClaimSubFilter] = useState<"all" | "draft" | "submitted" | "approved" | "rejected">("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
@@ -68,6 +71,7 @@ export function ExpensesPage() {
   // Modals State
   const [requestAdvanceOpen, setRequestAdvanceOpen] = useState<boolean>(false);
   const [selectedVoucherId, setSelectedVoucherId] = useState<string | null>(null);
+  const [exportClaimsModalOpen, setExportClaimsModalOpen] = useState<boolean>(false);
 
   // PDF Letterhead & Download State
   const letterhead = usePdfCompanyLetterhead();
@@ -125,6 +129,9 @@ export function ExpensesPage() {
   // Counts by category
   const counts = useMemo(() => {
     let advances = 0;
+    let advancesDisbursed = 0;
+    let advancesRefund = 0;
+    let advancesRejected = 0;
     let payments = 0;
     let expenses = 0;
     let settlements = 0;
@@ -134,8 +141,19 @@ export function ExpensesPage() {
     let rejectedClaims = 0;
 
     for (const e of rawEntries) {
-      if (e.entry_type === "advance_disbursement" || e.entry_type === "advance_refund") {
+      if (
+        e.entry_type === "advance_disbursement" ||
+        e.entry_type === "advance_refund" ||
+        e.entry_type === "advance_rejected"
+      ) {
         advances++;
+        if (e.entry_type === "advance_disbursement") {
+          advancesDisbursed++;
+        } else if (e.entry_type === "advance_refund") {
+          advancesRefund++;
+        } else if (e.entry_type === "advance_rejected") {
+          advancesRejected++;
+        }
       } else if (e.entry_type === "payment_entry") {
         payments++;
       } else if (
@@ -162,6 +180,9 @@ export function ExpensesPage() {
     return {
       all: rawEntries.length,
       advances,
+      advancesDisbursed,
+      advancesRefund,
+      advancesRejected,
       payments,
       expenses,
       settlements,
@@ -178,8 +199,18 @@ export function ExpensesPage() {
 
     if (typeFilter === "advance") {
       list = list.filter(
-        (e) => e.entry_type === "advance_disbursement" || e.entry_type === "advance_refund"
+        (e) =>
+          e.entry_type === "advance_disbursement" ||
+          e.entry_type === "advance_refund" ||
+          e.entry_type === "advance_rejected"
       );
+      if (advanceSubFilter === "disbursed") {
+        list = list.filter((e) => e.entry_type === "advance_disbursement");
+      } else if (advanceSubFilter === "refund") {
+        list = list.filter((e) => e.entry_type === "advance_refund");
+      } else if (advanceSubFilter === "rejected") {
+        list = list.filter((e) => e.entry_type === "advance_rejected");
+      }
     } else if (typeFilter === "payment") {
       list = list.filter((e) => e.entry_type === "payment_entry");
     } else if (typeFilter === "expense") {
@@ -221,6 +252,7 @@ export function ExpensesPage() {
         const txRef = (e.transaction_reference || "").toLowerCase();
         const category = (e.category || "").toLowerCase();
         const vendor = (e.vendor_name || "").toLowerCase();
+        const remarks = (e.rejection_reason || e.remarks || "").toLowerCase();
         return (
           ref.includes(q) ||
           title.includes(q) ||
@@ -228,7 +260,8 @@ export function ExpensesPage() {
           method.includes(q) ||
           txRef.includes(q) ||
           category.includes(q) ||
-          vendor.includes(q)
+          vendor.includes(q) ||
+          remarks.includes(q)
         );
       });
     }
@@ -239,7 +272,7 @@ export function ExpensesPage() {
       const tB = new Date(b.date).getTime() || 0;
       return tB - tA;
     });
-  }, [rawEntries, typeFilter, claimSubFilter, searchQuery]);
+  }, [rawEntries, typeFilter, advanceSubFilter, claimSubFilter, searchQuery]);
 
   // Group filtered entries by date for section headers
   const groupedByDate = useMemo(() => {
@@ -309,7 +342,7 @@ export function ExpensesPage() {
             typeFilter === "all"
               ? "All Transactions"
               : typeFilter === "advance"
-              ? "Tour Advances"
+              ? `Tour Advances (${advanceSubFilter.toUpperCase()})`
               : typeFilter === "payment"
               ? "Direct Treasury Payments"
               : typeFilter === "expense"
@@ -376,6 +409,9 @@ export function ExpensesPage() {
         } else if (e.entry_type === "advance_refund") {
           typeLabel = "Advance Refund";
           statusLabel = "REFUNDED";
+        } else if (e.entry_type === "advance_rejected") {
+          typeLabel = "Advance Rejected";
+          statusLabel = "REJECTED";
         } else if (e.entry_type === "expense_draft") {
           typeLabel = `Draft Claim (${e.category || "General"})`;
           statusLabel = "DRAFT";
@@ -399,6 +435,7 @@ export function ExpensesPage() {
         const particulars = [
           e.title,
           e.details && e.details !== e.title ? e.details : "",
+          e.rejection_reason ? `Reason: ${e.rejection_reason}` : "",
           e.vendor_name ? `Vendor: ${e.vendor_name}` : "",
         ]
           .filter(Boolean)
@@ -555,6 +592,16 @@ export function ExpensesPage() {
 
           <button
             type="button"
+            onClick={() => setExportClaimsModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-teal-600/30 bg-teal-500/10 px-3 py-2 text-xs font-semibold text-teal-700 dark:text-teal-300 hover:bg-teal-500/20 active:scale-95 transition shrink-0 cursor-pointer"
+            title="Export My Expense Claims (Excel, CSV, PDF Report)"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+            <span>Export Claims</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setRequestAdvanceOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-purple-700 active:scale-95 transition shadow-2xs shrink-0 cursor-pointer"
             title="Request Tour Advance Funds"
@@ -571,6 +618,7 @@ export function ExpensesPage() {
         <div
           onClick={() => {
             setTypeFilter("advance");
+            setAdvanceSubFilter("all");
           }}
           className={`rounded-2xl border border-purple-500/20 bg-purple-500/5 p-4 flex flex-col justify-between cursor-pointer transition hover:border-purple-500/40 hover:shadow-xs ${
             typeFilter === "advance" ? "ring-2 ring-purple-500/50" : ""
@@ -789,7 +837,10 @@ export function ExpensesPage() {
 
           <button
             type="button"
-            onClick={() => setTypeFilter("advance")}
+            onClick={() => {
+              setTypeFilter("advance");
+              setAdvanceSubFilter("all");
+            }}
             className={`rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
               typeFilter === "advance"
                 ? "bg-purple-600 text-white shadow-xs font-bold"
@@ -873,7 +924,7 @@ export function ExpensesPage() {
           >
             This Month
           </button>
-          {(fromDate || toDate || searchQuery || typeFilter !== "all" || claimSubFilter !== "all") && (
+          {(fromDate || toDate || searchQuery || typeFilter !== "all" || claimSubFilter !== "all" || advanceSubFilter !== "all") && (
             <button
               type="button"
               onClick={() => {
@@ -882,6 +933,7 @@ export function ExpensesPage() {
                 setSearchQuery("");
                 setTypeFilter("all");
                 setClaimSubFilter("all");
+                setAdvanceSubFilter("all");
               }}
               className="rounded-lg px-2 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
             >
@@ -890,6 +942,64 @@ export function ExpensesPage() {
           )}
         </div>
       </div>
+
+      {/* Advance Sub-Filter Bar when Advances tab is selected */}
+      {typeFilter === "advance" && (
+        <div className="flex items-center gap-1.5 bg-card/60 px-3 py-2 rounded-xl border border-border/70 text-xs overflow-x-auto scrollbar-none">
+          <span className="text-[11px] font-bold text-muted uppercase tracking-wider shrink-0 mr-1">
+            Advance Filter:
+          </span>
+          <button
+            type="button"
+            onClick={() => setAdvanceSubFilter("all")}
+            className={`rounded-lg px-2.5 py-1 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
+              advanceSubFilter === "all"
+                ? "bg-purple-600 text-white font-bold shadow-xs"
+                : "bg-surface-muted text-muted hover:text-foreground hover:bg-card border border-border"
+            }`}
+          >
+            All Advances ({counts.advances})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAdvanceSubFilter("disbursed")}
+            className={`rounded-lg px-2.5 py-1 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
+              advanceSubFilter === "disbursed"
+                ? "bg-purple-600 text-white font-bold shadow-xs"
+                : "bg-surface-muted text-muted hover:text-foreground hover:bg-card border border-border"
+            }`}
+          >
+            Disbursed ({counts.advancesDisbursed})
+          </button>
+
+          {counts.advancesRefund > 0 && (
+            <button
+              type="button"
+              onClick={() => setAdvanceSubFilter("refund")}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
+                advanceSubFilter === "refund"
+                  ? "bg-amber-600 text-white font-bold shadow-xs"
+                  : "bg-surface-muted text-muted hover:text-foreground hover:bg-card border border-border"
+              }`}
+            >
+              Refunds ({counts.advancesRefund})
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setAdvanceSubFilter("rejected")}
+            className={`rounded-lg px-2.5 py-1 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
+              advanceSubFilter === "rejected"
+                ? "bg-rose-600 text-white font-bold shadow-xs"
+                : "bg-surface-muted text-muted hover:text-foreground hover:bg-card border border-border"
+            }`}
+          >
+            Rejected ({counts.advancesRejected})
+          </button>
+        </div>
+      )}
 
       {/* Claims Sub-Filter Bar when Claims tab is selected */}
       {typeFilter === "expense" && (
@@ -1018,6 +1128,7 @@ export function ExpensesPage() {
               {group.entries.map((entry) => {
             const isAdvanceDisburse = entry.entry_type === "advance_disbursement";
             const isAdvanceRefund = entry.entry_type === "advance_refund";
+            const isAdvanceRejected = entry.entry_type === "advance_rejected";
             const isExpenseApproved = entry.entry_type === "expense_approved";
             const isExpenseSubmitted = entry.entry_type === "expense_submitted";
             const isExpenseRejected = entry.entry_type === "expense_rejected";
@@ -1034,7 +1145,7 @@ export function ExpensesPage() {
                 className={`rounded-2xl border bg-card p-4 shadow-2xs hover:shadow-xs transition space-y-3 ${
                   isExpenseSubmitted
                     ? "border-amber-500/30"
-                    : isExpenseRejected
+                    : isExpenseRejected || isAdvanceRejected
                     ? "border-rose-500/30"
                     : isExpenseDraft
                     ? "border-dashed border-slate-500/30"
@@ -1050,6 +1161,8 @@ export function ExpensesPage() {
                           ? "bg-purple-500/10 text-purple-600 dark:text-purple-400"
                           : isAdvanceRefund
                           ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                          : isAdvanceRejected
+                          ? "bg-rose-500/10 text-rose-600 dark:text-rose-400"
                           : isExpenseSubmitted
                           ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
                           : isExpenseDraft
@@ -1067,6 +1180,8 @@ export function ExpensesPage() {
                         <Wallet className="h-5 w-5" />
                       ) : isAdvanceRefund ? (
                         <RotateCcw className="h-5 w-5" />
+                      ) : isAdvanceRejected ? (
+                        <XCircle className="h-5 w-5" />
                       ) : isExpenseSubmitted ? (
                         <Clock className="h-5 w-5" />
                       ) : isExpenseDraft ? (
@@ -1086,6 +1201,11 @@ export function ExpensesPage() {
                         <span className="text-xs sm:text-sm font-bold text-foreground">
                           {entry.title}
                         </span>
+                        {isAdvanceRejected && (
+                          <span className="rounded-md bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase">
+                            Advance Rejected
+                          </span>
+                        )}
                         {isExpenseDraft && (
                           <span className="rounded-md bg-slate-500/10 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase">
                             Draft • Unsubmitted
@@ -1153,7 +1273,20 @@ export function ExpensesPage() {
 
                 {/* Details & Payment Metadata */}
                 <div className="rounded-xl bg-surface-muted/50 p-3 text-xs space-y-2">
-                  {entry.details && (
+                  {/* Rejection Remarks Callout Box */}
+                  {(isAdvanceRejected || isExpenseRejected) && (entry.rejection_reason || entry.remarks) && (
+                    <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-xs space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold text-rose-700 dark:text-rose-400">
+                        <XCircle className="h-3.5 w-3.5" />
+                        <span>{isAdvanceRejected ? "Advance Rejection Remarks:" : "Claim Rejection Remarks:"}</span>
+                      </div>
+                      <p className="text-foreground leading-relaxed pl-5 font-medium">
+                        {entry.rejection_reason || entry.remarks}
+                      </p>
+                    </div>
+                  )}
+
+                  {entry.details && (!isAdvanceRejected || (!entry.rejection_reason && !entry.remarks)) && (
                     <p className="text-muted leading-relaxed">{entry.details}</p>
                   )}
 
@@ -1226,6 +1359,11 @@ export function ExpensesPage() {
                       <span>
                         Claims Rec: <strong className="text-sky-600 dark:text-sky-400">{formatCurrency(entry.running_claim_receivable)}</strong>
                       </span>
+                      {isAdvanceRejected && (
+                        <span className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-medium text-rose-600 dark:text-rose-400">
+                          (Advance Rejected — not added to advance in hand)
+                        </span>
+                      )}
                       {isExpenseSubmitted && (
                         <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
                           (Pending Approval — not added to receivable balance yet)
@@ -1268,6 +1406,14 @@ export function ExpensesPage() {
       </div>
 
       {/* Modals */}
+      <DownloadExpensesModal
+        open={exportClaimsModalOpen}
+        onClose={() => setExportClaimsModalOpen(false)}
+        lockToUserId={userId}
+        defaultTab="claims"
+        title="Export My Expense Claims"
+      />
+
       <SettlementVoucherModal
         settlementId={selectedVoucherId}
         open={Boolean(selectedVoucherId)}

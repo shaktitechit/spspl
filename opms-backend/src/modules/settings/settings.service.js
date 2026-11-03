@@ -189,15 +189,17 @@ async function updatePortalSettings(payload, user) {
 
 async function getWorkflowFlags() {
   const s = await getPortalSettings();
-  return (
-    s.workflow_settings || {
-      performa_invoice_enabled: true,
-      cost_sheet_enabled: true,
-      kyc_verification_enabled: true,
-      purchase_order_enabled: true,
-      buy_back_enabled: false,
-    }
-  );
+  const wf = s.workflow_settings || {
+    performa_invoice_enabled: true,
+    cost_sheet_enabled: true,
+    kyc_verification_enabled: true,
+    purchase_order_enabled: true,
+    buy_back_enabled: false,
+  };
+  return {
+    ...wf,
+    role_access_settings: s.role_access_settings,
+  };
 }
 
 module.exports = {

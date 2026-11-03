@@ -29,7 +29,7 @@ export type QuickAddProductPayload = {
   quantity: number;
   free_qty: number;
   unit_price: number;
-  rate_type: "SR" | "SRA" | "CR";
+  rate_type: "SR" | "SRA" | "CR" | "MANUAL";
   discount_percent: number;
   gst_percent: number;
   remarks?: string;
@@ -55,7 +55,7 @@ type AggregatedHistoryItem = {
   lastQuantity: number;
   lastFreeQty: number;
   lastUnitPrice: number;
-  lastRateType: "SR" | "SRA" | "CR";
+  lastRateType: "SR" | "SRA" | "CR" | "MANUAL";
   lastDiscountPercent: number;
   lastGstPercent: number;
   timesOrdered: number;
@@ -249,8 +249,8 @@ export function PreviousPartyItemsModal({
       if (!pid) continue;
 
       const rawRate = String(item.applied_rate_type ?? "SR").toUpperCase();
-      const rateType: "SR" | "SRA" | "CR" =
-        rawRate === "SRA" || rawRate === "CR" ? rawRate : "SR";
+      const rateType: "SR" | "SRA" | "CR" | "MANUAL" =
+        rawRate === "SRA" || rawRate === "CR" || rawRate === "MANUAL" ? (rawRate as any) : "SR";
 
       payloads.push({
         productId: pid,
