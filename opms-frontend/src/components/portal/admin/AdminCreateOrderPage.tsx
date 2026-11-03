@@ -68,6 +68,7 @@ import {
 } from "@/store/api";
 import type { CheckOrderRatesItem } from "@/store/api/slices/partyOrderProductsRateApi";
 import { useAppSelector } from "@/store";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 import { contactsFromParty } from "@/lib/partyContacts";
 
 const inputClass =
@@ -930,6 +931,20 @@ export default function AdminCreateOrderPage({
   const [mapModalOpen, setMapModalOpen] = useState(false);
   const [previousItemsModalOpen, setPreviousItemsModalOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
+
+  const {
+    isPerformaEnabled,
+    isCostSheetEnabled,
+    isKycEnabled,
+    isPOEnabled,
+    isBuyBackEnabled,
+  } = usePortalSettings();
+
+  useEffect(() => {
+    if (!isPerformaEnabled && step === 2) {
+      setStep(1);
+    }
+  }, [isPerformaEnabled, step]);
   const [performaValues, setPerformaValues] = useState<PerformaFormValues>(INITIAL_PERFORMA_VALUES);
   const [attachmentFiles, setAttachmentFiles] = useState<PerformaAttachmentFiles>({
     po_file: null,
@@ -1722,7 +1737,7 @@ export default function AdminCreateOrderPage({
         const orderId = String(data?._id ?? data?.id ?? "");
 
         if (orderId) {
-          if (attachmentFiles.po_file) {
+          if (isPOEnabled && attachmentFiles.po_file) {
             const fd = new FormData();
             fd.append("file", attachmentFiles.po_file);
             fd.append("entity_type", "order");
@@ -1734,7 +1749,7 @@ export default function AdminCreateOrderPage({
             });
           }
 
-          if (attachmentFiles.cost_sheet_file) {
+          if (isCostSheetEnabled && attachmentFiles.cost_sheet_file) {
             const fd = new FormData();
             fd.append("file", attachmentFiles.cost_sheet_file);
             fd.append("entity_type", "order");
@@ -1746,7 +1761,7 @@ export default function AdminCreateOrderPage({
             });
           }
 
-          if (attachmentFiles.aadhaar_file) {
+          if (isKycEnabled && attachmentFiles.aadhaar_file) {
             const fd = new FormData();
             fd.append("file", attachmentFiles.aadhaar_file);
             fd.append("entity_type", "order");
@@ -1768,7 +1783,7 @@ export default function AdminCreateOrderPage({
             }
           }
 
-          if (attachmentFiles.pan_file) {
+          if (isKycEnabled && attachmentFiles.pan_file) {
             const fd = new FormData();
             fd.append("file", attachmentFiles.pan_file);
             fd.append("entity_type", "order");
@@ -1790,7 +1805,7 @@ export default function AdminCreateOrderPage({
             }
           }
 
-          if (attachmentFiles.gst_file) {
+          if (isKycEnabled && attachmentFiles.gst_file) {
             const fd = new FormData();
             fd.append("file", attachmentFiles.gst_file);
             fd.append("entity_type", "order");
@@ -1812,7 +1827,7 @@ export default function AdminCreateOrderPage({
             }
           }
 
-          if (attachmentFiles.kyc_files && attachmentFiles.kyc_files.length > 0) {
+          if (isKycEnabled && attachmentFiles.kyc_files && attachmentFiles.kyc_files.length > 0) {
             for (const file of attachmentFiles.kyc_files) {
               const fd = new FormData();
               fd.append("file", file);
@@ -1836,13 +1851,15 @@ export default function AdminCreateOrderPage({
             }
           }
 
-          // Sync performa after all attachments uploaded to ensure IDs and statuses link immediately
-          await updateOrderPerforma({
-            orderId,
-            data: finalPerforma,
-          }).unwrap().catch((err) => {
-            console.warn("Failed to sync performa after attachments upload:", err);
-          });
+          // Sync performa after all attachments uploaded if performa is enabled
+          if (isPerformaEnabled) {
+            await updateOrderPerforma({
+              orderId,
+              data: finalPerforma,
+            }).unwrap().catch((err) => {
+              console.warn("Failed to sync performa after attachments upload:", err);
+            });
+          }
         }
 
         toast.success(portalConfig.successToast(orderNo));
@@ -2035,45 +2052,47 @@ export default function AdminCreateOrderPage({
       </div>
 
       {/* Step Tabs Header */}
-      <div
-        className={
-          asModal
-            ? "flex shrink-0 items-center gap-3 border-b border-slate-200 px-6 py-3 dark:border-white/10"
-            : "flex items-center gap-3 border-b border-slate-200 pb-3 dark:border-white/10"
-        }
-      >
-        <button
-          type="button"
-          onClick={() => setStep(1)}
-          className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
-            step === 1
-              ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-              : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-          }`}
+      {isPerformaEnabled && (
+        <div
+          className={
+            asModal
+              ? "flex shrink-0 items-center gap-3 border-b border-slate-200 px-6 py-3 dark:border-white/10"
+              : "flex items-center gap-3 border-b border-slate-200 pb-3 dark:border-white/10"
+          }
         >
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-2xs font-bold text-white">
-            1
-          </span>
-          <span>Order Details & Items</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setStep(1)}
+            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+              step === 1
+                ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+            }`}
+          >
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-2xs font-bold text-white">
+              1
+            </span>
+            <span>Order Details & Items</span>
+          </button>
 
-        <span className="text-slate-300 dark:text-slate-700">/</span>
+          <span className="text-slate-300 dark:text-slate-700">/</span>
 
-        <button
-          type="button"
-          onClick={handleNextToStep2}
-          className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
-            step === 2
-              ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-              : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-          }`}
-        >
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-2xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
-            2
-          </span>
-          <span>Performa Invoice</span>
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={handleNextToStep2}
+            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+              step === 2
+                ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+            }`}
+          >
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-2xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+              2
+            </span>
+            <span>Performa Invoice</span>
+          </button>
+        </div>
+      )}
 
       <form
         onSubmit={onSubmit}
@@ -2530,22 +2549,36 @@ export default function AdminCreateOrderPage({
                       All items must be negotiated to proceed.
                     </p>
                   )}
-                  <Button
-                    type="button"
-                    variant="primary"
-                    onClick={handleNextToStep2}
-                    className="w-full font-semibold shadow-md shadow-primary/25 gap-2 cursor-pointer"
-                  >
-                    <span>Next: Performa Invoice</span>
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                  <button
-                    type="submit"
-                    disabled={isLoading || !allItemsNegotiated || !assignedSales}
-                    className="w-full py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition cursor-pointer"
-                  >
-                    {isLoading ? "Submitting order..." : "Or create & submit without Performa"}
-                  </button>
+                  {isPerformaEnabled ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        onClick={handleNextToStep2}
+                        className="w-full font-semibold shadow-md shadow-primary/25 gap-2 cursor-pointer"
+                      >
+                        <span>Next: Performa Invoice</span>
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                      <button
+                        type="submit"
+                        disabled={isLoading || !allItemsNegotiated || !assignedSales}
+                        className="w-full py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition cursor-pointer"
+                      >
+                        {isLoading ? "Submitting order..." : "Or create & submit without Performa"}
+                      </button>
+                    </>
+                  ) : (
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      disabled={isLoading || !allItemsNegotiated || !assignedSales}
+                      className="w-full font-semibold shadow-md shadow-primary/25 gap-2 cursor-pointer"
+                    >
+                      <span>{isLoading ? "Submitting order..." : "Create & Submit Order"}</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </section>
             </div>

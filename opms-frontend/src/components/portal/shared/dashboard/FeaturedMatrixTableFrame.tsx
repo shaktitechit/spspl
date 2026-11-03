@@ -1,10 +1,13 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import type { MatrixMetric, MatrixQtyBasis } from "./featuredMatrixUtils";
 import PeriodFilter from "./PeriodFilter";
 import PeriodHeadingCaption from "./PeriodHeadingCaption";
 import ReportDownloadButton from "./ReportDownloadButton";
+import { useAppSelector } from "@/store";
+import { getOpmsAccessRole } from "@/lib/opmsAuth";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 
 interface FeaturedMatrixTableFrameProps {
   title: string;
@@ -55,6 +58,21 @@ export default function FeaturedMatrixTableFrame({
   externalFilterCaption,
   children,
 }: FeaturedMatrixTableFrameProps) {
+  const user = useAppSelector((s) => s.auth.user);
+  const isSales = getOpmsAccessRole(user) === "sales";
+  const { canSalesMapQuantity, canSalesMapVolume } = usePortalSettings();
+
+  const allowQuantity = !isSales || canSalesMapQuantity;
+  const allowVolume = !isSales || canSalesMapVolume;
+
+  useEffect(() => {
+    if (!allowVolume && metric === "volume") {
+      onMetricChange?.("quantity");
+    } else if (!allowQuantity && metric === "quantity") {
+      onMetricChange?.("volume");
+    }
+  }, [allowVolume, allowQuantity, metric, onMetricChange]);
+
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
       <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 dark:border-white/5">
@@ -86,30 +104,34 @@ export default function FeaturedMatrixTableFrame({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
-            {showMetricToggle && onMetricChange && (
+            {showMetricToggle && onMetricChange && (allowQuantity || allowVolume) && (
               <div className="flex rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
-                <button
-                  type="button"
-                  onClick={() => onMetricChange("quantity")}
-                  className={`rounded-md px-2.5 py-1 text-2xs font-semibold transition cursor-pointer ${
-                    metric === "quantity"
-                      ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300"
-                      : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-                  }`}
-                >
-                  Quantity
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onMetricChange("volume")}
-                  className={`rounded-md px-2.5 py-1 text-2xs font-semibold transition cursor-pointer ${
-                    metric === "volume"
-                      ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300"
-                      : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-                  }`}
-                >
-                  Volume
-                </button>
+                {allowQuantity && (
+                  <button
+                    type="button"
+                    onClick={() => onMetricChange("quantity")}
+                    className={`rounded-md px-2.5 py-1 text-2xs font-semibold transition cursor-pointer ${
+                      metric === "quantity"
+                        ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300"
+                        : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    Quantity
+                  </button>
+                )}
+                {allowVolume && (
+                  <button
+                    type="button"
+                    onClick={() => onMetricChange("volume")}
+                    className={`rounded-md px-2.5 py-1 text-2xs font-semibold transition cursor-pointer ${
+                      metric === "volume"
+                        ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300"
+                        : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    Volume
+                  </button>
+                )}
               </div>
             )}
             {!hidePeriodFilter ? (

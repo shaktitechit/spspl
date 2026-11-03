@@ -24,6 +24,7 @@ import PeriodHeadingCaption from "./PeriodHeadingCaption";
 import ReportDownloadButton from "./ReportDownloadButton";
 import { formatPeriodLabel } from "./periodFilterUtils";
 import { downloadCsvFile, reportFilename } from "./reportDownloadUtils";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 
 import type { QtyBasis } from "./leaderboardUtils";
 
@@ -101,6 +102,12 @@ export default function OverviewWidgets({
   qtyBasis = "approved",
   showPricing,
 }: OverviewWidgetsProps) {
+  const { canSalesMapQuantity, canSalesMapVolume } = usePortalSettings();
+  const isSales = role === "sales";
+  const allowVolume = !isSales || canSalesMapVolume;
+  const allowQuantity = !isSales || canSalesMapQuantity;
+  const showAmount = showPricing ?? allowVolume;
+
   const tabStats = useMemo(
     () =>
       (tabStatsProp as OrderWorkflowTabStats | undefined) ??
@@ -160,11 +167,15 @@ export default function OverviewWidgets({
   }, [tabStats]);
 
   const cards = useMemo(() => {
-    const isSales = role === "sales";
+    const getLabel = (volLabel: string, qtyLabel: string, countLabel: string) => {
+      if (showAmount) return volLabel;
+      if (allowQuantity) return qtyLabel;
+      return countLabel;
+    };
     return [
       {
         key: "order_volume",
-        label: isSales ? "Order Quantity" : "Order Volume",
+        label: getLabel("Order Volume", "Order Quantity", "Total Orders"),
         ...kpis.orderVolume,
         hint: "Active orders excl. cancelled / rejected / on-hold · approved qty × rate (incl. GST)",
         accent: "bg-slate-500",
@@ -174,7 +185,7 @@ export default function OverviewWidgets({
       },
       {
         key: "delivered",
-        label: isSales ? "Delivered Quantity" : "Delivered Volume",
+        label: getLabel("Delivered Volume", "Delivered Quantity", "Delivered Orders"),
         ...kpis.delivered,
         hint: "Closed / delivered · approved qty × rate (incl. GST)",
         accent: "bg-emerald-500",
@@ -184,7 +195,7 @@ export default function OverviewWidgets({
       },
       {
         key: "approval_pending",
-        label: isSales ? "Approval Pending Qty" : "Approval Pending",
+        label: getLabel("Approval Pending", "Approval Pending Qty", "Approval Pending Orders"),
         ...kpis.approvalPending,
         hint: "Admin, due sheet, finance & account pending",
         accent: "bg-amber-500",
@@ -194,7 +205,7 @@ export default function OverviewWidgets({
       },
       {
         key: "dispatch_pending",
-        label: isSales ? "Dispatch Pending Qty" : "Dispatch Pending",
+        label: getLabel("Dispatch Pending", "Dispatch Pending Qty", "Dispatch Pending Orders"),
         ...kpis.dispatchPending,
         hint: "Dispatch pending",
         accent: "bg-indigo-500",
@@ -204,7 +215,7 @@ export default function OverviewWidgets({
       },
       {
         key: "transport_pending",
-        label: isSales ? "Transport Pending Qty" : "Transport Pending",
+        label: getLabel("Transport Pending", "Transport Pending Qty", "Transport Pending Orders"),
         ...kpis.transportPending,
         hint: "Transport pending",
         accent: "bg-blue-500",
@@ -214,7 +225,7 @@ export default function OverviewWidgets({
       },
       {
         key: "in_transit",
-        label: isSales ? "In Transit Quantity" : "In Transit",
+        label: getLabel("In Transit", "In Transit Quantity", "In Transit Orders"),
         ...kpis.inTransit,
         hint: "In transit orders",
         accent: "bg-sky-500",
@@ -224,7 +235,7 @@ export default function OverviewWidgets({
       },
       {
         key: "cancelled",
-        label: isSales ? "Cancelled Quantity" : "Cancelled Volume",
+        label: getLabel("Cancelled Volume", "Cancelled Quantity", "Cancelled Orders"),
         ...kpis.cancelled,
         hint: "Cancelled orders",
         accent: "bg-rose-500",
@@ -234,7 +245,7 @@ export default function OverviewWidgets({
       },
       {
         key: "rejected",
-        label: isSales ? "Rejected Quantity" : "Rejected Volume",
+        label: getLabel("Rejected Volume", "Rejected Quantity", "Rejected Orders"),
         ...kpis.rejected,
         hint: "Rejected orders",
         accent: "bg-red-500",
@@ -244,7 +255,7 @@ export default function OverviewWidgets({
       },
       {
         key: "on_hold",
-        label: isSales ? "On Hold Quantity" : "On Hold Volume",
+        label: getLabel("On Hold Volume", "On Hold Quantity", "On Hold Orders"),
         ...kpis.onHold,
         hint: "On-hold orders",
         accent: "bg-orange-500",
@@ -265,36 +276,34 @@ export default function OverviewWidgets({
       iconTone: string;
       Icon: LucideIcon;
     }>;
-  }, [kpis, role]);
+  }, [kpis, showAmount, allowQuantity]);
 
   const handleDownload = () => {
-    const showAmount = showPricing ?? role !== "sales";
-    const headers = !showAmount
-      ? ["Metric Category", "Quantity (Items)", "Kit Quantity", "Order Count"]
-      : [
+    const headers = showAmount
+      ? [
           "Metric Category",
           "Amount (INR)",
-          "Quantity (Items)",
-          "Kit Quantity",
+          ...(allowQuantity ? ["Quantity (Items)", "Kit Quantity"] : []),
+          "Order Count",
+        ]
+      : [
+          "Metric Category",
+          ...(allowQuantity ? ["Quantity (Items)", "Kit Quantity"] : []),
           "Order Count",
         ];
 
-    const rows = cards.map((card) =>
-      !showAmount
-        ? [
-            card.label,
-            formatQty(card.quantity),
-            formatQty(card.kitQuantity),
-            card.count.toLocaleString("en-IN"),
-          ]
-        : [
-            card.label,
-            `₹${formatMoney(card.amount)}`,
-            formatQty(card.quantity),
-            formatQty(card.kitQuantity),
-            card.count.toLocaleString("en-IN"),
-          ],
-    );
+    const rows = cards.map((card) => {
+      const row = [card.label];
+      if (showAmount) {
+        row.push(`₹${formatMoney(card.amount)}`);
+      }
+      if (allowQuantity) {
+        row.push(formatQty(card.quantity));
+        row.push(formatQty(card.kitQuantity));
+      }
+      row.push(card.count.toLocaleString("en-IN"));
+      return row;
+    });
 
     downloadCsvFile(
       reportFilename(`overview_widgets_${role}`, selectedYears, selectedMonths),
@@ -363,16 +372,34 @@ export default function OverviewWidgets({
                   <h3 className="font-sans text-xl font-bold text-slate-900 dark:text-slate-100">
                     {isOrdersFetching ? (
                       <span className="inline-block h-6 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-800" />
-                    ) : !showAmount ? (
+                    ) : showAmount ? (
+                      `₹${formatMoney(card.amount)}`
+                    ) : allowQuantity ? (
                       formatQty(card.quantity)
                     ) : (
-                      `₹${formatMoney(card.amount)}`
+                      card.count.toLocaleString("en-IN")
                     )}
                   </h3>
                   <p className="mt-1 text-2xs font-medium text-slate-500 dark:text-slate-400">
                     {isOrdersFetching ? (
                       <span className="inline-block h-3 w-28 animate-pulse rounded bg-slate-200 dark:bg-slate-800" />
-                    ) : !showAmount ? (
+                    ) : showAmount ? (
+                      <>
+                        {allowQuantity ? (
+                          <>
+                            {formatQty(card.quantity)} items
+                            {kitLabel ? (
+                              <span className="text-violet-600 dark:text-violet-400">
+                                {" "}
+                                · {kitLabel}
+                              </span>
+                            ) : null}
+                            {" · "}
+                          </>
+                        ) : null}
+                        {orderLabel}
+                      </>
+                    ) : allowQuantity ? (
                       <>
                         {orderLabel}
                         {kitLabel ? (
@@ -382,17 +409,7 @@ export default function OverviewWidgets({
                         ) : null}
                       </>
                     ) : (
-                      <>
-                        {formatQty(card.quantity)} items
-                        {kitLabel ? (
-                          <span className="text-violet-600 dark:text-violet-400">
-                            {" "}
-                            · {kitLabel}
-                          </span>
-                        ) : null}
-                        {" · "}
-                        {orderLabel}
-                      </>
+                      orderLabel
                     )}
                   </p>
                 </div>

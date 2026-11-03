@@ -740,7 +740,16 @@ function stageListFilter(scopeQuery, query) {
   const search = String(query.search || '').trim();
 
   if (tab && tab.toLowerCase() !== 'all') {
-    filter.process_stage = tab;
+    if (tab === 'draft') {
+      const draftOr = [
+        { process_stage: 'draft' },
+        { status: 'draft' },
+        { lifecycle_status: 'draft' },
+      ];
+      filter.$and = [...(filter.$and || []), { $or: draftOr }];
+    } else {
+      filter.process_stage = tab;
+    }
 
     // Defense-in-depth: exclude obvious contradictory records from tab queries
     if (tab === 'due_sheet_pending') {
@@ -798,7 +807,17 @@ async function countProcessStages(scopeQuery, salesTabs) {
   }
   const rows = await getModels().Order.aggregate([
     { $match: match },
-    { $group: { _id: '$process_stage', count: { $sum: 1 } } },
+    {
+      $group: {
+        _id: {
+          $ifNull: [
+            '$process_stage',
+            { $cond: [{ $eq: ['$status', 'draft'] }, 'draft', null] },
+          ],
+        },
+        count: { $sum: 1 },
+      },
+    },
   ]);
   const tabCounts = emptyTabCounts();
   let scopeTotal = 0;

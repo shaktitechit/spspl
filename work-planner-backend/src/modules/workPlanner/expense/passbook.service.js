@@ -15,6 +15,7 @@ const {
   getVisibleSalesUserIds,
 } = require('../teamVisibility.service');
 const { toPlain, assertAuthorityOverSalesUser, resolveEffectiveSalesUser } = require('./expense.common');
+const { withFreshExpenseAttachmentUrls } = require('../../../services/fileManagement');
 
 function buildMatchUserIds(userIds = []) {
   const strIds = userIds.map((id) => String(id?._id || id)).filter(Boolean);
@@ -336,6 +337,8 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
     })
       .populate('work_plan', 'plan_date title sales_user')
       .populate('approved_by', 'name email')
+      .populate('receipt_attachment')
+      .populate('attachments')
       .lean(),
     WorkPlanExpenseSettlement.find({
       sales_user: { $in: userMatchIds },
@@ -411,16 +414,90 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
     }
   }
 
-  // 2. Approved Expense Claims
-  for (const exp of expenses) {
+  // 2. Expense Claims (Approved, Submitted, Rejected, Draft)
+  let draftClaimsAmount = 0;
+  let draftClaimsCount = 0;
+  let submittedClaimsAmount = 0;
+  let submittedClaimsCount = 0;
+  let approvedClaimsAmount = 0;
+  let approvedClaimsCount = 0;
+
+  for (const rawExp of expenses) {
+    const exp = (await withFreshExpenseAttachmentUrls(rawExp).catch(() => rawExp)) || rawExp;
     const effectiveOwner = resolveEffectiveSalesUser(exp, exp.work_plan);
     if (effectiveOwner && effectiveOwner !== targetId) continue;
 
-    if (exp.status === 'approved' && (exp.amount || 0) > 0) {
+    const allAtts = [];
+    const seenAttIds = new Set();
+    const addUniqueAtt = (item) => {
+      if (!item) return;
+      const idKey = String(typeof item === 'object' ? (item._id || item.attachment_id || item.filename || item.url) : item);
+      if (idKey && !seenAttIds.has(idKey)) {
+        seenAttIds.add(idKey);
+        if (typeof item === 'object') allAtts.push(item);
+        else allAtts.push({ _id: item, original_name: 'Attachment' });
+      }
+    };
+    if (exp.receipt_attachment) addUniqueAtt(exp.receipt_attachment);
+    if (Array.isArray(exp.attachments)) {
+      for (const a of exp.attachments) addUniqueAtt(a);
+    }
+
+    if (exp.status === 'draft' && (exp.amount || 0) > 0) {
+      draftClaimsAmount += Number(exp.amount) || 0;
+      draftClaimsCount += 1;
+      const expDate = exp.expense_date || exp.createdAt;
+      rawLedger.push({
+        id: `EXP-DRAFT-${exp._id}`,
+        expense_id: String(exp._id),
+        entry_type: 'expense_draft',
+        claim_status: 'draft',
+        date: expDate,
+        reference: exp.bill_number || `EXP-${String(exp._id).slice(-6).toUpperCase()}`,
+        title: `Draft Expense Claim (${exp.category || 'General'})`,
+        amount: exp.amount,
+        impact_advance_balance: 0,
+        impact_claim_receivable: 0,
+        actor_name: userDoc?.name || 'Self',
+        details: exp.description || exp.category || 'Draft field expense claim (Unsubmitted)',
+        category: exp.category,
+        sub_category: exp.sub_category,
+        vendor_name: exp.vendor_name,
+        attachments: exp.attachments || [],
+        attachment_details: allAtts,
+      });
+    } else if (exp.status === 'submitted' && (exp.amount || 0) > 0) {
+      submittedClaimsAmount += Number(exp.amount) || 0;
+      submittedClaimsCount += 1;
+      const expDate = exp.submitted_at || exp.expense_date || exp.createdAt;
+      rawLedger.push({
+        id: `EXP-SUB-${exp._id}`,
+        expense_id: String(exp._id),
+        entry_type: 'expense_submitted',
+        claim_status: 'submitted',
+        date: expDate,
+        reference: exp.bill_number || `EXP-${String(exp._id).slice(-6).toUpperCase()}`,
+        title: `Submitted Expense Claim (${exp.category || 'General'})`,
+        amount: exp.amount,
+        impact_advance_balance: 0,
+        impact_claim_receivable: 0,
+        actor_name: userDoc?.name || 'Self',
+        details: exp.description || exp.category || 'Field expense claim submitted for approval',
+        category: exp.category,
+        sub_category: exp.sub_category,
+        vendor_name: exp.vendor_name,
+        attachments: exp.attachments || [],
+        attachment_details: allAtts,
+      });
+    } else if (exp.status === 'approved' && (exp.amount || 0) > 0) {
+      approvedClaimsAmount += Number(exp.amount) || 0;
+      approvedClaimsCount += 1;
       const expDate = exp.approved_at || exp.expense_date || exp.createdAt;
       rawLedger.push({
         id: `EXP-APP-${exp._id}`,
+        expense_id: String(exp._id),
         entry_type: 'expense_approved',
+        claim_status: 'approved',
         date: expDate,
         reference: exp.bill_number || `EXP-${String(exp._id).slice(-6).toUpperCase()}`,
         title: `Approved Expense Claim (${exp.category || 'General'})`,
@@ -429,6 +506,33 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
         impact_claim_receivable: +exp.amount,
         actor_name: exp.approved_by?.name || 'Manager',
         details: exp.description || exp.category || 'Verified field expense claim',
+        category: exp.category,
+        sub_category: exp.sub_category,
+        vendor_name: exp.vendor_name,
+        settlement_status: exp.settlement_status || 'unsettled',
+        attachments: exp.attachments || [],
+        attachment_details: allAtts,
+      });
+    } else if (exp.status === 'rejected' && (exp.amount || 0) > 0) {
+      const expDate = exp.updatedAt || exp.expense_date || exp.createdAt;
+      rawLedger.push({
+        id: `EXP-REJ-${exp._id}`,
+        expense_id: String(exp._id),
+        entry_type: 'expense_rejected',
+        claim_status: 'rejected',
+        date: expDate,
+        reference: exp.bill_number || `EXP-${String(exp._id).slice(-6).toUpperCase()}`,
+        title: `Rejected Expense Claim (${exp.category || 'General'})`,
+        amount: exp.amount,
+        impact_advance_balance: 0,
+        impact_claim_receivable: 0,
+        actor_name: exp.approved_by?.name || 'Manager',
+        details: exp.rejection_reason ? `Rejected: ${exp.rejection_reason}` : (exp.description || 'Expense claim rejected'),
+        category: exp.category,
+        sub_category: exp.sub_category,
+        vendor_name: exp.vendor_name,
+        attachments: exp.attachments || [],
+        attachment_details: allAtts,
       });
     }
   }
@@ -542,6 +646,12 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
     total_payment_entries: Math.round(runningPaymentEntry * 100) / 100,
     current_claim_receivable: Math.round(runningReceivable * 100) / 100,
     current_net_position: Math.round((runningReceivable - runningAdvance - runningPaymentEntry) * 100) / 100,
+    draft_claim_amount: Math.round(draftClaimsAmount * 100) / 100,
+    draft_claim_count: draftClaimsCount,
+    submitted_claim_amount: Math.round(submittedClaimsAmount * 100) / 100,
+    submitted_claim_count: submittedClaimsCount,
+    approved_claim_amount: Math.round(approvedClaimsAmount * 100) / 100,
+    approved_claim_count: approvedClaimsCount,
     entries: entries.reverse(), // most recent first for UI
   };
 }

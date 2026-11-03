@@ -10,6 +10,7 @@ const { authMiddleware } = require('./middlewares/auth.middleware');
 const { auditContextMiddleware } = require('./middlewares/auditContext.middleware');
 const { errorMiddleware } = require('./middlewares/error.middleware');
 const { notFound } = require('./middlewares/notFound.middleware');
+const { salesMappingAccessMiddleware } = require('./middlewares/salesMappingAccess.middleware');
 const swaggerUi = require('swagger-ui-express');
 let swaggerDocument = null;
 try {
@@ -46,6 +47,7 @@ const filesRoutes = require('./modules/files/files.routes');
 const reminderRoutes = require('./modules/reminders/reminder.routes');
 const transportPlannerRoutes = require('./modules/transportPlanner/transportPlanner.routes');
 const termsAndConditionsRoutes = require('./modules/terms_and_conditions/terms_and_conditions.routes');
+const settingsRoutes = require('./modules/settings/settings.routes');
 
 const app = express();
 app.use(cors(corsOptions));
@@ -101,8 +103,8 @@ app.use('/api/zones', proxyToPartyService);
 app.use('/api/party-countries', proxyToPartyService);
 app.use('/api/party-states', proxyToPartyService);
 app.use('/api/party-cities', proxyToPartyService);
-app.use('/api/party-products', proxyToPartyService);
-app.use('/api/party-order-products-rate', proxyToPartyService);
+app.use('/api/party-products', salesMappingAccessMiddleware, proxyToPartyService);
+app.use('/api/party-order-products-rate', salesMappingAccessMiddleware, proxyToPartyService);
 app.use('/api/orders', orderRoutes);
 app.use('/api/approvals', approvalRoutes);
 app.use('/api/finance', financeRoutes);
@@ -130,6 +132,7 @@ app.use('/api/communication', proxyToMessageService);
 app.use('/api/reminders', reminderRoutes);
 app.use('/api/transport-plans', transportPlannerRoutes);
 app.use('/api/terms-and-conditions', termsAndConditionsRoutes);
+app.use('/api/settings', settingsRoutes);
 app.use('/api', filesRoutes);
 app.use('/api', proxyToNotificationService);
 

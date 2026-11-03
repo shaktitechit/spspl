@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 import {
   FileText,
   Upload,
@@ -117,6 +118,14 @@ export function PerformaInvoiceFields({
   showFileUploads = true,
   existingDocs,
 }: Props) {
+  const {
+    isPerformaEnabled,
+    isCostSheetEnabled,
+    isKycEnabled,
+    isPOEnabled,
+    isBuyBackEnabled,
+  } = usePortalSettings();
+
   const poInputRef = useRef<HTMLInputElement>(null);
   const costSheetInputRef = useRef<HTMLInputElement>(null);
   const aadhaarInputRef = useRef<HTMLInputElement>(null);
@@ -347,231 +356,244 @@ export function PerformaInvoiceFields({
       </div>
 
       {/* SECTION 3: COMPLIANCE, DOCUMENTS & ATTACHMENTS */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">
-        <div className="mb-3.5 flex items-center gap-2 border-b border-slate-100 pb-2.5">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-50 text-amber-600">
-            <ShieldCheck className="h-3.5 w-3.5" />
+      {(isPOEnabled || isCostSheetEnabled || isKycEnabled) && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">
+          <div className="mb-3.5 flex items-center gap-2 border-b border-slate-100 pb-2.5">
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-50 text-amber-600">
+              <ShieldCheck className="h-3.5 w-3.5" />
+            </div>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+              {isKycEnabled && (isPOEnabled || isCostSheetEnabled)
+                ? "Verification, Attachments & KYC"
+                : isKycEnabled
+                ? "KYC Verification & Documents"
+                : isCostSheetEnabled && isPOEnabled
+                ? "Purchase Order & Cost Sheet Documents"
+                : isPOEnabled
+                ? "Purchase Order Documents"
+                : "Cost Sheet Documents"}
+            </h4>
           </div>
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-            Verification, Attachments & KYC
-          </h4>
-        </div>
 
-        <div className="space-y-4">
-          {/* Primary Order Documents: PO & Cost Sheet + Statuses */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {/* PO Attachment */}
-            {showFileUploads && (
-              <div className="flex flex-col justify-between rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-800">
-                      Purchase Order (PO)
-                    </span>
-                    {(value.po_file || existingDocs?.po) && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
-                        <CheckCircle2 className="h-3 w-3" /> Attached
+          <div className="space-y-4">
+            {/* Primary Order Documents: PO & Cost Sheet + Statuses */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {/* PO Attachment */}
+              {showFileUploads && isPOEnabled && (
+                <div className="flex flex-col justify-between rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-800">
+                        Purchase Order (PO)
                       </span>
-                    )}
+                      {(value.po_file || existingDocs?.po) && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                          <CheckCircle2 className="h-3 w-3" /> Attached
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-slate-500">
+                      Customer PO PDF / Image
+                    </p>
                   </div>
-                  <p className="mt-0.5 text-[11px] text-slate-500">
-                    Customer PO PDF / Image
-                  </p>
-                </div>
 
-                <div className="mt-2.5">
-                  <input
-                    ref={poInputRef}
-                    type="file"
-                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                    className="hidden"
-                    disabled={disabled}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0] || null;
-                      update({ po_file: f });
-                    }}
-                  />
-                  {value.po_file ? (
-                    <div className="flex items-center justify-between rounded-md border border-teal-200 bg-teal-50/60 px-2.5 py-1.5 text-xs">
-                      <span className=" flex items-center gap-1.5 font-medium text-teal-900">
-                        <Paperclip className="h-3.5 w-3.5 shrink-0 text-teal-600" />
-                        <span className="">{value.po_file.name}</span>
-                      </span>
+                  <div className="mt-2.5">
+                    <input
+                      ref={poInputRef}
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                      className="hidden"
+                      disabled={disabled}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] || null;
+                        update({ po_file: f });
+                      }}
+                    />
+                    {value.po_file ? (
+                      <div className="flex items-center justify-between rounded-md border border-teal-200 bg-teal-50/60 px-2.5 py-1.5 text-xs">
+                        <span className=" flex items-center gap-1.5 font-medium text-teal-900">
+                          <Paperclip className="h-3.5 w-3.5 shrink-0 text-teal-600" />
+                          <span className="">{value.po_file.name}</span>
+                        </span>
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => {
+                            update({ po_file: null });
+                            if (poInputRef.current) poInputRef.current.value = "";
+                          }}
+                          className="ml-2 text-slate-400 hover:text-red-600"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : existingDocs?.po ? (
+                      <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs">
+                        <a
+                          href={existingDocs.po.url || "#"}
+                          target="_blank"
+                          rel="noreferrer"
+                          className=" font-medium text-teal-700 hover:underline"
+                        >
+                          {existingDocs.po.original_name || "View PO Document"}
+                        </a>
+                        {!disabled && (
+                          <button
+                            type="button"
+                            onClick={() => poInputRef.current?.click()}
+                            className="ml-2 shrink-0 text-[11px] font-medium text-slate-600 hover:text-slate-900"
+                          >
+                            Replace
+                          </button>
+                        )}
+                      </div>
+                    ) : (
                       <button
                         type="button"
                         disabled={disabled}
-                        onClick={() => {
-                          update({ po_file: null });
-                          if (poInputRef.current) poInputRef.current.value = "";
-                        }}
-                        className="ml-2 text-slate-400 hover:text-red-600"
+                        onClick={() => poInputRef.current?.click()}
+                        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-teal-500 hover:text-teal-700 disabled:opacity-50"
                       >
-                        <X className="h-3.5 w-3.5" />
+                        <Upload className="h-3.5 w-3.5" /> Upload PO
                       </button>
-                    </div>
-                  ) : existingDocs?.po ? (
-                    <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs">
-                      <a
-                        href={existingDocs.po.url || "#"}
-                        target="_blank"
-                        rel="noreferrer"
-                        className=" font-medium text-teal-700 hover:underline"
-                      >
-                        {existingDocs.po.original_name || "View PO Document"}
-                      </a>
-                      {!disabled && (
-                        <button
-                          type="button"
-                          onClick={() => poInputRef.current?.click()}
-                          className="ml-2 shrink-0 text-[11px] font-medium text-slate-600 hover:text-slate-900"
-                        >
-                          Replace
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => poInputRef.current?.click()}
-                      className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-teal-500 hover:text-teal-700 disabled:opacity-50"
-                    >
-                      <Upload className="h-3.5 w-3.5" /> Upload PO
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Cost Sheet / Margin Sheet Attachment */}
-            {showFileUploads && (
-              <div className="flex flex-col justify-between rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-800">
-                      Cost Sheet (Margin Sheet)
-                    </span>
-                    {(value.cost_sheet_file || existingDocs?.costSheet) && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
-                        <CheckCircle2 className="h-3 w-3" /> Attached
-                      </span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-[11px] text-slate-500">
-                    Auto-marks Margin Sheet Attached
-                  </p>
                 </div>
+              )}
 
-                <div className="mt-2.5">
-                  <input
-                    ref={costSheetInputRef}
-                    type="file"
-                    accept=".pdf,.png,.jpg,.jpeg,.xls,.xlsx,.csv"
-                    className="hidden"
-                    disabled={disabled}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0] || null;
-                      update({
-                        cost_sheet_file: f,
-                        margin_sheet_attached: f ? "Attached" : value.margin_sheet_attached,
-                      });
-                    }}
-                  />
-                  {value.cost_sheet_file ? (
-                    <div className="flex items-center justify-between rounded-md border border-teal-200 bg-teal-50/60 px-2.5 py-1.5 text-xs">
-                      <span className=" flex items-center gap-1.5 font-medium text-teal-900">
-                        <Paperclip className="h-3.5 w-3.5 shrink-0 text-teal-600" />
-                        <span className="">{value.cost_sheet_file.name}</span>
+              {/* Cost Sheet / Margin Sheet Attachment */}
+              {showFileUploads && isCostSheetEnabled && (
+                <div className="flex flex-col justify-between rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-800">
+                        Cost Sheet (Margin Sheet)
                       </span>
+                      {(value.cost_sheet_file || existingDocs?.costSheet) && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                          <CheckCircle2 className="h-3 w-3" /> Attached
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-slate-500">
+                      Auto-marks Margin Sheet Attached
+                    </p>
+                  </div>
+
+                  <div className="mt-2.5">
+                    <input
+                      ref={costSheetInputRef}
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.xls,.xlsx,.csv"
+                      className="hidden"
+                      disabled={disabled}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] || null;
+                        update({
+                          cost_sheet_file: f,
+                          margin_sheet_attached: f ? "Attached" : value.margin_sheet_attached,
+                        });
+                      }}
+                    />
+                    {value.cost_sheet_file ? (
+                      <div className="flex items-center justify-between rounded-md border border-teal-200 bg-teal-50/60 px-2.5 py-1.5 text-xs">
+                        <span className=" flex items-center gap-1.5 font-medium text-teal-900">
+                          <Paperclip className="h-3.5 w-3.5 shrink-0 text-teal-600" />
+                          <span className="">{value.cost_sheet_file.name}</span>
+                        </span>
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => {
+                            update({ cost_sheet_file: null });
+                            if (costSheetInputRef.current) costSheetInputRef.current.value = "";
+                          }}
+                          className="ml-2 text-slate-400 hover:text-red-600"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : existingDocs?.costSheet ? (
+                      <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs">
+                        <a
+                          href={existingDocs.costSheet.url || "#"}
+                          target="_blank"
+                          rel="noreferrer"
+                          className=" font-medium text-teal-700 hover:underline"
+                        >
+                          {existingDocs.costSheet.original_name || "View Cost Sheet"}
+                        </a>
+                        {!disabled && (
+                          <button
+                            type="button"
+                            onClick={() => costSheetInputRef.current?.click()}
+                            className="ml-2 shrink-0 text-[11px] font-medium text-slate-600 hover:text-slate-900"
+                          >
+                            Replace
+                          </button>
+                        )}
+                      </div>
+                    ) : (
                       <button
                         type="button"
                         disabled={disabled}
-                        onClick={() => {
-                          update({ cost_sheet_file: null });
-                          if (costSheetInputRef.current) costSheetInputRef.current.value = "";
-                        }}
-                        className="ml-2 text-slate-400 hover:text-red-600"
+                        onClick={() => costSheetInputRef.current?.click()}
+                        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-teal-500 hover:text-teal-700 disabled:opacity-50"
                       >
-                        <X className="h-3.5 w-3.5" />
+                        <Upload className="h-3.5 w-3.5" /> Upload Cost Sheet
                       </button>
-                    </div>
-                  ) : existingDocs?.costSheet ? (
-                    <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs">
-                      <a
-                        href={existingDocs.costSheet.url || "#"}
-                        target="_blank"
-                        rel="noreferrer"
-                        className=" font-medium text-teal-700 hover:underline"
-                      >
-                        {existingDocs.costSheet.original_name || "View Cost Sheet"}
-                      </a>
-                      {!disabled && (
-                        <button
-                          type="button"
-                          onClick={() => costSheetInputRef.current?.click()}
-                          className="ml-2 shrink-0 text-[11px] font-medium text-slate-600 hover:text-slate-900"
-                        >
-                          Replace
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => costSheetInputRef.current?.click()}
-                      className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-teal-500 hover:text-teal-700 disabled:opacity-50"
-                    >
-                      <Upload className="h-3.5 w-3.5" /> Upload Cost Sheet
-                    </button>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* 11. Margin Sheet Status */}
-            <div className="flex flex-col justify-between rounded-lg border border-slate-200 bg-slate-50/40 p-3">
-              <label className={labelBase}>11. Margin Sheet Status</label>
-              <select
-                disabled={disabled}
-                value={value.margin_sheet_attached}
-                onChange={(e) => update({ margin_sheet_attached: e.target.value })}
-                className={inputBase}
-              >
-                {ATTACHED_STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-[10px] text-slate-400">
-                Updated automatically when Cost Sheet is attached
-              </p>
+              {/* 11. Margin Sheet Status */}
+              {isCostSheetEnabled && (
+                <div className="flex flex-col justify-between rounded-lg border border-slate-200 bg-slate-50/40 p-3">
+                  <label className={labelBase}>11. Margin Sheet Status</label>
+                  <select
+                    disabled={disabled}
+                    value={value.margin_sheet_attached}
+                    onChange={(e) => update({ margin_sheet_attached: e.target.value })}
+                    className={inputBase}
+                  >
+                    {ATTACHED_STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    Updated automatically when Cost Sheet is attached
+                  </p>
+                </div>
+              )}
+
+              {/* 12. KYC Status */}
+              {isKycEnabled && (
+                <div className="flex flex-col justify-between rounded-lg border border-slate-200 bg-slate-50/40 p-3">
+                  <label className={labelBase}>12. KYC Status</label>
+                  <select
+                    disabled={disabled}
+                    value={value.kyc_status}
+                    onChange={(e) => update({ kyc_status: e.target.value })}
+                    className={inputBase}
+                  >
+                    {ATTACHED_STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    Updated automatically when KYC docs are uploaded
+                  </p>
+                </div>
+              )}
             </div>
 
-            {/* 12. KYC Status */}
-            <div className="flex flex-col justify-between rounded-lg border border-slate-200 bg-slate-50/40 p-3">
-              <label className={labelBase}>12. KYC Status</label>
-              <select
-                disabled={disabled}
-                value={value.kyc_status}
-                onChange={(e) => update({ kyc_status: e.target.value })}
-                className={inputBase}
-              >
-                {ATTACHED_STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-[10px] text-slate-400">
-                Updated automatically when KYC docs are uploaded
-              </p>
-            </div>
-          </div>
-
-          {/* Dedicated KYC Document Uploads: Aadhaar, PAN, GST */}
-          {showFileUploads && (
+            {/* Dedicated KYC Document Uploads: Aadhaar, PAN, GST */}
+            {showFileUploads && isKycEnabled && (
             <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-3.5">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -890,6 +912,7 @@ export function PerformaInvoiceFields({
           )}
         </div>
       </div>
+      )}
 
       {/* SECTION 4: REMARKS */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">

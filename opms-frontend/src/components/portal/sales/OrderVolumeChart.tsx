@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Info } from "lucide-react";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 import {
   createEmptySalesOrderStats,
   getOrderTabCategory,
@@ -45,9 +46,18 @@ export default function OrderVolumeChart({
   isOrdersFetching,
   categoryOptions,
 }: OrderVolumeChartProps) {
+  const { canSalesMapQuantity, canSalesMapVolume } = usePortalSettings();
   const [showMetric, setShowMetric] = useState<"orders" | "quantities" | "volume">("orders");
   const [timeframe, setTimeframe] = useState<"monthly" | "daily">("monthly");
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!canSalesMapVolume && showMetric === "volume") {
+      setShowMetric(canSalesMapQuantity ? "quantities" : "orders");
+    } else if (!canSalesMapQuantity && showMetric === "quantities") {
+      setShowMetric(canSalesMapVolume ? "volume" : "orders");
+    }
+  }, [canSalesMapVolume, canSalesMapQuantity, showMetric]);
 
   const totalOrdersCount = orders.length;
 
@@ -201,28 +211,32 @@ export default function OrderVolumeChart({
             >
               Orders
             </button>
-            <button
-              type="button"
-              onClick={() => setShowMetric("quantities")}
-              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
-                showMetric === "quantities"
-                  ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-slate-100"
-                  : "text-slate-600 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-200"
-              }`}
-            >
-              Item Quantities
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowMetric("volume")}
-              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
-                showMetric === "volume"
-                  ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-slate-100"
-                  : "text-slate-600 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-200"
-              }`}
-            >
-              Order Value (₹)
-            </button>
+            {canSalesMapQuantity && (
+              <button
+                type="button"
+                onClick={() => setShowMetric("quantities")}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  showMetric === "quantities"
+                    ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-slate-100"
+                    : "text-slate-600 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-200"
+                }`}
+              >
+                Item Quantities
+              </button>
+            )}
+            {canSalesMapVolume && (
+              <button
+                type="button"
+                onClick={() => setShowMetric("volume")}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  showMetric === "volume"
+                    ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-slate-100"
+                    : "text-slate-600 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-200"
+                }`}
+              >
+                Order Value (₹)
+              </button>
+            )}
           </div>
 
           {/* Timeframe Toggle */}

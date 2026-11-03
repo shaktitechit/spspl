@@ -25,6 +25,7 @@ import {
   TransportAgentDetailPage,
   SuperAdminOrderDetail,
   SuperAdminCreateOrderPage,
+  SuperAdminSettingsPage,
   ProfilePage,
   UnbilledOrdersPage,
 } from "@/components/portal";
@@ -384,6 +385,9 @@ export default function PortalCatchAllPage() {
   }
   if (portal === "super_admin" && restArr.length === 1 && restArr[0] === "create-order") {
     return <SuperAdminCreateOrderPage />;
+  }
+  if (portal === "super_admin" && restArr.length === 1 && restArr[0] === "settings") {
+    return <SuperAdminSettingsPage />;
   }
 
   if (portal === "super_admin" && restArr.length === 2 && restArr[0] === "order") {

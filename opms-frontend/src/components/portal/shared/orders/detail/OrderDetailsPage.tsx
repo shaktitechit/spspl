@@ -102,6 +102,7 @@ import {
   type OrderDetailTabId,
   type OrderDetailsPageConfig,
 } from "./orderDetailsPageConfig";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 
 function readId(value: unknown): string {
   if (!value || typeof value !== "object") return "";
@@ -124,14 +125,27 @@ export default function OrderDetailsPage({
     [currentUser],
   );
 
+  const { isPerformaEnabled, isCostSheetEnabled, isKycEnabled, isPOEnabled } =
+    usePortalSettings();
+
+  const effectiveTabs = useMemo(() => {
+    return config.tabs.filter((t) => {
+      if (t === "performa" && !isPerformaEnabled) return false;
+      if (t === "cost_sheet" && !isCostSheetEnabled) return false;
+      if (t === "kyc" && !isKycEnabled) return false;
+      if (t === "po" && !isPOEnabled) return false;
+      return true;
+    });
+  }, [config.tabs, isPerformaEnabled, isCostSheetEnabled, isKycEnabled, isPOEnabled]);
+
   const needsApprovals =
     Boolean(config.approvalsMode) ||
     config.dispatchesMode === "dispatch_ops";
-  const needsDeliveries = config.tabs.includes("deliveries");
-  const needsReturns = config.tabs.includes("returns");
-  const needsReminders = config.tabs.includes("reminders");
-  const needsDueSheets = config.tabs.includes("due_sheet");
-  const needsPerforma = config.tabs.includes("performa");
+  const needsDeliveries = effectiveTabs.includes("deliveries");
+  const needsReturns = effectiveTabs.includes("returns");
+  const needsReminders = effectiveTabs.includes("reminders");
+  const needsDueSheets = effectiveTabs.includes("due_sheet");
+  const needsPerforma = effectiveTabs.includes("performa");
   const needsFinanceExtras = config.approvalsMode === "finance";
   const needsAdminApprovals = config.approvalsMode === "admin";
   const needsDispatchOps =
@@ -1067,9 +1081,15 @@ export default function OrderDetailsPage({
     performaCount,
   ]);
 
+  useEffect(() => {
+    if (!effectiveTabs.includes(activeTab) && effectiveTabs.length > 0) {
+      setActiveTab(effectiveTabs[0]);
+    }
+  }, [effectiveTabs, activeTab]);
+
   const desktopTabs = useMemo(
     () =>
-      config.tabs.map((id) => {
+      effectiveTabs.map((id) => {
         const count = tabCounts[id] ?? 0;
         return {
           id,
@@ -1082,7 +1102,7 @@ export default function OrderDetailsPage({
           dangerBadge: id === "flags",
         };
       }),
-    [config.tabs, config.approvalsMode, tabCounts],
+    [effectiveTabs, config.approvalsMode, tabCounts],
   );
 
   const partyData = (partyDetailQ.data || resolvedPartyRecord) as Record<string, unknown> | undefined;
@@ -1611,7 +1631,7 @@ export default function OrderDetailsPage({
         {!isFetching && !isError && detail && (
           <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-slate-800 bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md px-2 pb-safe">
             <nav className="flex items-stretch justify-around overflow-x-auto">
-              {config.tabs.map((tabId) => {
+              {effectiveTabs.map((tabId) => {
                 const isActive = activeTab === tabId && mobileTabOpen;
                 const count = tabCounts[tabId] ?? 0;
                 const hasData = count > 0;

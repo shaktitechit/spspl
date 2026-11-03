@@ -19,7 +19,9 @@ import {
   Paperclip,
   Trash2,
   FileSpreadsheet,
+  RotateCcw,
 } from "lucide-react";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 
 export type PerformaFormValues = {
   sales_person: string;
@@ -129,6 +131,13 @@ export function PerformaInvoiceFields({
   onAttachmentFileChange,
   existingDocuments,
 }: PerformaInvoiceFieldsProps) {
+  const {
+    isCostSheetEnabled,
+    isKycEnabled,
+    isPOEnabled,
+    isBuyBackEnabled,
+    buyBackConfig,
+  } = usePortalSettings();
   const inputClass =
     "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 dark:border-white/10 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-blue-500 dark:disabled:bg-slate-900/60 dark:disabled:text-slate-500";
   const selectClass =
@@ -435,190 +444,209 @@ export function PerformaInvoiceFields({
               <ShieldCheck className="h-4 w-4" />
             </span>
             <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              Verification, Attachments & KYC
+              {!isPOEnabled && !isCostSheetEnabled && !isKycEnabled
+                ? "Additional Remarks & Notes"
+                : isKycEnabled && (isPOEnabled || isCostSheetEnabled)
+                ? "Verification, Attachments & KYC"
+                : isKycEnabled
+                ? "KYC Verification & Documents"
+                : isCostSheetEnabled && isPOEnabled
+                ? "Purchase Order & Cost Sheet Documents"
+                : isPOEnabled
+                ? "Purchase Order Documents"
+                : "Cost Sheet Documents"}
             </h4>
           </div>
           <span className="text-2xs font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-            Documents
+            {!isPOEnabled && !isCostSheetEnabled && !isKycEnabled ? "Notes" : "Documents"}
           </span>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
+
           {/* Purchase Order Attachment */}
-          <div className="space-y-2 rounded-xl border border-slate-200/80 bg-slate-50/60 p-3.5 dark:border-white/10 dark:bg-slate-800/40">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                <FileText className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                Purchase Order (PO)
-              </label>
-              <span className="text-2xs text-slate-400">PDF, Images, DOC</span>
+          {isPOEnabled && (
+            <div className="space-y-2 rounded-xl border border-slate-200/80 bg-slate-50/60 p-3.5 dark:border-white/10 dark:bg-slate-800/40">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                  Purchase Order (PO)
+                </label>
+                <span className="text-2xs text-slate-400">PDF, Images, DOC</span>
+              </div>
+
+              {existingDocuments?.po_document && (
+                <div className="flex items-center justify-between rounded-lg border border-blue-200/80 bg-blue-50/70 px-2.5 py-1.5 text-xs dark:border-blue-500/20 dark:bg-blue-950/30">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <FileCheck className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                    <span className="truncate font-medium text-blue-900 dark:text-blue-200">
+                      {String(existingDocuments.po_document.original_name || existingDocuments.po_document.file_name || "PO Document")}
+                    </span>
+                  </div>
+                  <span className="shrink-0 text-2xs text-blue-600 dark:text-blue-400 font-semibold ml-2">Existing</span>
+                </div>
+              )}
+
+              {attachmentFiles?.po_file ? (
+                <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs dark:border-emerald-500/20 dark:bg-emerald-950/30">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <FileCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <span className="truncate font-medium text-emerald-900 dark:text-emerald-200">
+                      {attachmentFiles.po_file.name}
+                    </span>
+                    <span className="text-2xs text-emerald-600 dark:text-emerald-400 ml-1">
+                      ({(attachmentFiles.po_file.size / 1024).toFixed(0)} KB)
+                    </span>
+                  </div>
+                  {!readOnly && onAttachmentFileChange && (
+                    <button
+                      type="button"
+                      onClick={() => onAttachmentFileChange("po_file", null)}
+                      className="ml-2 text-slate-400 hover:text-rose-500 cursor-pointer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ) : !readOnly && onAttachmentFileChange ? (
+                <label className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white p-3 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50/30 transition dark:border-white/10 dark:bg-slate-900 dark:hover:border-blue-400">
+                  <UploadCloud className="h-4 w-4 text-slate-400 mb-1" />
+                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    {existingDocuments?.po_document ? "Replace Purchase Order" : "Attach Purchase Order"}
+                  </span>
+                  <span className="text-2xs text-slate-400">Click to browse file</span>
+                  <input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) onAttachmentFileChange("po_file", f);
+                    }}
+                    disabled={readOnly}
+                  />
+                </label>
+              ) : null}
             </div>
-
-            {existingDocuments?.po_document && (
-              <div className="flex items-center justify-between rounded-lg border border-blue-200/80 bg-blue-50/70 px-2.5 py-1.5 text-xs dark:border-blue-500/20 dark:bg-blue-950/30">
-                <div className="flex items-center gap-1.5 truncate">
-                  <FileCheck className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
-                  <span className="truncate font-medium text-blue-900 dark:text-blue-200">
-                    {String(existingDocuments.po_document.original_name || existingDocuments.po_document.file_name || "PO Document")}
-                  </span>
-                </div>
-                <span className="shrink-0 text-2xs text-blue-600 dark:text-blue-400 font-semibold ml-2">Existing</span>
-              </div>
-            )}
-
-            {attachmentFiles?.po_file ? (
-              <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs dark:border-emerald-500/20 dark:bg-emerald-950/30">
-                <div className="flex items-center gap-1.5 truncate">
-                  <FileCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                  <span className="truncate font-medium text-emerald-900 dark:text-emerald-200">
-                    {attachmentFiles.po_file.name}
-                  </span>
-                  <span className="text-2xs text-emerald-600 dark:text-emerald-400 ml-1">
-                    ({(attachmentFiles.po_file.size / 1024).toFixed(0)} KB)
-                  </span>
-                </div>
-                {!readOnly && onAttachmentFileChange && (
-                  <button
-                    type="button"
-                    onClick={() => onAttachmentFileChange("po_file", null)}
-                    className="ml-2 text-slate-400 hover:text-rose-500 cursor-pointer"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            ) : !readOnly && onAttachmentFileChange ? (
-              <label className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white p-3 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50/30 transition dark:border-white/10 dark:bg-slate-900 dark:hover:border-blue-400">
-                <UploadCloud className="h-4 w-4 text-slate-400 mb-1" />
-                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                  {existingDocuments?.po_document ? "Replace Purchase Order" : "Attach Purchase Order"}
-                </span>
-                <span className="text-2xs text-slate-400">Click to browse file</span>
-                <input
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) onAttachmentFileChange("po_file", f);
-                  }}
-                  disabled={readOnly}
-                />
-              </label>
-            ) : null}
-          </div>
+          )}
 
           {/* Cost Sheet / Margin Sheet Attachment */}
-          <div className="space-y-2 rounded-xl border border-slate-200/80 bg-slate-50/60 p-3.5 dark:border-white/10 dark:bg-slate-800/40">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                Cost Sheet (Margin Sheet)
-              </label>
-              <span className="text-2xs text-slate-400">Excel, CSV, PDF, Image</span>
+          {isCostSheetEnabled && (
+            <div className="space-y-2 rounded-xl border border-slate-200/80 bg-slate-50/60 p-3.5 dark:border-white/10 dark:bg-slate-800/40">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  Cost Sheet (Margin Sheet)
+                </label>
+                <span className="text-2xs text-slate-400">Excel, CSV, PDF, Image</span>
+              </div>
+
+              {existingDocuments?.cost_sheet_document && (
+                <div className="flex items-center justify-between rounded-lg border border-emerald-200/80 bg-emerald-50/70 px-2.5 py-1.5 text-xs dark:border-emerald-500/20 dark:bg-emerald-950/30">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <FileCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <span className="truncate font-medium text-emerald-900 dark:text-emerald-200">
+                      {String(existingDocuments.cost_sheet_document.original_name || existingDocuments.cost_sheet_document.file_name || "Cost Sheet")}
+                    </span>
+                  </div>
+                  <span className="shrink-0 text-2xs text-emerald-600 dark:text-emerald-400 font-semibold ml-2">Existing</span>
+                </div>
+              )}
+
+              {attachmentFiles?.cost_sheet_file ? (
+                <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs dark:border-emerald-500/20 dark:bg-emerald-950/30">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <FileCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <span className="truncate font-medium text-emerald-900 dark:text-emerald-200">
+                      {attachmentFiles.cost_sheet_file.name}
+                    </span>
+                    <span className="text-2xs text-emerald-600 dark:text-emerald-400 ml-1">
+                      ({(attachmentFiles.cost_sheet_file.size / 1024).toFixed(0)} KB)
+                    </span>
+                  </div>
+                  {!readOnly && onAttachmentFileChange && (
+                    <button
+                      type="button"
+                      onClick={() => onAttachmentFileChange("cost_sheet_file", null)}
+                      className="ml-2 text-slate-400 hover:text-rose-500 cursor-pointer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ) : !readOnly && onAttachmentFileChange ? (
+                <label className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white p-3 text-center cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/30 transition dark:border-white/10 dark:bg-slate-900 dark:hover:border-emerald-400">
+                  <UploadCloud className="h-4 w-4 text-slate-400 mb-1" />
+                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    {existingDocuments?.cost_sheet_document ? "Replace Cost Sheet" : "Attach Cost Sheet"}
+                  </span>
+                  <span className="text-2xs text-slate-400">Click to browse file</span>
+                  <input
+                    type="file"
+                    accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        onAttachmentFileChange("cost_sheet_file", f);
+                        onChange("margin_sheet_attached", "Attached");
+                      }
+                    }}
+                    disabled={readOnly}
+                  />
+                </label>
+              ) : null}
             </div>
-
-            {existingDocuments?.cost_sheet_document && (
-              <div className="flex items-center justify-between rounded-lg border border-emerald-200/80 bg-emerald-50/70 px-2.5 py-1.5 text-xs dark:border-emerald-500/20 dark:bg-emerald-950/30">
-                <div className="flex items-center gap-1.5 truncate">
-                  <FileCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                  <span className="truncate font-medium text-emerald-900 dark:text-emerald-200">
-                    {String(existingDocuments.cost_sheet_document.original_name || existingDocuments.cost_sheet_document.file_name || "Cost Sheet")}
-                  </span>
-                </div>
-                <span className="shrink-0 text-2xs text-emerald-600 dark:text-emerald-400 font-semibold ml-2">Existing</span>
-              </div>
-            )}
-
-            {attachmentFiles?.cost_sheet_file ? (
-              <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs dark:border-emerald-500/20 dark:bg-emerald-950/30">
-                <div className="flex items-center gap-1.5 truncate">
-                  <FileCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                  <span className="truncate font-medium text-emerald-900 dark:text-emerald-200">
-                    {attachmentFiles.cost_sheet_file.name}
-                  </span>
-                  <span className="text-2xs text-emerald-600 dark:text-emerald-400 ml-1">
-                    ({(attachmentFiles.cost_sheet_file.size / 1024).toFixed(0)} KB)
-                  </span>
-                </div>
-                {!readOnly && onAttachmentFileChange && (
-                  <button
-                    type="button"
-                    onClick={() => onAttachmentFileChange("cost_sheet_file", null)}
-                    className="ml-2 text-slate-400 hover:text-rose-500 cursor-pointer"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            ) : !readOnly && onAttachmentFileChange ? (
-              <label className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white p-3 text-center cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/30 transition dark:border-white/10 dark:bg-slate-900 dark:hover:border-emerald-400">
-                <UploadCloud className="h-4 w-4 text-slate-400 mb-1" />
-                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                  {existingDocuments?.cost_sheet_document ? "Replace Cost Sheet" : "Attach Cost Sheet"}
-                </span>
-                <span className="text-2xs text-slate-400">Click to browse file</span>
-                <input
-                  type="file"
-                  accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) {
-                      onAttachmentFileChange("cost_sheet_file", f);
-                      onChange("margin_sheet_attached", "Attached");
-                    }
-                  }}
-                  disabled={readOnly}
-                />
-              </label>
-            ) : null}
-          </div>
+          )}
 
           {/* Margin Sheet Attached Select */}
-          <div className="space-y-1.5">
-            <label className={labelClass}>
-              <FileText className="h-3.5 w-3.5 text-slate-400" />
-              Margin Sheet Status
-            </label>
-            <select
-              className={selectClass}
-              value={values.margin_sheet_attached}
-              onChange={(e) => onChange("margin_sheet_attached", e.target.value)}
-              disabled={readOnly}
-            >
-              <option value="">Select margin sheet status...</option>
-              {MARGIN_SHEET_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-            </select>
-          </div>
+          {isCostSheetEnabled && (
+            <div className="space-y-1.5">
+              <label className={labelClass}>
+                <FileText className="h-3.5 w-3.5 text-slate-400" />
+                Margin Sheet Status
+              </label>
+              <select
+                className={selectClass}
+                value={values.margin_sheet_attached}
+                onChange={(e) => onChange("margin_sheet_attached", e.target.value)}
+                disabled={readOnly}
+              >
+                <option value="">Select margin sheet status...</option>
+                {MARGIN_SHEET_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* KYC Status Select */}
-          <div className="space-y-1.5">
-            <label className={labelClass}>
-              <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
-              KYC Status
-            </label>
-            <select
-              className={selectClass}
-              value={values.kyc_status}
-              onChange={(e) => onChange("kyc_status", e.target.value)}
-              disabled={readOnly}
-            >
-              <option value="">Select KYC status...</option>
-              {KYC_STATUS_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-            </select>
-          </div>
+          {isKycEnabled && (
+            <div className="space-y-1.5">
+              <label className={labelClass}>
+                <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
+                KYC Status
+              </label>
+              <select
+                className={selectClass}
+                value={values.kyc_status}
+                onChange={(e) => onChange("kyc_status", e.target.value)}
+                disabled={readOnly}
+              >
+                <option value="">Select KYC status...</option>
+                {KYC_STATUS_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Verification & KYC Documents (shown if KYC is applicable / active) */}
-          {values.kyc_status !== "Not Applicable" && (
+          {isKycEnabled && values.kyc_status !== "Not Applicable" && (
             <div className="space-y-3 rounded-xl border border-amber-200/80 bg-amber-50/40 p-4 dark:border-amber-500/20 dark:bg-amber-950/20 sm:col-span-2">
               <div className="flex items-center justify-between border-b border-amber-200/60 pb-2 dark:border-amber-500/20">
                 <div className="flex items-center gap-2">
@@ -848,6 +876,54 @@ export function PerformaInvoiceFields({
           </div>
         </div>
       </div>
+
+      {/* Section 4: Buy Back & Trade-In Details (when enabled by admin) */}
+      {isBuyBackEnabled && (
+        <div className="rounded-xl border border-indigo-200/90 bg-indigo-50/20 p-4.5 shadow-xs dark:border-indigo-900/40 dark:bg-indigo-950/20">
+          <div className="mb-4 flex items-center justify-between border-b border-indigo-100 pb-2.5 dark:border-indigo-900/30">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400">
+                <RotateCcw className="h-4 w-4" />
+              </span>
+              <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Buy Back & Trade-In Information
+              </h4>
+            </div>
+            <span className="text-2xs font-semibold text-indigo-700 dark:text-indigo-300">
+              Valuation: {buyBackConfig?.default_valuation_rate ?? 30}% MRP
+            </span>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className={labelClass}>
+                <RotateCcw className="h-3.5 w-3.5 text-slate-400" />
+                Buy Back / Exchange Equipment Details
+              </label>
+              <textarea
+                rows={2}
+                className={`${inputClass} resize-y`}
+                value={values.remarks?.includes("Buy Back:") ? values.remarks : ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  onChange(
+                    "remarks",
+                    val
+                      ? `[Buy Back: ${val}] ${values.remarks || ""}`.trim()
+                      : values.remarks
+                  );
+                }}
+                placeholder="Equipment model, serial number, and condition for trade-in credit..."
+                disabled={readOnly}
+              />
+              <span className="text-2xs text-slate-500 dark:text-slate-400">
+                {buyBackConfig?.terms ||
+                  "Buy Back is subject to technical inspection and serial verification."}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

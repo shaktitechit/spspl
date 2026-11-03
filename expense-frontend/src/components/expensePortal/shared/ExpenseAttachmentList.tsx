@@ -91,12 +91,20 @@ export function ExpenseAttachmentList({
         {mergedList.map((att: any, idx: number) => {
           const fileName = att.original_name || att.filename || att.name || `Attachment #${idx + 1}`;
           const fileId = att._id || att.attachment_id || att.file_id || att.id;
-        const fileUrl =
-          att.url ||
-          (fileId ? `/api/work-planner/attachments/${fileId}/preview` : "#");
-        const mime = att.mime_type || att.mime || "";
 
-        const docObj = { name: fileName, url: fileUrl, mime };
+          // Prefer exact Attachment ObjectId for a fresh stream from backend instead of expired MinIO URLs
+          let fileUrl = "#";
+          if (fileId && typeof fileId === "string" && /^[0-9a-fA-F]{24}$/.test(fileId.trim())) {
+            fileUrl = `/api/work-planner/attachments/${fileId.trim()}/preview`;
+          } else if (typeof att?.url === "string" && att.url.trim() && att.url !== "#") {
+            fileUrl = att.url.trim();
+          } else if (fileId) {
+            fileUrl = `/api/work-planner/attachments/${fileId}/preview`;
+          }
+
+          const mime = att.mime_type || att.mime || "";
+
+          const docObj = { name: fileName, url: fileUrl, mime };
 
         if (compact) {
           return (

@@ -27,6 +27,7 @@ import {
 } from "@/components/portal/sales/partyDisplay";
 import {
   normalizeSalesTabFromUrl,
+  orderMatchesSalesTab,
   type SalesOrderTabCategory,
 } from "@/components/portal/sales/orderUtils";
 import { GoogleSheetAnalyticsModal } from "@/components/portal/shared/orders/integrations/GoogleSheetAnalyticsModal";
@@ -238,13 +239,19 @@ export default function ListOrdersPage({
   const orders = useMemo(() => {
     if (processStage === "all") return rawOrders;
     return rawOrders.filter((o) => {
-      return orderMatchesWorkflowTab(
-        o,
-        processStage as OrderWorkflowTabCategory,
-        categoryOptions,
-      );
+      return includeDraftTab
+        ? orderMatchesSalesTab(
+            o,
+            processStage as SalesOrderTabCategory,
+            categoryOptions,
+          )
+        : orderMatchesWorkflowTab(
+            o,
+            processStage as OrderWorkflowTabCategory,
+            categoryOptions,
+          );
     });
-  }, [rawOrders, processStage, categoryOptions]);
+  }, [rawOrders, processStage, includeDraftTab, categoryOptions]);
 
   const rawBulkOrders = useMemo(
     () => pickOrders(bulkQ.data) as OrderListRow[],
@@ -254,13 +261,19 @@ export default function ListOrdersPage({
   const bulkOrders = useMemo(() => {
     if (processStage === "all") return rawBulkOrders;
     return rawBulkOrders.filter((o) => {
-      return orderMatchesWorkflowTab(
-        o,
-        processStage as OrderWorkflowTabCategory,
-        categoryOptions,
-      );
+      return includeDraftTab
+        ? orderMatchesSalesTab(
+            o,
+            processStage as SalesOrderTabCategory,
+            categoryOptions,
+          )
+        : orderMatchesWorkflowTab(
+            o,
+            processStage as OrderWorkflowTabCategory,
+            categoryOptions,
+          );
     });
-  }, [rawBulkOrders, processStage, categoryOptions]);
+  }, [rawBulkOrders, processStage, includeDraftTab, categoryOptions]);
 
   const getActiveTransportInfoForOrder = useCallback((o: Record<string, unknown>) => {
     const at = o.active_transport as

@@ -63,6 +63,7 @@ import CostSheetTab from "@/components/portal/shared/orders/detail/tabs/CostShee
 import KycTab from "@/components/portal/shared/orders/detail/tabs/KycTab";
 import SubmitOrderPreviewModal from "./components/SubmitOrderPreviewModal";
 import { mobileTabIcon } from "@/components/portal/shared/orders/detail/orderDetailMobileIcons";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 import { formatDateShort, detailRefId } from "@/components/portal/shared/orders/detail/orderDetailUtils";
 import type { WorkflowEmailOptions } from "@/components/portal/shared/orders/modals/WorkflowEmailControls";
 
@@ -112,8 +113,28 @@ export default function SalesOrderDetail({ orderId }: { orderId: string }) {
   const { data, isLoading, isFetching, isError, refetch } = useGetOrderQuery(orderId);
   const user = useAppSelector((s) => s.auth.user);
 
+  const {
+    isPerformaEnabled,
+    isCostSheetEnabled,
+    isKycEnabled,
+    isPOEnabled,
+    isBuyBackEnabled,
+  } = usePortalSettings();
+
   const [activeTab, setActiveTab] = useState<SalesTabId>("approvals");
   const [mobileTabOpen, setMobileTabOpen] = useState(false);
+
+  useEffect(() => {
+    const disabledTabs: string[] = [];
+    if (!isPOEnabled) disabledTabs.push("po");
+    if (!isPerformaEnabled) disabledTabs.push("performa");
+    if (!isCostSheetEnabled) disabledTabs.push("cost_sheet");
+    if (!isKycEnabled) disabledTabs.push("kyc");
+
+    if (disabledTabs.includes(activeTab)) {
+      setActiveTab("approvals");
+    }
+  }, [activeTab, isPOEnabled, isPerformaEnabled, isCostSheetEnabled, isKycEnabled]);
 
   const [isSubmitPreviewOpen, setIsSubmitPreviewOpen] = useState(false);
   const [isFulfillmentModalOpen, setIsFulfillmentModalOpen] = useState(false);
@@ -201,7 +222,9 @@ export default function SalesOrderDetail({ orderId }: { orderId: string }) {
     { order: orderId },
     { skip: !orderId },
   );
-  const performaQ = useGetOrderPerformaQuery(orderId, { skip: !orderId });
+  const performaQ = useGetOrderPerformaQuery(orderId, {
+    skip: !orderId || !isPerformaEnabled,
+  });
 
   const approvalsCount = useMemo(
     () => pickList(approvalsQ.data).length,
@@ -480,8 +503,8 @@ export default function SalesOrderDetail({ orderId }: { orderId: string }) {
     return resolveUser(u).name;
   }, [detail, resolveUser]);
 
-  const desktopTabs = useMemo(
-    () => [
+  const desktopTabs = useMemo(() => {
+    const all = [
       {
         id: "approvals",
         name: "Order Approval",
@@ -537,22 +560,33 @@ export default function SalesOrderDetail({ orderId }: { orderId: string }) {
         count: attachmentsCount,
         hasData: attachmentsCount > 0,
       },
-    ],
-    [
-      approvalsCount,
-      poCount,
-      performaCount,
-      costSheetCount,
-      kycCount,
-      dispatchesCount,
-      transportsCount,
-      openFlagsCount,
-      attachmentsCount,
-    ],
-  );
+    ];
 
-  const mobileTabs = useMemo(
-    () => [
+    return all.filter((t) => {
+      if (t.id === "po" && !isPOEnabled) return false;
+      if (t.id === "performa" && !isPerformaEnabled) return false;
+      if (t.id === "cost_sheet" && !isCostSheetEnabled) return false;
+      if (t.id === "kyc" && !isKycEnabled) return false;
+      return true;
+    });
+  }, [
+    approvalsCount,
+    poCount,
+    performaCount,
+    costSheetCount,
+    kycCount,
+    dispatchesCount,
+    transportsCount,
+    openFlagsCount,
+    attachmentsCount,
+    isPOEnabled,
+    isPerformaEnabled,
+    isCostSheetEnabled,
+    isKycEnabled,
+  ]);
+
+  const mobileTabs = useMemo(() => {
+    const all = [
       { id: "approvals" as const, name: "Approval", count: approvalsCount, hasData: approvalsCount > 0, dangerBadge: false },
       { id: "po" as const, name: "PO", count: poCount, hasData: poCount > 0, dangerBadge: false },
       { id: "performa" as const, name: "Performa", count: performaCount, hasData: performaCount > 0, dangerBadge: false },
@@ -562,19 +596,30 @@ export default function SalesOrderDetail({ orderId }: { orderId: string }) {
       { id: "transports" as const, name: "Transport", count: transportsCount, hasData: transportsCount > 0, dangerBadge: false },
       { id: "flags" as const, name: "Flags", count: openFlagsCount, hasData: openFlagsCount > 0, dangerBadge: true },
       { id: "attachments" as const, name: "Files", count: attachmentsCount, hasData: attachmentsCount > 0, dangerBadge: false },
-    ],
-    [
-      approvalsCount,
-      poCount,
-      performaCount,
-      costSheetCount,
-      kycCount,
-      dispatchesCount,
-      transportsCount,
-      openFlagsCount,
-      attachmentsCount,
-    ],
-  );
+    ];
+
+    return all.filter((t) => {
+      if (t.id === "po" && !isPOEnabled) return false;
+      if (t.id === "performa" && !isPerformaEnabled) return false;
+      if (t.id === "cost_sheet" && !isCostSheetEnabled) return false;
+      if (t.id === "kyc" && !isKycEnabled) return false;
+      return true;
+    });
+  }, [
+    approvalsCount,
+    poCount,
+    performaCount,
+    costSheetCount,
+    kycCount,
+    dispatchesCount,
+    transportsCount,
+    openFlagsCount,
+    attachmentsCount,
+    isPOEnabled,
+    isPerformaEnabled,
+    isCostSheetEnabled,
+    isKycEnabled,
+  ]);
 
   useEffect(() => {
     if (!detail) {

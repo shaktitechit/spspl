@@ -48,4 +48,5 @@ export * from "./slices/partyCountriesApi";
 export * from "./slices/partyStatesApi";
 export * from "./slices/partyCitiesApi";
 export * from "./slices/companyInfoApi";
+export * from "./slices/settingsApi";
 

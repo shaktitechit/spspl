@@ -6,6 +6,7 @@ import { useListOrderApprovalsQuery, useListUsersQuery } from "@/store/api";
 import { DashboardCard } from "@/components/widgets";
 import { ApprovalRecordCard } from "@/components/portal/shared/orders/detail/approvals/ApprovalRecordCard";
 import { buildUserRoleById } from "@/components/portal/shared/lib/userDisplay";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 
 type ApprovalTabProps = {
   orderId: string;
@@ -24,6 +25,7 @@ function pickList(raw: unknown): Record<string, unknown>[] {
 }
 
 export function ApprovalTab({ orderId, detail, partyLabel = "—" }: ApprovalTabProps) {
+  const { canSalesMapVolume } = usePortalSettings();
   const approvalsQ = useListOrderApprovalsQuery({ order: orderId }, { skip: !orderId });
   const usersQ = useListUsersQuery({});
 
@@ -88,6 +90,7 @@ export function ApprovalTab({ orderId, detail, partyLabel = "—" }: ApprovalTab
                 expectedDeliveryDate={detail?.expected_delivery_date}
                 userNameById={userNameById}
                 userRoleById={userRoleById}
+                showPricing={canSalesMapVolume}
               />
             ))}
           </div>

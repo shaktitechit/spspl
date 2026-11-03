@@ -17,8 +17,24 @@ import {
   Info,
   User,
   Plus,
+  Clock,
+  XCircle,
+  FileText,
+  Download,
 } from "lucide-react";
-import { useGetExecutivePassbookQuery } from "@/store/api/workPlannerApiSlice";
+import { toast } from "sonner";
+import { usePdfCompanyLetterhead } from "./pdfCompanyLetterhead";
+import {
+  downloadPdfReport,
+  formatAmountForPdf,
+  formatCurrencyForPdf,
+  type PdfReportColumn,
+  type PdfReportRow,
+} from "./exportPdfReport";
+import {
+  useGetExecutivePassbookQuery,
+  useGetExpenseKpisQuery,
+} from "@/store/api/workPlannerApiSlice";
 import { readSessionFromStorage } from "@/utils/authStorage";
 import { formatCurrency, formatPlanDate } from "./workPlanUtils";
 import { ExpenseAttachmentList } from "./expense/ExpenseAttachmentList";
@@ -39,6 +55,7 @@ export function ExpensesPage() {
   const [fromDate, setFromDate] = useState<string>(defaultRange.from);
   const [toDate, setToDate] = useState<string>(defaultRange.to);
   const [typeFilter, setTypeFilter] = useState<"all" | "advance" | "payment" | "expense" | "settlement">("all");
+  const [claimSubFilter, setClaimSubFilter] = useState<"all" | "draft" | "submitted" | "approved" | "rejected">("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   const isCurrentMonthActive = Boolean(
@@ -51,6 +68,10 @@ export function ExpensesPage() {
   // Modals State
   const [requestAdvanceOpen, setRequestAdvanceOpen] = useState<boolean>(false);
   const [selectedVoucherId, setSelectedVoucherId] = useState<string | null>(null);
+
+  // PDF Letterhead & Download State
+  const letterhead = usePdfCompanyLetterhead();
+  const [downloadingPdf, setDownloadingPdf] = useState<boolean>(false);
 
   // File Preview Hook
   const {
@@ -65,9 +86,9 @@ export function ExpensesPage() {
   // Query Passbook for the logged-in user
   const {
     data: passbookData,
-    isLoading,
-    isFetching,
-    refetch,
+    isLoading: isPassbookLoading,
+    isFetching: isPassbookFetching,
+    refetch: refetchPassbook,
   } = useGetExecutivePassbookQuery(
     {
       userId,
@@ -77,6 +98,28 @@ export function ExpensesPage() {
     { skip: !userId }
   );
 
+  // Query KPI summary for logged-in user
+  const {
+    data: kpiSummary,
+    isFetching: isKpiFetching,
+    refetch: refetchKpis,
+  } = useGetExpenseKpisQuery(
+    {
+      scope: "mine",
+      user_id: userId,
+      from_date: fromDate || undefined,
+      to_date: toDate || undefined,
+    },
+    { skip: !userId }
+  );
+
+  const isLoading = isPassbookLoading;
+  const isFetching = isPassbookFetching || isKpiFetching;
+  const refetch = () => {
+    refetchPassbook();
+    refetchKpis();
+  };
+
   const rawEntries: PassbookLedgerEntry[] = passbookData?.entries || [];
 
   // Counts by category
@@ -85,14 +128,32 @@ export function ExpensesPage() {
     let payments = 0;
     let expenses = 0;
     let settlements = 0;
+    let draftClaims = 0;
+    let submittedClaims = 0;
+    let approvedClaims = 0;
+    let rejectedClaims = 0;
 
     for (const e of rawEntries) {
       if (e.entry_type === "advance_disbursement" || e.entry_type === "advance_refund") {
         advances++;
       } else if (e.entry_type === "payment_entry") {
         payments++;
-      } else if (e.entry_type === "expense_approved") {
+      } else if (
+        e.entry_type === "expense_approved" ||
+        e.entry_type === "expense_submitted" ||
+        e.entry_type === "expense_rejected" ||
+        e.entry_type === "expense_draft"
+      ) {
         expenses++;
+        if (e.entry_type === "expense_draft" || e.claim_status === "draft") {
+          draftClaims++;
+        } else if (e.entry_type === "expense_submitted" || e.claim_status === "submitted") {
+          submittedClaims++;
+        } else if (e.entry_type === "expense_approved" || e.claim_status === "approved") {
+          approvedClaims++;
+        } else if (e.entry_type === "expense_rejected" || e.claim_status === "rejected") {
+          rejectedClaims++;
+        }
       } else if (e.entry_type === "settlement_voucher") {
         settlements++;
       }
@@ -104,10 +165,14 @@ export function ExpensesPage() {
       payments,
       expenses,
       settlements,
+      draftClaims,
+      submittedClaims,
+      approvedClaims,
+      rejectedClaims,
     };
   }, [rawEntries]);
 
-  // Filtered entries by type and search query, sorted latest-to-oldest
+  // Filtered entries by type, sub-filter and search query, sorted latest-to-oldest
   const filteredEntries = useMemo(() => {
     let list = rawEntries;
 
@@ -118,7 +183,30 @@ export function ExpensesPage() {
     } else if (typeFilter === "payment") {
       list = list.filter((e) => e.entry_type === "payment_entry");
     } else if (typeFilter === "expense") {
-      list = list.filter((e) => e.entry_type === "expense_approved");
+      list = list.filter(
+        (e) =>
+          e.entry_type === "expense_approved" ||
+          e.entry_type === "expense_submitted" ||
+          e.entry_type === "expense_rejected" ||
+          e.entry_type === "expense_draft"
+      );
+      if (claimSubFilter === "draft") {
+        list = list.filter(
+          (e) => e.entry_type === "expense_draft" || e.claim_status === "draft"
+        );
+      } else if (claimSubFilter === "submitted") {
+        list = list.filter(
+          (e) => e.entry_type === "expense_submitted" || e.claim_status === "submitted"
+        );
+      } else if (claimSubFilter === "approved") {
+        list = list.filter(
+          (e) => e.entry_type === "expense_approved" || e.claim_status === "approved"
+        );
+      } else if (claimSubFilter === "rejected") {
+        list = list.filter(
+          (e) => e.entry_type === "expense_rejected" || e.claim_status === "rejected"
+        );
+      }
     } else if (typeFilter === "settlement") {
       list = list.filter((e) => e.entry_type === "settlement_voucher");
     }
@@ -131,12 +219,16 @@ export function ExpensesPage() {
         const details = (e.details || "").toLowerCase();
         const method = (e.payment_method || "").toLowerCase();
         const txRef = (e.transaction_reference || "").toLowerCase();
+        const category = (e.category || "").toLowerCase();
+        const vendor = (e.vendor_name || "").toLowerCase();
         return (
           ref.includes(q) ||
           title.includes(q) ||
           details.includes(q) ||
           method.includes(q) ||
-          txRef.includes(q)
+          txRef.includes(q) ||
+          category.includes(q) ||
+          vendor.includes(q)
         );
       });
     }
@@ -147,7 +239,7 @@ export function ExpensesPage() {
       const tB = new Date(b.date).getTime() || 0;
       return tB - tA;
     });
-  }, [rawEntries, typeFilter, searchQuery]);
+  }, [rawEntries, typeFilter, claimSubFilter, searchQuery]);
 
   // Group filtered entries by date for section headers
   const groupedByDate = useMemo(() => {
@@ -173,17 +265,233 @@ export function ExpensesPage() {
     return groups;
   }, [filteredEntries]);
 
+  const currentUserName = currentUser?.name || passbookData?.sales_user?.name || "Executive";
+  const currentUserEmail = currentUser?.email || passbookData?.sales_user?.email || "";
+  const currentDepartment = currentUser?.department || passbookData?.sales_user?.department || "Operations";
+  const netPosition = passbookData?.current_net_position || 0;
+  const submittedClaimAmount =
+    passbookData?.submitted_claim_amount ??
+    kpiSummary?.pending_approval?.amount ??
+    0;
+  const submittedClaimCount =
+    passbookData?.submitted_claim_count ??
+    kpiSummary?.pending_approval?.count ??
+    counts.submittedClaims ??
+    0;
+
   function handlePrint() {
     if (typeof window !== "undefined") {
       window.print();
     }
   }
 
-  const currentUserName = currentUser?.name || passbookData?.sales_user?.name || "Executive";
-  const currentUserEmail = currentUser?.email || passbookData?.sales_user?.email || "";
-  const currentDepartment = currentUser?.department || passbookData?.sales_user?.department || "Operations";
+  async function handleDownloadPdf() {
+    if (downloadingPdf) return;
+    setDownloadingPdf(true);
+    try {
+      const activeFilterPanel: Array<{ label: string; value: string }> = [
+        { label: "Executive", value: currentUserName },
+        { label: "Department", value: currentDepartment },
+        {
+          label: "Period",
+          value:
+            fromDate && toDate
+              ? `${formatPlanDate(fromDate)} to ${formatPlanDate(toDate)}`
+              : fromDate
+              ? `From ${formatPlanDate(fromDate)}`
+              : toDate
+              ? `Up to ${formatPlanDate(toDate)}`
+              : "All Time",
+        },
+        {
+          label: "Type Filter",
+          value:
+            typeFilter === "all"
+              ? "All Transactions"
+              : typeFilter === "advance"
+              ? "Tour Advances"
+              : typeFilter === "payment"
+              ? "Direct Treasury Payments"
+              : typeFilter === "expense"
+              ? `Claims (${claimSubFilter.toUpperCase()})`
+              : "Settlement Vouchers",
+        },
+        { label: "Records", value: `${filteredEntries.length} entries` },
+      ];
 
-  const netPosition = passbookData?.current_net_position || 0;
+      const activeMetadata: Array<{ label: string; value: string }> = [
+        {
+          label: "Advance in Hand",
+          value: formatCurrencyForPdf(passbookData?.current_advance_balance || 0),
+        },
+        {
+          label: "Direct Payments",
+          value: formatCurrencyForPdf(
+            passbookData?.current_payment_entry ??
+              passbookData?.total_payment_entries ??
+              0
+          ),
+        },
+        {
+          label: "Submitted Claims",
+          value: formatCurrencyForPdf(submittedClaimAmount),
+        },
+        {
+          label: "Approved Claims",
+          value: formatCurrencyForPdf(passbookData?.current_claim_receivable || 0),
+        },
+        {
+          label: "Net Balance Position",
+          value: `${formatCurrencyForPdf(Math.abs(netPosition))} (${
+            netPosition > 0
+              ? "Due Employee"
+              : netPosition < 0
+              ? "Due Company"
+              : "Balanced"
+          })`,
+        },
+      ];
+
+      const columns: PdfReportColumn[] = [
+        { key: "rowNum", label: "#", width: 0.35, align: "center" },
+        { key: "date", label: "Date", width: 0.85, align: "center" },
+        { key: "ref", label: "Reference", width: 1.1, align: "left" },
+        { key: "type", label: "Type / Category", width: 1.4, align: "left" },
+        { key: "particulars", label: "Particulars & Description", width: 2.3, align: "left" },
+        { key: "paymentInfo", label: "Payment Mode / UTR", width: 1.1, align: "left" },
+        { key: "status", label: "Status", width: 0.8, align: "center" },
+        { key: "amount", label: "Amount (INR)", width: 1.0, align: "right" },
+        { key: "advBal", label: "Adv Bal (INR)", width: 1.0, align: "right" },
+        { key: "claimsRec", label: "Claims Rec (INR)", width: 1.0, align: "right" },
+        { key: "runningNet", label: "Running Net (INR)", width: 1.35, align: "right" },
+      ];
+
+      const rows: PdfReportRow[] = filteredEntries.map((e, idx) => {
+        let typeLabel = "Transaction";
+        let statusLabel = "POSTED";
+
+        if (e.entry_type === "advance_disbursement") {
+          typeLabel = "Advance Disbursed";
+          statusLabel = "DISBURSED";
+        } else if (e.entry_type === "advance_refund") {
+          typeLabel = "Advance Refund";
+          statusLabel = "REFUNDED";
+        } else if (e.entry_type === "expense_draft") {
+          typeLabel = `Draft Claim (${e.category || "General"})`;
+          statusLabel = "DRAFT";
+        } else if (e.entry_type === "expense_submitted") {
+          typeLabel = `Submitted Claim (${e.category || "General"})`;
+          statusLabel = "PENDING";
+        } else if (e.entry_type === "expense_approved") {
+          typeLabel = `Approved Claim (${e.category || "General"})`;
+          statusLabel = "APPROVED";
+        } else if (e.entry_type === "expense_rejected") {
+          typeLabel = `Rejected Claim (${e.category || "General"})`;
+          statusLabel = "REJECTED";
+        } else if (e.entry_type === "payment_entry") {
+          typeLabel = "Treasury Payment";
+          statusLabel = "PAID";
+        } else if (e.entry_type === "settlement_voucher") {
+          typeLabel = "Settlement Voucher";
+          statusLabel = "SETTLED";
+        }
+
+        const particulars = [
+          e.title,
+          e.details && e.details !== e.title ? e.details : "",
+          e.vendor_name ? `Vendor: ${e.vendor_name}` : "",
+        ]
+          .filter(Boolean)
+          .join(" • ");
+
+        const paymentInfo = [
+          e.payment_method ? String(e.payment_method).toUpperCase() : "",
+          e.transaction_reference ? `UTR: ${e.transaction_reference}` : "",
+        ]
+          .filter(Boolean)
+          .join(" / ");
+
+        const netPos = Number(e.running_net_position || 0);
+        let netPosStr = "0.00";
+        if (netPos < 0) {
+          netPosStr = `${formatAmountForPdf(Math.abs(netPos))} (Due Co)`;
+        } else if (netPos > 0) {
+          netPosStr = `${formatAmountForPdf(netPos)} (Due Empl)`;
+        }
+
+        return {
+          rowNum: idx + 1,
+          date: formatPlanDate(e.date),
+          ref: e.reference || "—",
+          type: typeLabel,
+          particulars: particulars || "—",
+          paymentInfo: paymentInfo || "—",
+          status: statusLabel,
+          amount: formatAmountForPdf(e.amount || 0),
+          advBal: formatAmountForPdf(e.running_advance_balance || 0),
+          claimsRec: formatAmountForPdf(e.running_claim_receivable || 0),
+          runningNet: netPosStr,
+        };
+      });
+
+      // Closing totals row
+      const totalAmount = filteredEntries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+      const latestAdvBal = filteredEntries.length > 0 ? (filteredEntries[0].running_advance_balance || 0) : 0;
+      const latestClaimsRec = filteredEntries.length > 0 ? (filteredEntries[0].running_claim_receivable || 0) : 0;
+      const latestNetPos = filteredEntries.length > 0 ? (filteredEntries[0].running_net_position || 0) : 0;
+      let finalNetStr = "0.00";
+      if (latestNetPos < 0) {
+        finalNetStr = `${formatAmountForPdf(Math.abs(latestNetPos))} (Due Co)`;
+      } else if (latestNetPos > 0) {
+        finalNetStr = `${formatAmountForPdf(latestNetPos)} (Due Empl)`;
+      }
+
+      rows.push({
+        _rowType: "SUBTOTAL",
+        rowNum: "",
+        date: "",
+        ref: "",
+        type: "CLOSING TOTALS",
+        particulars: `Total entries: ${filteredEntries.length}`,
+        paymentInfo: "",
+        status: "",
+        amount: formatAmountForPdf(totalAmount),
+        advBal: formatAmountForPdf(latestAdvBal),
+        claimsRec: formatAmountForPdf(latestClaimsRec),
+        runningNet: finalNetStr,
+      });
+
+      const safeName = (currentUserName || "Executive").toLowerCase().replace(/[^a-z0-9]+/g, "_");
+      const dateStr = new Date().toISOString().slice(0, 10);
+
+      await downloadPdfReport({
+        letterhead,
+        filename: `passbook_statement_${safeName}_${dateStr}.pdf`,
+        title: "Executive Financial Passbook & Statement of Account",
+        subtitle: `Statement of Account & Claims Ledger for ${currentUserName} (${currentDepartment})`,
+        downloadedBy: `${currentUserName} (${currentUserEmail || currentDepartment})`,
+        timestamp: new Date().toLocaleString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        }),
+        filterPanel: activeFilterPanel,
+        metadata: activeMetadata,
+        columns,
+        rows,
+      });
+
+      toast.success("Passbook statement downloaded with company letterhead");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to generate PDF";
+      toast.error(msg);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
 
   return (
     <div className="space-y-4 font-sans w-full max-w-full pb-8">
@@ -236,6 +544,17 @@ export function ExpensesPage() {
 
           <button
             type="button"
+            onClick={handleDownloadPdf}
+            disabled={downloadingPdf || isLoading}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface-muted active:scale-95 transition shrink-0 cursor-pointer disabled:opacity-50"
+            title="Download Statement of Account on Company Letterhead"
+          >
+            <Download className={`h-4 w-4 text-muted ${downloadingPdf ? "animate-bounce" : ""}`} />
+            <span>{downloadingPdf ? "Generating PDF…" : "Download PDF"}</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setRequestAdvanceOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-purple-700 active:scale-95 transition shadow-2xs shrink-0 cursor-pointer"
             title="Request Tour Advance Funds"
@@ -247,9 +566,17 @@ export function ExpensesPage() {
       </div>
 
       {/* Financial Dossier KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {/* 1. Advance in Hand */}
-        <div className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-4 flex flex-col justify-between">
+        <div
+          onClick={() => {
+            setTypeFilter("advance");
+          }}
+          className={`rounded-2xl border border-purple-500/20 bg-purple-500/5 p-4 flex flex-col justify-between cursor-pointer transition hover:border-purple-500/40 hover:shadow-xs ${
+            typeFilter === "advance" ? "ring-2 ring-purple-500/50" : ""
+          }`}
+          title="Filter by Tour Advances"
+        >
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
               Advance in Hand
@@ -266,7 +593,10 @@ export function ExpensesPage() {
               <p className="text-[11px] text-muted">Active tour advances</p>
               <button
                 type="button"
-                onClick={() => setRequestAdvanceOpen(true)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRequestAdvanceOpen(true);
+                }}
                 className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
               >
                 + Request
@@ -276,7 +606,15 @@ export function ExpensesPage() {
         </div>
 
         {/* 2. Direct Treasury Payments */}
-        <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-4 flex flex-col justify-between">
+        <div
+          onClick={() => {
+            setTypeFilter("payment");
+          }}
+          className={`rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-4 flex flex-col justify-between cursor-pointer transition hover:border-indigo-500/40 hover:shadow-xs ${
+            typeFilter === "payment" ? "ring-2 ring-indigo-500/50" : ""
+          }`}
+          title="Filter by Direct Payments"
+        >
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
               Direct Payments
@@ -299,8 +637,58 @@ export function ExpensesPage() {
           </div>
         </div>
 
-        {/* 3. Unsettled Approved Claims */}
-        <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4 flex flex-col justify-between">
+        {/* 3. Submitted Claims */}
+        <div
+          onClick={() => {
+            setTypeFilter("expense");
+            setClaimSubFilter("submitted");
+          }}
+          className={`rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 flex flex-col justify-between cursor-pointer transition hover:border-amber-500/40 hover:shadow-xs ${
+            typeFilter === "expense" && claimSubFilter === "submitted"
+              ? "ring-2 ring-amber-500/50"
+              : ""
+          }`}
+          title="Filter by Submitted Claims (Awaiting Approval)"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+              Submitted Claims
+            </span>
+            <div className="rounded-lg bg-amber-500/10 p-1.5 text-amber-600 dark:text-amber-400">
+              <Clock className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <div className="text-xl sm:text-2xl font-extrabold text-foreground">
+              {isLoading
+                ? "…"
+                : formatCurrency(
+                    passbookData?.submitted_claim_amount ??
+                      kpiSummary?.pending_approval?.amount ??
+                      0
+                  )}
+            </div>
+            <p className="text-[11px] text-muted mt-0.5">
+              {(passbookData?.submitted_claim_count ?? kpiSummary?.pending_approval?.count ?? counts.submittedClaims) || 0}{" "}
+              claims awaiting approval
+              {counts.draftClaims > 0 ? ` • ${counts.draftClaims} draft` : ""}
+            </p>
+          </div>
+        </div>
+
+        {/* 4. Unsettled Approved Claims */}
+        <div
+          onClick={() => {
+            setTypeFilter("expense");
+            setClaimSubFilter("approved");
+          }}
+          className={`rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4 flex flex-col justify-between cursor-pointer transition hover:border-sky-500/40 hover:shadow-xs ${
+            typeFilter === "expense" && claimSubFilter === "approved"
+              ? "ring-2 ring-sky-500/50"
+              : ""
+          }`}
+          title="Filter by Approved Claims"
+        >
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-sky-700 dark:text-sky-300">
               Approved Claims
@@ -317,15 +705,20 @@ export function ExpensesPage() {
           </div>
         </div>
 
-        {/* 4. Net Position */}
+        {/* 5. Net Position */}
         <div
-          className={`rounded-2xl border p-4 flex flex-col justify-between ${
+          onClick={() => {
+            setTypeFilter("all");
+            setClaimSubFilter("all");
+          }}
+          className={`rounded-2xl border p-4 flex flex-col justify-between cursor-pointer transition hover:shadow-xs ${
             netPosition > 0
-              ? "border-emerald-500/20 bg-emerald-500/5"
+              ? "border-emerald-500/20 bg-emerald-500/5 hover:border-emerald-500/40"
               : netPosition < 0
-              ? "border-rose-500/20 bg-rose-500/5"
+              ? "border-rose-500/20 bg-rose-500/5 hover:border-rose-500/40"
               : "border-border bg-card"
-          }`}
+          } ${typeFilter === "all" ? "ring-2 ring-primary/40" : ""}`}
+          title="Show All Transactions"
         >
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
@@ -357,7 +750,7 @@ export function ExpensesPage() {
               }`}
             >
               {netPosition > 0
-                ? "Due to You (Reimbursement Pending)"
+                ? "Due to You (Reimbursement)"
                 : netPosition < 0
                 ? "Due to Company (Return / Deduct)"
                 : "Balanced / Fully Settled"}
@@ -420,7 +813,10 @@ export function ExpensesPage() {
 
           <button
             type="button"
-            onClick={() => setTypeFilter("expense")}
+            onClick={() => {
+              setTypeFilter("expense");
+              setClaimSubFilter("all");
+            }}
             className={`rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
               typeFilter === "expense"
                 ? "bg-sky-600 text-white shadow-xs font-bold"
@@ -477,7 +873,7 @@ export function ExpensesPage() {
           >
             This Month
           </button>
-          {(fromDate || toDate || searchQuery || typeFilter !== "all") && (
+          {(fromDate || toDate || searchQuery || typeFilter !== "all" || claimSubFilter !== "all") && (
             <button
               type="button"
               onClick={() => {
@@ -485,6 +881,7 @@ export function ExpensesPage() {
                 setToDate("");
                 setSearchQuery("");
                 setTypeFilter("all");
+                setClaimSubFilter("all");
               }}
               className="rounded-lg px-2 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
             >
@@ -493,6 +890,78 @@ export function ExpensesPage() {
           )}
         </div>
       </div>
+
+      {/* Claims Sub-Filter Bar when Claims tab is selected */}
+      {typeFilter === "expense" && (
+        <div className="flex items-center gap-1.5 bg-card/60 px-3 py-2 rounded-xl border border-border/70 text-xs overflow-x-auto scrollbar-none">
+          <span className="text-[11px] font-bold text-muted uppercase tracking-wider shrink-0 mr-1">
+            Claim Status:
+          </span>
+          <button
+            type="button"
+            onClick={() => setClaimSubFilter("all")}
+            className={`rounded-lg px-2.5 py-1 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
+              claimSubFilter === "all"
+                ? "bg-sky-600 text-white font-bold shadow-xs"
+                : "bg-surface-muted text-muted hover:text-foreground hover:bg-card border border-border"
+            }`}
+          >
+            All Claims ({counts.expenses})
+          </button>
+
+          {counts.draftClaims > 0 && (
+            <button
+              type="button"
+              onClick={() => setClaimSubFilter("draft")}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
+                claimSubFilter === "draft"
+                  ? "bg-slate-700 text-white font-bold shadow-xs"
+                  : "bg-surface-muted text-muted hover:text-foreground hover:bg-card border border-border"
+              }`}
+            >
+              Drafts ({counts.draftClaims})
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setClaimSubFilter("submitted")}
+            className={`rounded-lg px-2.5 py-1 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
+              claimSubFilter === "submitted"
+                ? "bg-amber-600 text-white font-bold shadow-xs"
+                : "bg-surface-muted text-muted hover:text-foreground hover:bg-card border border-border"
+            }`}
+          >
+            Submitted ({counts.submittedClaims})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setClaimSubFilter("approved")}
+            className={`rounded-lg px-2.5 py-1 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
+              claimSubFilter === "approved"
+                ? "bg-sky-600 text-white font-bold shadow-xs"
+                : "bg-surface-muted text-muted hover:text-foreground hover:bg-card border border-border"
+            }`}
+          >
+            Approved ({counts.approvedClaims})
+          </button>
+
+          {counts.rejectedClaims > 0 && (
+            <button
+              type="button"
+              onClick={() => setClaimSubFilter("rejected")}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
+                claimSubFilter === "rejected"
+                  ? "bg-rose-600 text-white font-bold shadow-xs"
+                  : "bg-surface-muted text-muted hover:text-foreground hover:bg-card border border-border"
+              }`}
+            >
+              Rejected ({counts.rejectedClaims})
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Chronological Ledger Timeline */}
       <div className="space-y-3">
@@ -509,7 +978,7 @@ export function ExpensesPage() {
             <div>
               <h3 className="text-base font-bold text-foreground">No Passbook Transactions Found</h3>
               <p className="text-xs text-muted mt-1 max-w-md mx-auto">
-                You do not have any tour advance disbursements, approved expense claims, direct payments, or settlement vouchers recorded yet.
+                You do not have any tour advance disbursements, expense claims, direct payments, or settlement vouchers recorded yet.
               </p>
             </div>
             <div className="pt-2">
@@ -550,6 +1019,9 @@ export function ExpensesPage() {
             const isAdvanceDisburse = entry.entry_type === "advance_disbursement";
             const isAdvanceRefund = entry.entry_type === "advance_refund";
             const isExpenseApproved = entry.entry_type === "expense_approved";
+            const isExpenseSubmitted = entry.entry_type === "expense_submitted";
+            const isExpenseRejected = entry.entry_type === "expense_rejected";
+            const isExpenseDraft = entry.entry_type === "expense_draft";
             const isPaymentEntry = entry.entry_type === "payment_entry";
             const isSettlement = entry.entry_type === "settlement_voucher";
 
@@ -559,7 +1031,15 @@ export function ExpensesPage() {
             return (
               <div
                 key={entry.id}
-                className="rounded-2xl border border-border bg-card p-4 shadow-2xs hover:shadow-xs transition space-y-3"
+                className={`rounded-2xl border bg-card p-4 shadow-2xs hover:shadow-xs transition space-y-3 ${
+                  isExpenseSubmitted
+                    ? "border-amber-500/30"
+                    : isExpenseRejected
+                    ? "border-rose-500/30"
+                    : isExpenseDraft
+                    ? "border-dashed border-slate-500/30"
+                    : "border-border"
+                }`}
               >
                 {/* Header: Type icon, title, date, reference, amount */}
                 <div className="flex items-start justify-between gap-3">
@@ -570,8 +1050,14 @@ export function ExpensesPage() {
                           ? "bg-purple-500/10 text-purple-600 dark:text-purple-400"
                           : isAdvanceRefund
                           ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                          : isExpenseSubmitted
+                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                          : isExpenseDraft
+                          ? "bg-slate-500/10 text-slate-600 dark:text-slate-400"
                           : isExpenseApproved
                           ? "bg-sky-500/10 text-sky-600 dark:text-sky-400"
+                          : isExpenseRejected
+                          ? "bg-rose-500/10 text-rose-600 dark:text-rose-400"
                           : isPaymentEntry
                           ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
                           : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
@@ -581,8 +1067,14 @@ export function ExpensesPage() {
                         <Wallet className="h-5 w-5" />
                       ) : isAdvanceRefund ? (
                         <RotateCcw className="h-5 w-5" />
+                      ) : isExpenseSubmitted ? (
+                        <Clock className="h-5 w-5" />
+                      ) : isExpenseDraft ? (
+                        <FileText className="h-5 w-5" />
                       ) : isExpenseApproved ? (
                         <Receipt className="h-5 w-5" />
+                      ) : isExpenseRejected ? (
+                        <XCircle className="h-5 w-5" />
                       ) : isPaymentEntry ? (
                         <CreditCard className="h-5 w-5" />
                       ) : (
@@ -594,6 +1086,26 @@ export function ExpensesPage() {
                         <span className="text-xs sm:text-sm font-bold text-foreground">
                           {entry.title}
                         </span>
+                        {isExpenseDraft && (
+                          <span className="rounded-md bg-slate-500/10 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase">
+                            Draft • Unsubmitted
+                          </span>
+                        )}
+                        {isExpenseSubmitted && (
+                          <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase">
+                            Submitted • Pending Approval
+                          </span>
+                        )}
+                        {isExpenseApproved && (
+                          <span className="rounded-md bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold text-sky-600 dark:text-sky-400 uppercase">
+                            Approved Claim
+                          </span>
+                        )}
+                        {isExpenseRejected && (
+                          <span className="rounded-md bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase">
+                            Rejected Claim
+                          </span>
+                        )}
                         {isPaymentEntry && (
                           <span className="rounded-md bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase">
                             Treasury Payment
@@ -646,6 +1158,20 @@ export function ExpensesPage() {
                   )}
 
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted">
+                    {entry.category && (
+                      <div>
+                        Category:{" "}
+                        <span className="font-semibold text-foreground">
+                          {entry.category}
+                          {entry.sub_category ? ` (${entry.sub_category})` : ""}
+                        </span>
+                      </div>
+                    )}
+                    {entry.vendor_name && (
+                      <div>
+                        Vendor: <span className="font-semibold text-foreground">{entry.vendor_name}</span>
+                      </div>
+                    )}
                     {entry.payment_method && (
                       <div>
                         Mode: <span className="font-semibold text-foreground uppercase">{entry.payment_method}</span>
@@ -688,7 +1214,7 @@ export function ExpensesPage() {
 
                   {/* Running Balances Strip */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/50 text-[11px]">
-                    <div className="flex items-center gap-3 text-muted">
+                    <div className="flex items-center gap-3 text-muted flex-wrap">
                       <span>
                         Advance Bal: <strong className="text-purple-600 dark:text-purple-400">{formatCurrency(entry.running_advance_balance)}</strong>
                       </span>
@@ -700,6 +1226,16 @@ export function ExpensesPage() {
                       <span>
                         Claims Rec: <strong className="text-sky-600 dark:text-sky-400">{formatCurrency(entry.running_claim_receivable)}</strong>
                       </span>
+                      {isExpenseSubmitted && (
+                        <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                          (Pending Approval — not added to receivable balance yet)
+                        </span>
+                      )}
+                      {isExpenseDraft && (
+                        <span className="rounded bg-slate-500/10 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-400">
+                          (Draft — unsubmitted, not added to receivable balance)
+                        </span>
+                      )}
                     </div>
 
                     <div className="font-semibold text-foreground flex items-center gap-1">

@@ -374,6 +374,30 @@ const FILE_NOT_FOUND_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="600" 
  * @param {object} options Options like disposition ('inline' | 'attachment') and filename
  */
 async function streamFileToResponse(identifier, res, options = {}) {
+  const INVALID_IDENTIFIERS = new Set([
+    'tenant',
+    'preview',
+    'view',
+    'download',
+    'resource',
+    'original',
+    'company-files',
+    'attachments',
+    'files',
+    'work_plan_expense',
+    'order_due_sheet',
+    'undefined',
+    'null',
+    'true',
+    'false',
+    '[object object]',
+  ]);
+
+  const cleanIdent = String(identifier || '').trim().toLowerCase();
+  if (!cleanIdent || INVALID_IDENTIFIERS.has(cleanIdent)) {
+    return res.status(404).json({ success: false, message: 'Invalid or missing file identifier' });
+  }
+
   const { Attachment, ProjectFile } = getModels();
 
   let att = null;
@@ -401,17 +425,20 @@ async function streamFileToResponse(identifier, res, options = {}) {
   }
 
   if (!att && Attachment && identifier) {
-    att = await Attachment.findOne({
-      $or: [
-        { filename: identifier },
-        { fileId: identifier },
-        { storage_path: identifier },
-        { key: identifier },
-        { url: identifier },
+    const isExactQuery = [
+      { filename: identifier },
+      { fileId: identifier },
+      { storage_path: identifier },
+      { key: identifier },
+      { url: identifier },
+    ];
+    if (cleanIdent.length >= 12 && !INVALID_IDENTIFIERS.has(cleanIdent)) {
+      isExactQuery.push(
         { storage_path: { $regex: identifier, $options: 'i' } },
-        { url: { $regex: identifier, $options: 'i' } },
-      ],
-    }).lean();
+        { url: { $regex: identifier, $options: 'i' } }
+      );
+    }
+    att = await Attachment.findOne({ $or: isExactQuery }).lean();
   }
 
   const rawCandidates = resolveFileIdCandidateList(att || identifier);
@@ -422,7 +449,8 @@ async function streamFileToResponse(identifier, res, options = {}) {
   // If still not found, try candidates regex lookup
   if (!att && Attachment) {
     for (const cid of rawCandidates) {
-      if (cid && cid.length >= 8) {
+      const lowerCid = String(cid || '').toLowerCase();
+      if (cid && cid.length >= 12 && !INVALID_IDENTIFIERS.has(lowerCid)) {
         try {
           att = await Attachment.findOne({
             $or: [

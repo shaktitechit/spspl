@@ -6,6 +6,7 @@ import {
   largeModalPanelClass,
 } from "@/components/portal/shared/ui/modals/modalLayout";
 import { LargeModalPortal } from "@/components/portal/shared/ui/modals/LargeModalPortal";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 import {
   WorkflowEmailControls,
   type WorkflowEmailOptions,
@@ -86,6 +87,7 @@ export default function SubmitOrderPreviewModal({
   emailOptions,
   onEmailOptionsChange,
 }: SubmitOrderPreviewModalProps) {
+  const { canSalesMapVolume, canSalesMapPrice } = usePortalSettings();
   const items = useMemo(() => {
     if (!Array.isArray(detail.order_items)) return [];
     return detail.order_items as Record<string, unknown>[];
@@ -204,10 +206,10 @@ export default function SubmitOrderPreviewModal({
                   <th className="px-3 py-2 font-medium text-right">Qty</th>
                   <th className="px-3 py-2 font-medium text-right">Free</th>
                   <th className="px-3 py-2 font-medium text-right">Rate Type</th>
-                  <th className="px-3 py-2 font-medium text-right">Unit Price</th>
-                  <th className="px-3 py-2 font-medium text-right">Discount</th>
-                  <th className="px-3 py-2 font-medium text-right">GST</th>
-                  <th className="px-3 py-2 font-medium text-right">Line Total</th>
+                  {canSalesMapPrice && <th className="px-3 py-2 font-medium text-right">Unit Price</th>}
+                  {canSalesMapPrice && <th className="px-3 py-2 font-medium text-right">Discount</th>}
+                  {canSalesMapVolume && <th className="px-3 py-2 font-medium text-right">GST</th>}
+                  {canSalesMapVolume && <th className="px-3 py-2 font-medium text-right">Line Total</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200/80 dark:divide-white/10">
@@ -244,22 +246,30 @@ export default function SubmitOrderPreviewModal({
                         <td className="px-3 py-2 text-right">
                           {typeof line.applied_rate_type === "string" ? line.applied_rate_type : "—"}
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums">
-                          ₹{formatMoney(line.unit_price ?? 0)}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums">
-                          {Number(line.discount_percent ?? 0) > 0
-                            ? `${line.discount_percent}%`
-                            : Number(line.discount_amount ?? 0) > 0
-                              ? `₹${formatMoney(line.discount_amount)}`
-                              : "—"}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums">
-                          {Number(line.gst_percent ?? 0)}%
-                        </td>
-                        <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                          ₹{formatMoney(lineTotal(line))}
-                        </td>
+                        {canSalesMapPrice && (
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            ₹{formatMoney(line.unit_price ?? 0)}
+                          </td>
+                        )}
+                        {canSalesMapPrice && (
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {Number(line.discount_percent ?? 0) > 0
+                              ? `${line.discount_percent}%`
+                              : Number(line.discount_amount ?? 0) > 0
+                                ? `₹${formatMoney(line.discount_amount)}`
+                                : "—"}
+                          </td>
+                        )}
+                        {canSalesMapVolume && (
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {Number(line.gst_percent ?? 0)}%
+                          </td>
+                        )}
+                        {canSalesMapVolume && (
+                          <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                            ₹{formatMoney(lineTotal(line))}
+                          </td>
+                        )}
                       </tr>
                     );
                   })
@@ -269,39 +279,41 @@ export default function SubmitOrderPreviewModal({
           </div>
 
           {/* Financial Breakdown */}
-          <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/20 p-4 dark:border-blue-900/30 dark:bg-blue-950/10">
-            <h4 className="mb-2 text-2xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Order Financial Summary
-            </h4>
-            <div className="grid gap-3 sm:grid-cols-4 font-sans text-xs">
-              <div>
-                <span className="text-slate-500 dark:text-slate-400 block">Gross Subtotal</span>
-                <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-200">
-                  ₹{formatMoney(totals.subtotal)}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-500 dark:text-slate-400 block">Total Discount</span>
-                <span className="text-sm font-semibold tabular-nums text-rose-600 dark:text-rose-400">
-                  -₹{formatMoney(totals.discount)}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-500 dark:text-slate-400 block">Estimated GST</span>
-                <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-200">
-                  ₹{formatMoney(totals.gst)}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-500 dark:text-slate-400 block font-semibold text-emerald-600 dark:text-emerald-400">
-                  Grand Total
-                </span>
-                <span className="text-base font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-                  ₹{formatMoney(totals.grandTotal)}
-                </span>
+          {canSalesMapVolume && (
+            <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/20 p-4 dark:border-blue-900/30 dark:bg-blue-950/10">
+              <h4 className="mb-2 text-2xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Order Financial Summary
+              </h4>
+              <div className="grid gap-3 sm:grid-cols-4 font-sans text-xs">
+                <div>
+                  <span className="text-slate-500 dark:text-slate-400 block">Gross Subtotal</span>
+                  <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-200">
+                    ₹{formatMoney(totals.subtotal)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 dark:text-slate-400 block">Total Discount</span>
+                  <span className="text-sm font-semibold tabular-nums text-rose-600 dark:text-rose-400">
+                    -₹{formatMoney(totals.discount)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 dark:text-slate-400 block">Estimated GST</span>
+                  <span className="text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-200">
+                    ₹{formatMoney(totals.gst)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 dark:text-slate-400 block font-semibold text-emerald-600 dark:text-emerald-400">
+                    Grand Total
+                  </span>
+                  <span className="text-base font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    ₹{formatMoney(totals.grandTotal)}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className="mt-5">
             <label className="text-xs font-medium text-slate-700 dark:text-slate-300">

@@ -767,6 +767,8 @@ async function buildBaseQuery(query = {}, user) {
       q.status = 'cancelled';
     } else if (s === 'rejected') {
       q.$or = [{ finance_approval_status: 'rejected' }, { status: 'finance_rejected' }];
+    } else if (s === 'draft') {
+      q.$or = [{ status: 'draft' }, { lifecycle_status: 'draft' }, { process_stage: 'draft' }];
     }
   } else if (status) {
     const s = String(status).toLowerCase();
@@ -779,6 +781,8 @@ async function buildBaseQuery(query = {}, user) {
       q._id = { $in: pendingOrderIds };
     } else if (s === 'rejected') {
       q.$or = [{ finance_approval_status: 'rejected' }, { status: 'finance_rejected' }];
+    } else if (s === 'draft') {
+      q.$or = [{ status: 'draft' }, { lifecycle_status: 'draft' }, { process_stage: 'draft' }];
     } else if (s === 'closed') {
       q.is_locked = true;
     } else if (s === 'open') {
@@ -1138,6 +1142,7 @@ async function create(body, user) {
     current_assignee: body.assigned_sales_user || user._id,
     current_department: 'sales',
     pending_with_role: 'sales',
+    process_stage: 'draft',
     lifecycle_status: 'draft',
     status: 'draft',
     workflow_stage: 'sales',

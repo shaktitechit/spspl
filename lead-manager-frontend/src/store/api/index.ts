@@ -13,3 +13,4 @@ export * from "./slices/companyInfoApi";
 export * from "./slices/attachmentsApi";
 export * from "./slices/messagesApi";
 export * from "./slices/notificationsApiSlice";
+export * from "./slices/settingsApi";

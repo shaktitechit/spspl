@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 
 import ListOrdersPage from "./ListOrdersPage";
 import {
@@ -45,7 +46,17 @@ export default function PortalOrdersRoute({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const config = CONFIG_BY_PORTAL[portalHome];
+  const { canSalesMapVolume } = usePortalSettings();
+  const baseConfig = CONFIG_BY_PORTAL[portalHome];
+  const config = useMemo(() => {
+    if (portalHome === "/sales") {
+      return {
+        ...baseConfig,
+        showPricing: canSalesMapVolume,
+      };
+    }
+    return baseConfig;
+  }, [baseConfig, portalHome, canSalesMapVolume]);
   const portalKey = orderMasterPortalKeyFromHome(portalHome);
   const defaultTab = portalKey
     ? defaultOrderStageForPortal(portalKey)

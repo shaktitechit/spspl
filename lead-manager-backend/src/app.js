@@ -20,6 +20,7 @@ const leadUserRosterRoutes = require('./modules/users/user.routes');
 const { proxyToAuthService } = require('./utils/proxyToAuthService');
 const { proxyToMessageService } = require('./utils/proxyToMessageService');
 const { proxyToNotificationService } = require('./utils/proxyToNotificationService');
+const { proxyToOpmsBackend } = require('./utils/proxyToOpmsBackend');
 
 const app = express();
 
@@ -51,6 +52,7 @@ app.use('/api/emails', proxyToMessageService);
 app.use('/api/messages', proxyToMessageService);
 app.use('/api/auto-emails', proxyToMessageService);
 app.use('/api/communication', proxyToMessageService);
+app.use('/api/settings', proxyToOpmsBackend);
 
 app.use(notFound);
 app.use(errorMiddleware);

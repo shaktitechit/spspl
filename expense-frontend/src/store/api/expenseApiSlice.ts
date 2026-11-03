@@ -3,7 +3,7 @@
  * @module store/api/expenseApiSlice
  */
 import { baseApi } from "./baseApi";
-import { EXPENSE_SERVICE_URL, WORK_PLANNER_SERVICE_URL } from "@/lib/env";
+import { EXPENSE_SERVICE_URL, WORK_PLANNER_SERVICE_URL, publicExpenseApiOrigin } from "@/lib/env";
 import type {
   ExpenseRecord,
   TourAdvanceRecord,
@@ -14,7 +14,15 @@ import type {
   WorkPlannerUserFinancialItem,
 } from "@/types/expense";
 
-const API_BASE = (EXPENSE_SERVICE_URL || WORK_PLANNER_SERVICE_URL || "http://localhost:7015").replace(/\/+$/, "");
+export function getExpenseApiBase(): string {
+  return publicExpenseApiOrigin().replace(/\/+$/, "");
+}
+
+const API_BASE = {
+  toString(): string {
+    return getExpenseApiBase();
+  },
+};
 
 function normalizePaginatedResponse<T>(res: any): {
   data: T[];

@@ -1,10 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Users, X } from "lucide-react";
 import { LargeModalBackdrop } from "@/components/portal/shared/ui/modals/LargeModalBackdrop";
 import { largeModalPanelClass } from "@/components/portal/shared/ui/modals/modalLayout";
 import { resolveOrderCounterparty } from "@/components/portal/sales/partyDisplay";
+import { useAppSelector } from "@/store";
+import { getOpmsAccessRole } from "@/lib/opmsAuth";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 import PeriodFilter from "./PeriodFilter";
 import { usePeriodFilter } from "./usePeriodFilter";
 import PeriodHeadingCaption from "./PeriodHeadingCaption";
@@ -47,6 +50,22 @@ export default function PartyLeaderboard({
 }: PartyLeaderboardProps) {
   const [showAll, setShowAll] = useState(false);
   const [metricState, setMetric] = useState<Metric>("quantity");
+
+  const user = useAppSelector((s) => s.auth.user);
+  const isSales = getOpmsAccessRole(user) === "sales";
+  const { canSalesMapQuantity, canSalesMapVolume } = usePortalSettings();
+
+  const allowQuantity = !isSales || canSalesMapQuantity;
+  const allowVolume = !isSales || canSalesMapVolume;
+
+  useEffect(() => {
+    if (!allowVolume && metricState === "volume") {
+      setMetric("quantity");
+    } else if (!allowQuantity && metricState === "quantity") {
+      setMetric("volume");
+    }
+  }, [allowVolume, allowQuantity, metricState]);
+
   const metric = forceMetric ?? metricState;
   const {
     availableYears,
@@ -124,32 +143,36 @@ export default function PartyLeaderboard({
         : "Party Sales breakdown (Approved Volume)";
 
 
-  const metricToggle = (
+  const metricToggle = (allowQuantity || allowVolume) ? (
     <div className="flex rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
-      <button
-        type="button"
-        onClick={() => setMetric("quantity")}
-        className={`rounded-md px-2.5 py-1 text-2xs font-semibold transition cursor-pointer ${
-          metric === "quantity"
-            ? "bg-white text-emerald-700 shadow-sm dark:bg-slate-700 dark:text-emerald-300"
-            : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-        }`}
-      >
-        Quantity
-      </button>
-      <button
-        type="button"
-        onClick={() => setMetric("volume")}
-        className={`rounded-md px-2.5 py-1 text-2xs font-semibold transition cursor-pointer ${
-          metric === "volume"
-            ? "bg-white text-emerald-700 shadow-sm dark:bg-slate-700 dark:text-emerald-300"
-            : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-        }`}
-      >
-        Volume
-      </button>
+      {allowQuantity && (
+        <button
+          type="button"
+          onClick={() => setMetric("quantity")}
+          className={`rounded-md px-2.5 py-1 text-2xs font-semibold transition cursor-pointer ${
+            metric === "quantity"
+              ? "bg-white text-emerald-700 shadow-sm dark:bg-slate-700 dark:text-emerald-300"
+              : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          Quantity
+        </button>
+      )}
+      {allowVolume && (
+        <button
+          type="button"
+          onClick={() => setMetric("volume")}
+          className={`rounded-md px-2.5 py-1 text-2xs font-semibold transition cursor-pointer ${
+            metric === "volume"
+              ? "bg-white text-emerald-700 shadow-sm dark:bg-slate-700 dark:text-emerald-300"
+              : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          Volume
+        </button>
+      )}
     </div>
-  );
+  ) : null;
 
   const handleDownload = () => {
     if (partyRows.length === 0) return;

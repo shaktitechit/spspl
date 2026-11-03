@@ -13,6 +13,9 @@ import {
 } from "./leaderboardUtils";
 import { isKitShellOrderLine } from "@/components/portal/shared/orders/lib/orderLineQuantities";
 import type { DashboardOrdersSummary } from "@/store/api/slices/dashboardApi";
+import { useAppSelector } from "@/store";
+import { getOpmsAccessRole } from "@/lib/opmsAuth";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 
 interface MonthlyPerformanceChartProps {
   orders?: any[];
@@ -156,8 +159,25 @@ export default function MonthlyPerformanceChart({
   forceMetric,
   qtyBasis: propQtyBasis = "approved",
 }: MonthlyPerformanceChartProps) {
-  const [metricState, setMetric] = useState<Metric>("quantity");
+  const user = useAppSelector((s) => s.auth.user);
+  const isSales = getOpmsAccessRole(user) === "sales";
+  const { canSalesMapQuantity, canSalesMapVolume } = usePortalSettings();
+
+  const allowQuantity = !isSales || canSalesMapQuantity;
+  const allowVolume = !isSales || canSalesMapVolume;
+
+  const [metricState, setMetric] = useState<Metric>(() =>
+    allowQuantity ? "quantity" : "volume"
+  );
   const metric = forceMetric ?? metricState;
+
+  useEffect(() => {
+    if (!allowVolume && metricState === "volume") {
+      setMetric("quantity");
+    } else if (!allowQuantity && metricState === "quantity") {
+      setMetric("volume");
+    }
+  }, [allowVolume, allowQuantity, metricState]);
   const [dataBasisState, setDataBasisState] = useState<QtyBasis>(
     propQtyBasis === "dispatched" ? "dispatched" : "approved",
   );
@@ -376,30 +396,34 @@ export default function MonthlyPerformanceChart({
             </button>
           </div>
 
-          {!forceMetric && (
+          {!forceMetric && (allowQuantity || allowVolume) && (
             <div className="flex rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
-              <button
-                type="button"
-                onClick={() => setMetric("quantity")}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
-                  metric === "quantity"
-                    ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-slate-100"
-                    : "text-slate-600 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-200"
-                }`}
-              >
-                Quantity
-              </button>
-              <button
-                type="button"
-                onClick={() => setMetric("volume")}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
-                  metric === "volume"
-                    ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-slate-100"
-                    : "text-slate-600 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-200"
-                }`}
-              >
-                Volume
-              </button>
+              {allowQuantity && (
+                <button
+                  type="button"
+                  onClick={() => setMetric("quantity")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                    metric === "quantity"
+                      ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-slate-100"
+                      : "text-slate-600 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-200"
+                  }`}
+                >
+                  Quantity
+                </button>
+              )}
+              {allowVolume && (
+                <button
+                  type="button"
+                  onClick={() => setMetric("volume")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                    metric === "volume"
+                      ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-slate-100"
+                      : "text-slate-600 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-200"
+                  }`}
+                >
+                  Volume
+                </button>
+              )}
             </div>
           )}
 

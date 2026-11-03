@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DollarSign, Package, X } from "lucide-react";
+import { DollarSign, Package, X, AlertTriangle, Lock } from "lucide-react";
 
 import { mutationRejectedMessage } from "@/lib/mutationMessages";
 import { toast } from "@/lib/toast";
@@ -12,7 +12,35 @@ import {
   useGetPartyProductQuery,
   useGetPartyQuery,
 } from "@/store/api";
+import { useAppSelector } from "@/store/hooks";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 import { LargeModalPortal } from "@/components/portal/shared/LargeModalPortal";
+
+function isSalesOrExecutive(user: unknown): boolean {
+  if (!user || typeof user !== "object") return false;
+  const u = user as any;
+  const dept = String(u.department?.code || u.department?.name || u.department || "").toLowerCase();
+  if (dept === "sales") return true;
+  const roles = [
+    ...(Array.isArray(u.roles) ? u.roles : []),
+    ...(Array.isArray(u.role_codes) ? u.role_codes : []),
+    ...(Array.isArray(u.access_roles) ? u.access_roles : []),
+  ].map((r: any) => String(typeof r === "object" ? r.code || r.name : r).toLowerCase());
+  if (roles.includes("admin") || roles.includes("super_admin") || roles.includes("superadmin")) {
+    return false;
+  }
+  if (roles.some((r) => r === "sales" || r === "sales_executive" || r === "executive" || r.includes("executive"))) {
+    return true;
+  }
+  if (Array.isArray(u.portals)) {
+    for (const p of u.portals) {
+      const pRoles = (Array.isArray(p.access_roles) ? p.access_roles : [p.access_role, p.role]).filter(Boolean);
+      if (pRoles.some((r: any) => ["admin", "super_admin"].includes(String(r).toLowerCase()))) return false;
+      if (pRoles.some((r: any) => ["sales", "sales_executive", "executive"].includes(String(r).toLowerCase()))) return true;
+    }
+  }
+  return false;
+}
 
 const inputClass =
   "w-full rounded-lg border border-slate-200/95 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-600 focus:ring-1 focus:ring-blue-600 dark:border-white/15 dark:bg-slate-950 dark:text-slate-50";
@@ -84,6 +112,12 @@ export function MapOrderLinePriceModal({
     skip: !partyId || !open,
   });
 
+  const currentUser = useAppSelector((s) => s.auth.user);
+  const isSales = isSalesOrExecutive(currentUser);
+  const { canSalesMapQuantity, canSalesMapPrice } = usePortalSettings();
+  const priceRestricted = isSales && !canSalesMapPrice;
+  const quantityRestricted = isSales && !canSalesMapQuantity;
+
   const [priority, setPriority] = useState("100");
   const [expectedOrderQuantity, setExpectedOrderQuantity] = useState("0");
   const [isOrderable, setIsOrderable] = useState(true);
@@ -152,6 +186,10 @@ export function MapOrderLinePriceModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (priceRestricted) {
+      toast.error("Sales role is not authorized to map or modify prices.");
+      return;
+    }
     if (!partyId || !target.productId) {
       toast.error("Party and product are required.");
       return;
@@ -242,6 +280,21 @@ export function MapOrderLinePriceModal({
             onSubmit={handleSubmit}
             className="flex-1 space-y-4 overflow-y-auto p-5"
           >
+            {priceRestricted && (
+              <div className="flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50/90 p-3.5 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>
+                  <strong>Access Restricted:</strong> Price mapping is disabled for the Sales role by Super Admin. You cannot enter or update negotiated rates.
+                </span>
+              </div>
+            )}
+            {quantityRestricted && (
+              <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/90 p-3 text-xs text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+                <Lock className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                <span>Quantity mapping is locked to system defaults for Sales role.</span>
+              </div>
+            )}
+
             <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3.5 dark:border-white/5 dark:bg-white/5">
               <div className="text-xs text-slate-500 dark:text-slate-400">
                 Order line
@@ -286,14 +339,15 @@ export function MapOrderLinePriceModal({
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                    Expected Order Qty (EOQ)
+                    Expected Order Qty (EOQ) {quantityRestricted && <span className="text-[10px] text-amber-600 dark:text-amber-400">(Locked)</span>}
                   </label>
                   <input
                     type="number"
                     min={0}
                     value={expectedOrderQuantity}
                     onChange={(e) => setExpectedOrderQuantity(e.target.value)}
-                    className={inputClass}
+                    disabled={quantityRestricted}
+                    className={`${inputClass} ${quantityRestricted ? "bg-slate-100 cursor-not-allowed text-slate-500 dark:bg-slate-800" : ""}`}
                     required
                   />
                 </div>
@@ -347,7 +401,7 @@ export function MapOrderLinePriceModal({
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                    Negotiated price (₹)
+                    Negotiated price (₹) {priceRestricted && <span className="text-[10px] text-amber-600 dark:text-amber-400">(Restricted)</span>}
                   </label>
                   <input
                     type="number"
@@ -355,9 +409,10 @@ export function MapOrderLinePriceModal({
                     min={0}
                     value={rate}
                     onChange={(e) => setRate(e.target.value)}
+                    disabled={priceRestricted}
                     required
-                    placeholder="e.g. 450.00"
-                    className={inputClass}
+                    placeholder={priceRestricted ? "Price mapping disabled" : "e.g. 450.00"}
+                    className={`${inputClass} ${priceRestricted ? "bg-slate-100 cursor-not-allowed text-slate-500 dark:bg-slate-800" : ""}`}
                   />
                 </div>
               </div>
@@ -365,26 +420,28 @@ export function MapOrderLinePriceModal({
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                    Min quantity
+                    Min quantity {quantityRestricted && <span className="text-[10px] text-amber-600 dark:text-amber-400">(Default: 1)</span>}
                   </label>
                   <input
                     type="number"
                     min={1}
                     value={minQty}
                     onChange={(e) => setMinQty(e.target.value)}
-                    className={inputClass}
+                    disabled={quantityRestricted}
+                    className={`${inputClass} ${quantityRestricted ? "bg-slate-100 cursor-not-allowed text-slate-500 dark:bg-slate-800" : ""}`}
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                    Max quantity
+                    Max quantity {quantityRestricted && <span className="text-[10px] text-amber-600 dark:text-amber-400">(Default: 999999)</span>}
                   </label>
                   <input
                     type="number"
                     min={1}
                     value={maxQty}
                     onChange={(e) => setMaxQty(e.target.value)}
-                    className={inputClass}
+                    disabled={quantityRestricted}
+                    className={`${inputClass} ${quantityRestricted ? "bg-slate-100 cursor-not-allowed text-slate-500 dark:bg-slate-800" : ""}`}
                   />
                 </div>
               </div>
@@ -440,10 +497,11 @@ export function MapOrderLinePriceModal({
               </button>
               <button
                 type="submit"
-                disabled={busy}
+                disabled={busy || priceRestricted}
+                title={priceRestricted ? "Price mapping is restricted for Sales by Super Admin" : undefined}
                 className="rounded-lg bg-blue-600 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
               >
-                {busy ? "Saving..." : submitLabel}
+                {busy ? "Saving..." : priceRestricted ? "Price Mapping Restricted" : submitLabel}
               </button>
             </div>
           </form>

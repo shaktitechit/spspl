@@ -293,7 +293,21 @@ export type ExecutiveBalanceItem = {
 export type PassbookLedgerEntry = {
   id: string;
   settlement_id?: string;
-  entry_type: "advance_disbursement" | "advance_refund" | "expense_approved" | "settlement_voucher" | "payment_entry";
+  expense_id?: string;
+  entry_type:
+    | "advance_disbursement"
+    | "advance_refund"
+    | "expense_approved"
+    | "expense_submitted"
+    | "expense_rejected"
+    | "expense_draft"
+    | "settlement_voucher"
+    | "payment_entry";
+  claim_status?: string;
+  category?: string;
+  sub_category?: string;
+  vendor_name?: string;
+  settlement_status?: string;
   date: string;
   reference: string;
   title: string;
@@ -323,6 +337,12 @@ export type ExecutivePassbookData = {
   total_payment_entries?: number;
   current_claim_receivable: number;
   current_net_position: number;
+  draft_claim_amount?: number;
+  draft_claim_count?: number;
+  submitted_claim_amount?: number;
+  submitted_claim_count?: number;
+  approved_claim_amount?: number;
+  approved_claim_count?: number;
   opening_advance_balance?: number;
   opening_payment_entry?: number;
   opening_claim_receivable?: number;

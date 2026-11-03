@@ -28,6 +28,7 @@ import {
   formatAddressOneLine,
 } from "@/components/portal/shared/orders/addresses/OrderAddressSelector";
 import { ArrowLeft, ArrowRight, FileText, Lock } from "lucide-react";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 
 type EditOrderModalProps = {
   isOpen: boolean;
@@ -262,8 +263,15 @@ export default function EditOrderModal({
   const [shippingAddress, setShippingAddress] = useState<OrderAddressData>(emptyOrderAddress);
   const [saveShippingToParty, setSaveShippingToParty] = useState<boolean>(false);
 
+  const {
+    isPerformaEnabled,
+    isCostSheetEnabled,
+    isKycEnabled,
+    isPOEnabled,
+  } = usePortalSettings();
+
   const { data: performaData } = useGetOrderPerformaQuery(orderId, {
-    skip: !isOpen || !orderId,
+    skip: !isOpen || !orderId || !isPerformaEnabled,
   });
   const [updateOrderPerforma] = useUpdateOrderPerformaMutation();
   const [createAttachment] = useCreateAttachmentMutation();
@@ -700,54 +708,56 @@ export default function EditOrderModal({
         </div>
 
         {/* Stepper Tabs */}
-        <div className="mt-3 flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/70 p-1 dark:border-white/10 dark:bg-slate-900/60">
-          <button
-            type="button"
-            onClick={() => setStep(1)}
-            className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
-              step === 1
-                ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/90 dark:bg-slate-800 dark:text-blue-400 dark:ring-white/10"
-                : "text-slate-600 hover:text-slate-900 hover:bg-white/50 dark:text-slate-400 dark:hover:text-slate-200"
-            }`}
-          >
-            <span
-              className={`flex h-4.5 w-4.5 items-center justify-center rounded-full text-2xs font-bold ${
+        {isPerformaEnabled && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/70 p-1 dark:border-white/10 dark:bg-slate-900/60">
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
                 step === 1
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
+                  ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/90 dark:bg-slate-800 dark:text-blue-400 dark:ring-white/10"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50 dark:text-slate-400 dark:hover:text-slate-200"
               }`}
             >
-              1
-            </span>
-            <span>Step 1: Order Items & Totals</span>
-          </button>
+              <span
+                className={`flex h-4.5 w-4.5 items-center justify-center rounded-full text-2xs font-bold ${
+                  step === 1
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
+                }`}
+              >
+                1
+              </span>
+              <span>Step 1: Order Items & Totals</span>
+            </button>
 
-          <span className="text-slate-300 dark:text-slate-700">/</span>
+            <span className="text-slate-300 dark:text-slate-700">/</span>
 
-          <button
-            type="button"
-            onClick={() => setStep(2)}
-            className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
-              step === 2
-                ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/90 dark:bg-slate-800 dark:text-blue-400 dark:ring-white/10"
-                : "text-slate-600 hover:text-slate-900 hover:bg-white/50 dark:text-slate-400 dark:hover:text-slate-200"
-            }`}
-          >
-            <span
-              className={`flex h-4.5 w-4.5 items-center justify-center rounded-full text-2xs font-bold ${
+            <button
+              type="button"
+              onClick={() => setStep(2)}
+              className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
                 step === 2
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
+                  ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/90 dark:bg-slate-800 dark:text-blue-400 dark:ring-white/10"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50 dark:text-slate-400 dark:hover:text-slate-200"
               }`}
             >
-              2
-            </span>
-            <span>Step 2: Performa Invoice</span>
-            {performaData?.is_locked && (
-              <Lock className="h-3 w-3 text-amber-500 ml-1" />
-            )}
-          </button>
-        </div>
+              <span
+                className={`flex h-4.5 w-4.5 items-center justify-center rounded-full text-2xs font-bold ${
+                  step === 2
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
+                }`}
+              >
+                2
+              </span>
+              <span>Step 2: Performa Invoice</span>
+              {performaData?.is_locked && (
+                <Lock className="h-3 w-3 text-amber-500 ml-1" />
+              )}
+            </button>
+          </div>
+        )}
 
         {/* Content */}
         <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1 space-y-5">

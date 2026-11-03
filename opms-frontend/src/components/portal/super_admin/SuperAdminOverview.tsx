@@ -30,6 +30,7 @@ import {
   ExternalLink,
   UserCheck,
   LayoutGrid,
+  Settings,
 } from "lucide-react";
 import PeriodFilter from "@/components/portal/shared/dashboard/PeriodFilter";
 import { useDashboardSummary } from "@/components/portal/shared/dashboard/useDashboardSummary";
@@ -147,6 +148,14 @@ export default function SuperAdminOverview() {
 
         <div className="flex flex-wrap items-center gap-3">
           <OverviewFlagsWidget currentDepartment="admin" variant="headerButton" />
+
+          <Link
+            href={`${PORTAL_HOME}/settings`}
+            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-xs transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+          >
+            <Settings className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            Portal Settings
+          </Link>
 
           <button
             type="button"

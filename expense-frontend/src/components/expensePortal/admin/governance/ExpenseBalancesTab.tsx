@@ -15,10 +15,20 @@ import {
   Zap,
   ArrowRight,
   RotateCcw,
+  Download,
 } from "lucide-react";
 import { useGetExecutiveBalancesQuery } from "@/store/api/workPlannerApiSlice";
 import { formatCurrency } from "@/components/expensePortal/shared/workPlanUtils";
 import { canSettleForUser } from "@/components/expensePortal/shared/expensePermissions";
+import { usePdfCompanyLetterhead } from "@/components/expensePortal/shared/pdfCompanyLetterhead";
+import {
+  downloadPdfReport,
+  formatAmountForPdf,
+  formatCurrencyForPdf,
+  type PdfReportColumn,
+  type PdfReportRow,
+} from "@/components/expensePortal/finance/reports/exportPdfReport";
+import { toast } from "sonner";
 import type { AuthUser, ExecutiveBalanceItem } from "@/types/workPlanner";
 
 interface ExpenseBalancesTabProps {
@@ -74,6 +84,145 @@ export function ExpenseBalancesTab({
   const hasActiveFilters = Boolean(
     (selectedExecutive && selectedExecutive !== "all") || searchQuery
   );
+
+  const letterhead = usePdfCompanyLetterhead();
+  const [downloadingPdf, setDownloadingPdf] = useState<boolean>(false);
+
+  async function handleDownloadBalancesPdf() {
+    if (downloadingPdf) return;
+    try {
+      setDownloadingPdf(true);
+
+      const totalAdvances = filteredBalances.reduce((acc, b) => acc + (b.active_advance_balance || 0), 0);
+      const totalUnsettled = filteredBalances.reduce(
+        (acc, b) => acc + (b.unsettled_approved_claims_amount ?? b.unsettled_approved_claims ?? 0),
+        0
+      );
+      const totalSettled = filteredBalances.reduce(
+        (acc, b) => acc + (b.total_settled_claims_amount ?? b.total_settled_amount ?? 0),
+        0
+      );
+      const totalPaid = filteredBalances.reduce((acc, b) => acc + Number(b.total_payment_entries || 0), 0);
+
+      const activeFilterPanel: Array<{ label: string; value: string }> = [
+        {
+          label: "Scope",
+          value: ownershipScope === "mine" ? "Personal Balances" : "Team Balances",
+        },
+        {
+          label: "Team Member",
+          value:
+            selectedExecutive && selectedExecutive !== "all"
+              ? executiveOptions.find((e) => e.id === selectedExecutive)?.name || selectedExecutive
+              : "All Team Members",
+        },
+        {
+          label: "Search Keyword",
+          value: searchQuery.trim() ? `"${searchQuery}"` : "None",
+        },
+      ];
+
+      const activeMetadata: Array<{ label: string; value: string }> = [
+        {
+          label: "Staff Count",
+          value: `${filteredBalances.length} Executive(s)`,
+        },
+        {
+          label: "Total Advances in Hand",
+          value: formatCurrencyForPdf(totalAdvances),
+        },
+        {
+          label: "Total Unsettled Claims",
+          value: formatCurrencyForPdf(totalUnsettled),
+        },
+        {
+          label: "Total Settled Claims",
+          value: formatCurrencyForPdf(totalSettled),
+        },
+        {
+          label: "Direct Payments",
+          value: formatCurrencyForPdf(totalPaid),
+        },
+      ];
+
+      const columns: PdfReportColumn[] = [
+        { key: "rowNum", label: "#", width: 0.35, align: "center" },
+        { key: "executive", label: "Executive Name", width: 1.8, align: "left" },
+        { key: "email", label: "Email / Department", width: 1.7, align: "left" },
+        { key: "advanceInHand", label: "Advances in Hand (INR)", width: 1.2, align: "right" },
+        { key: "activeAdvances", label: "Active Adv", width: 0.7, align: "center" },
+        { key: "unsettledClaims", label: "Unsettled Claims (INR)", width: 1.2, align: "right" },
+        { key: "approvedCount", label: "Approved", width: 0.7, align: "center" },
+        { key: "settledClaims", label: "Settled Claims (INR)", width: 1.2, align: "right" },
+        { key: "positionStatus", label: "Position Status", width: 1.2, align: "center" },
+        { key: "netPosition", label: "Net Position (INR)", width: 1.3, align: "right" },
+      ];
+
+      const rows: PdfReportRow[] = filteredBalances.map((b, idx) => {
+        const netAmt = Math.abs(b.net_position ?? b.net_balance ?? 0);
+        let statusLabel = "Balanced";
+        if (b.position_status === "due_to_employee") statusLabel = "Due to Employee";
+        else if (b.position_status === "due_to_company") statusLabel = "Due to Company";
+
+        return {
+          rowNum: idx + 1,
+          executive: b.sales_user?.name || "Executive",
+          email: [b.sales_user?.email, b.sales_user?.department].filter(Boolean).join(" • ") || "—",
+          advanceInHand: formatAmountForPdf(b.active_advance_balance),
+          activeAdvances: String(b.active_advance_count || 0),
+          unsettledClaims: formatAmountForPdf(b.unsettled_approved_claims_amount ?? b.unsettled_approved_claims),
+          approvedCount: String(b.unsettled_approved_claims_count || 0),
+          settledClaims: formatAmountForPdf(b.total_settled_claims_amount ?? b.total_settled_amount),
+          positionStatus: statusLabel,
+          netPosition: formatAmountForPdf(netAmt),
+        };
+      });
+
+      // Closing totals row
+      rows.push({
+        _rowType: "SUBTOTAL",
+        rowNum: "",
+        executive: "GRAND TOTALS",
+        email: `${filteredBalances.length} Executive(s)`,
+        advanceInHand: formatAmountForPdf(totalAdvances),
+        activeAdvances: "",
+        unsettledClaims: formatAmountForPdf(totalUnsettled),
+        approvedCount: "",
+        settledClaims: formatAmountForPdf(totalSettled),
+        positionStatus: "",
+        netPosition: "",
+      });
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+
+      await downloadPdfReport({
+        letterhead,
+        filename: `staff_balances_report_${dateStr}.pdf`,
+        title: "Staff Running Balances & Passbooks Master Report",
+        subtitle: `Financial governance & running ledger positions for ${filteredBalances.length} staff member(s)`,
+        downloadedBy: currentUser?.name ? `${currentUser.name} (${currentUser.email || "Finance/Admin"})` : "Finance Governance",
+        timestamp: new Date().toLocaleString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        }),
+        filterPanel: activeFilterPanel,
+        metadata: activeMetadata,
+        columns,
+        rows,
+      });
+
+      toast.success("Staff balances report downloaded on company letterhead");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to generate PDF";
+      toast.error(msg);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
 
   function resetFilters() {
     setSelectedExecutive("all");
@@ -135,6 +284,21 @@ export function ExpenseBalancesTab({
           title="Refresh table"
         >
           <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+        </button>
+
+        <button
+          type="button"
+          onClick={handleDownloadBalancesPdf}
+          disabled={downloadingPdf || isLoading || filteredBalances.length === 0}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface-muted/60 hover:bg-surface-muted px-3 py-1.5 text-xs font-semibold text-foreground active:scale-95 transition cursor-pointer shrink-0 disabled:opacity-50"
+          title="Download Staff Balances PDF Report (with Company Letterhead)"
+        >
+          {downloadingPdf ? (
+            <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+          ) : (
+            <Download className="h-4 w-4 text-primary" />
+          )}
+          <span className="hidden sm:inline">Export PDF</span>
         </button>
       </div>
 

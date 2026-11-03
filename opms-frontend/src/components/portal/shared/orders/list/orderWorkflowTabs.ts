@@ -791,11 +791,15 @@ export function getOrderWorkflowTabCategory(
 
 export function orderMatchesWorkflowTab(
   order: unknown,
-  tab: OrderWorkflowTabCategory,
+  tab: OrderWorkflowTabCategory | "draft",
   options?: OrderWorkflowCategoryOptions,
 ): boolean {
   const row = asRow(order);
   if (!row) return false;
+
+  if (tab === "draft") {
+    return deriveOrderWorkflowStatus(row) === "draft";
+  }
 
   if (tab === "all") {
     return deriveOrderWorkflowStatus(row) !== "draft";

@@ -38,6 +38,7 @@ type ApprovalRecordCardProps = {
   sendToAccountBusy?: boolean;
   sendingApprovalId?: string | null;
   isAmendBlocked?: boolean;
+  showPricing?: boolean;
 };
 
 function formatDate(v: unknown): string {
@@ -145,6 +146,7 @@ export function ApprovalRecordCard({
   sendToAccountBusy = false,
   sendingApprovalId = null,
   isAmendBlocked = false,
+  showPricing = true,
 }: ApprovalRecordCardProps) {
   const approvalId = String(approval._id ?? approval.id ?? "");
   const approvalStatus = useMemo(() => {
@@ -834,50 +836,52 @@ export function ApprovalRecordCard({
         </div>
       )}
 
-      <div className="mt-4 border-t border-slate-200/90 pt-4 dark:border-white/10">
-        <div className="mb-3">
-          <h4 className="font-sans text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Financial Breakdown
-          </h4>
-          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-            Totals for this approval revision.
-          </p>
+      {showPricing && (
+        <div className="mt-4 border-t border-slate-200/90 pt-4 dark:border-white/10">
+          <div className="mb-3">
+            <h4 className="font-sans text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Financial Breakdown
+            </h4>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+              Totals for this approval revision.
+            </p>
+          </div>
+          <div className="grid gap-3 font-sans text-sm sm:grid-cols-4">
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
+              <span className="block text-xs text-slate-500 dark:text-slate-400">
+                Approved Total
+              </span>
+              <span className="mt-1 block font-mono text-base font-semibold text-emerald-700 dark:text-emerald-300">
+                {approvedTotal.toFixed(2)}
+              </span>
+            </div>
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
+              <span className="block text-xs text-slate-500 dark:text-slate-400">
+                Batch Ordered
+              </span>
+              <span className="mt-1 block font-mono text-base font-semibold text-slate-900 dark:text-slate-50">
+                {orderedTotal.toFixed(2)}
+              </span>
+            </div>
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
+              <span className="block text-xs text-slate-500 dark:text-slate-400">
+                Rates Reviewed
+              </span>
+              <span className="mt-1 block text-base font-semibold text-slate-900 dark:text-slate-50">
+                {approval.rates_reviewed ? "Yes" : "No"}
+              </span>
+            </div>
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
+              <span className="block text-xs text-slate-500 dark:text-slate-400">
+                All Rates Mapped
+              </span>
+              <span className="mt-1 block text-base font-semibold text-slate-900 dark:text-slate-50">
+                {approval.all_rates_mapped ? "Yes" : "No"}
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="grid gap-3 font-sans text-sm sm:grid-cols-4">
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
-            <span className="block text-xs text-slate-500 dark:text-slate-400">
-              Approved Total
-            </span>
-            <span className="mt-1 block font-mono text-base font-semibold text-emerald-700 dark:text-emerald-300">
-              {approvedTotal.toFixed(2)}
-            </span>
-          </div>
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
-            <span className="block text-xs text-slate-500 dark:text-slate-400">
-              Batch Ordered
-            </span>
-            <span className="mt-1 block font-mono text-base font-semibold text-slate-900 dark:text-slate-50">
-              {orderedTotal.toFixed(2)}
-            </span>
-          </div>
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
-            <span className="block text-xs text-slate-500 dark:text-slate-400">
-              Rates Reviewed
-            </span>
-            <span className="mt-1 block text-base font-semibold text-slate-900 dark:text-slate-50">
-              {approval.rates_reviewed ? "Yes" : "No"}
-            </span>
-          </div>
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
-            <span className="block text-xs text-slate-500 dark:text-slate-400">
-              All Rates Mapped
-            </span>
-            <span className="mt-1 block text-base font-semibold text-slate-900 dark:text-slate-50">
-              {approval.all_rates_mapped ? "Yes" : "No"}
-            </span>
-          </div>
-        </div>
-      </div>
+      )}
 
       {items.length > 0 ? (
         <div className="mt-4 border-t border-slate-200/90 pt-4 dark:border-white/10">
@@ -895,7 +899,7 @@ export function ApprovalRecordCard({
                   <th className="px-3 py-2 font-medium text-right">Unit Price</th>
                   <th className="px-3 py-2 font-medium text-right">Discount</th>
                   <th className="px-3 py-2 font-medium text-right">GST</th>
-                  <th className="px-3 py-2 font-medium text-right">Net Total</th>
+                  {showPricing && <th className="px-3 py-2 font-medium text-right">Net Total</th>}
                   <th className="px-3 py-2 font-medium">Remarks</th>
                 </tr>
               </thead>
@@ -1036,9 +1040,11 @@ export function ApprovalRecordCard({
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-right font-bold tabular-nums text-slate-900 dark:text-slate-100 bg-slate-50/20 dark:bg-slate-950/20">
-                        {nested ? "0.00" : lineTotal.toFixed(2)}
-                      </td>
+                      {showPricing && (
+                        <td className="px-3 py-2 text-right font-bold tabular-nums text-slate-900 dark:text-slate-100 bg-slate-50/20 dark:bg-slate-950/20">
+                          {nested ? "0.00" : lineTotal.toFixed(2)}
+                        </td>
+                      )}
                       <td
                         className="max-w-[150px] truncate px-3 py-2 italic text-slate-500"
                         title={String(row.remarks ?? row.rejection_reason ?? "")}

@@ -259,7 +259,8 @@ export function useFilePreview(token?: string | null) {
         }
 
         const headers: Record<string, string> = {};
-        if (effectiveToken && !rawUrl.includes("token=")) {
+        // Only set Authorization header if token is not already in query parameters to prevent S3/MinIO redirect rejection
+        if (effectiveToken && !fetchUrl.includes("token=")) {
           headers.Authorization = `Bearer ${effectiveToken}`;
         }
 

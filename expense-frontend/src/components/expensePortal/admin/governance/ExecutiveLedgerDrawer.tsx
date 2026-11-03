@@ -17,12 +17,25 @@ import {
   Info,
   Filter,
   Paperclip,
+  Download,
+  Clock,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import { useGetExecutivePassbookQuery } from "@/store/api/workPlannerApiSlice";
 import { formatCurrency, formatPlanDate } from "@/components/expensePortal/shared/workPlanUtils";
 import { ExpenseAttachmentList } from "@/components/expensePortal/shared/ExpenseAttachmentList";
 import { FilePreviewModal, useFilePreview } from "@/components/expensePortal/shared/FilePreviewModal";
 import { AdvanceRefundModal } from "@/components/expensePortal/finance/disbursements/AdvanceRefundModal";
+import { usePdfCompanyLetterhead } from "@/components/expensePortal/shared/pdfCompanyLetterhead";
+import {
+  downloadPdfReport,
+  formatAmountForPdf,
+  formatCurrencyForPdf,
+  type PdfReportColumn,
+  type PdfReportRow,
+} from "@/components/expensePortal/finance/reports/exportPdfReport";
+import { toast } from "sonner";
 import type { PassbookLedgerEntry } from "@/types/workPlanner";
 
 interface ExecutiveLedgerDrawerProps {
@@ -89,7 +102,15 @@ export function ExecutiveLedgerDrawer({
           e.type === "ADVANCE_REFUND"
       );
     } else if (typeFilter === "expense") {
-      list = rawEntries.filter((e: any) => e.entry_type === "expense_approved" || e.type === "EXPENSE_APPROVED");
+      list = rawEntries.filter(
+        (e: any) =>
+          e.entry_type?.startsWith("expense_") ||
+          e.type?.startsWith("EXPENSE_") ||
+          e.entry_type === "expense_approved" ||
+          e.entry_type === "expense_submitted" ||
+          e.entry_type === "expense_draft" ||
+          e.entry_type === "expense_rejected"
+      );
     } else if (typeFilter === "settlement") {
       list = rawEntries.filter(
         (e: any) =>
@@ -143,6 +164,205 @@ export function ExecutiveLedgerDrawer({
     }
   }
 
+  const letterhead = usePdfCompanyLetterhead();
+  const [downloadingPdf, setDownloadingPdf] = useState<boolean>(false);
+
+  async function handleDownloadPdf() {
+    if (downloadingPdf) return;
+    try {
+      setDownloadingPdf(true);
+
+      const activeFilterPanel: Array<{ label: string; value: string }> = [
+        {
+          label: "Executive",
+          value: currentUserName,
+        },
+        {
+          label: "Transaction Filter",
+          value:
+            typeFilter === "all"
+              ? "All Transactions"
+              : typeFilter === "advance"
+              ? "Tour Advances & Refunds"
+              : typeFilter === "expense"
+              ? "Expense Claims"
+              : "Settlement Vouchers & Payments",
+        },
+        {
+          label: "Date Range",
+          value: fromDate || toDate ? `${fromDate || "Start"} to ${toDate || "Present"}` : "All Recorded History",
+        },
+      ];
+
+      const activeMetadata: Array<{ label: string; value: string }> = [
+        {
+          label: "Advance in Hand",
+          value: formatCurrencyForPdf(advanceBal),
+        },
+        {
+          label: "Submitted Claims",
+          value: formatCurrencyForPdf((passbookData as any)?.submitted_claim_amount || 0),
+        },
+        {
+          label: "Approved Claims",
+          value: formatCurrencyForPdf(claimReceivable),
+        },
+        {
+          label: "Net Balance Position",
+          value: `${formatCurrencyForPdf(Math.abs(netPosition))} (${
+            netPosition > 0
+              ? "Due Employee"
+              : netPosition < 0
+              ? "Due Company"
+              : "Balanced"
+          })`,
+        },
+      ];
+
+      const columns: PdfReportColumn[] = [
+        { key: "rowNum", label: "#", width: 0.35, align: "center" },
+        { key: "date", label: "Date", width: 0.85, align: "center" },
+        { key: "ref", label: "Reference", width: 1.1, align: "left" },
+        { key: "type", label: "Type / Category", width: 1.4, align: "left" },
+        { key: "particulars", label: "Particulars & Description", width: 2.3, align: "left" },
+        { key: "paymentInfo", label: "Payment Mode / UTR", width: 1.1, align: "left" },
+        { key: "status", label: "Status", width: 0.8, align: "center" },
+        { key: "amount", label: "Amount (INR)", width: 1.0, align: "right" },
+        { key: "advBal", label: "Adv Bal (INR)", width: 1.0, align: "right" },
+        { key: "claimsRec", label: "Claims Rec (INR)", width: 1.0, align: "right" },
+        { key: "runningNet", label: "Running Net (INR)", width: 1.35, align: "right" },
+      ];
+
+      const rows: PdfReportRow[] = entries.map((e, idx) => {
+        const eAny = e as any;
+        let typeLabel = "Transaction";
+        let statusLabel = "POSTED";
+
+        if (e.entry_type === "advance_disbursement" || eAny.type === "ADVANCE_DISBURSED") {
+          typeLabel = "Advance Disbursed";
+          statusLabel = "DISBURSED";
+        } else if (e.entry_type === "advance_refund" || eAny.type === "ADVANCE_REFUND") {
+          typeLabel = "Advance Refund";
+          statusLabel = "REFUNDED";
+        } else if (e.entry_type === "expense_draft" || eAny.type === "EXPENSE_DRAFT") {
+          typeLabel = `Draft Claim (${e.category || eAny.category || "General"})`;
+          statusLabel = "DRAFT";
+        } else if (e.entry_type === "expense_submitted" || eAny.type === "EXPENSE_SUBMITTED") {
+          typeLabel = `Submitted Claim (${e.category || eAny.category || "General"})`;
+          statusLabel = "PENDING";
+        } else if (e.entry_type === "expense_approved" || eAny.type === "EXPENSE_APPROVED") {
+          typeLabel = `Approved Claim (${e.category || eAny.category || "General"})`;
+          statusLabel = "APPROVED";
+        } else if (e.entry_type === "expense_rejected" || eAny.type === "EXPENSE_REJECTED") {
+          typeLabel = `Rejected Claim (${e.category || eAny.category || "General"})`;
+          statusLabel = "REJECTED";
+        } else if (e.entry_type === "payment_entry" || eAny.type === "PAYMENT_ENTRY") {
+          typeLabel = "Treasury Payment";
+          statusLabel = "PAID";
+        } else if (e.entry_type === "settlement_voucher" || (typeof eAny.type === "string" && eAny.type.startsWith("SETTLEMENT"))) {
+          typeLabel = "Settlement Voucher";
+          statusLabel = "SETTLED";
+        }
+
+        const particulars = [
+          e.title || eAny.description,
+          e.details && e.details !== e.title ? e.details : "",
+          e.vendor_name || eAny.vendor ? `Vendor: ${e.vendor_name || eAny.vendor}` : "",
+        ]
+          .filter(Boolean)
+          .join(" • ");
+
+        const paymentInfo = [
+          e.payment_method ? String(e.payment_method).toUpperCase() : "",
+          e.transaction_reference ? `UTR: ${e.transaction_reference}` : "",
+        ]
+          .filter(Boolean)
+          .join(" / ");
+
+        const netPos = Number(e.running_net_position || 0);
+        let netPosStr = "0.00";
+        if (netPos < 0) {
+          netPosStr = `${formatAmountForPdf(Math.abs(netPos))} (Due Co)`;
+        } else if (netPos > 0) {
+          netPosStr = `${formatAmountForPdf(netPos)} (Due Empl)`;
+        }
+
+        const rawAmt = e.amount ?? (eAny.debit > 0 ? eAny.debit : eAny.credit) ?? 0;
+
+        return {
+          rowNum: idx + 1,
+          date: formatPlanDate(e.date),
+          ref: e.reference || eAny.reference_number || "—",
+          type: typeLabel,
+          particulars: particulars || "—",
+          paymentInfo: paymentInfo || "—",
+          status: statusLabel,
+          amount: formatAmountForPdf(rawAmt),
+          advBal: formatAmountForPdf(e.running_advance_balance || 0),
+          claimsRec: formatAmountForPdf(e.running_claim_receivable || 0),
+          runningNet: netPosStr,
+        };
+      });
+
+      // Closing totals row
+      const totalAmount = entries.reduce((s, e: any) => s + (Number(e.amount ?? (e.debit > 0 ? e.debit : e.credit)) || 0), 0);
+      const latestAdvBal = entries.length > 0 ? (entries[0].running_advance_balance || 0) : 0;
+      const latestClaimsRec = entries.length > 0 ? (entries[0].running_claim_receivable || 0) : 0;
+      const latestNetPos = entries.length > 0 ? (entries[0].running_net_position || 0) : 0;
+      let finalNetStr = "0.00";
+      if (latestNetPos < 0) {
+        finalNetStr = `${formatAmountForPdf(Math.abs(latestNetPos))} (Due Co)`;
+      } else if (latestNetPos > 0) {
+        finalNetStr = `${formatAmountForPdf(latestNetPos)} (Due Empl)`;
+      }
+
+      rows.push({
+        _rowType: "SUBTOTAL",
+        rowNum: "",
+        date: "",
+        ref: "",
+        type: "CLOSING TOTALS",
+        particulars: `Total entries: ${entries.length}`,
+        paymentInfo: "",
+        status: "",
+        amount: formatAmountForPdf(totalAmount),
+        advBal: formatAmountForPdf(latestAdvBal),
+        claimsRec: formatAmountForPdf(latestClaimsRec),
+        runningNet: finalNetStr,
+      });
+
+      const safeName = (currentUserName || "Executive").toLowerCase().replace(/[^a-z0-9]+/g, "_");
+      const dateStr = new Date().toISOString().slice(0, 10);
+
+      await downloadPdfReport({
+        letterhead,
+        filename: `passbook_statement_${safeName}_${dateStr}.pdf`,
+        title: "Executive Financial Passbook & Statement of Account",
+        subtitle: `Statement of Account & Claims Ledger for ${currentUserName}`,
+        downloadedBy: currentUserName,
+        timestamp: new Date().toLocaleString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        }),
+        filterPanel: activeFilterPanel,
+        metadata: activeMetadata,
+        columns,
+        rows,
+      });
+
+      toast.success("Passbook statement downloaded on company letterhead");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to generate PDF";
+      toast.error(msg);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
+
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
@@ -176,6 +396,19 @@ export function ExecutiveLedgerDrawer({
               </div>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                disabled={downloadingPdf || isLoading}
+                className="rounded-lg p-2 text-muted hover:bg-surface-muted hover:text-foreground transition cursor-pointer disabled:opacity-50"
+                title="Download Passbook PDF Statement (Company Letterhead)"
+              >
+                {downloadingPdf ? (
+                  <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+                ) : (
+                  <Download className="h-4 w-4 text-primary" />
+                )}
+              </button>
               <button
                 type="button"
                 onClick={handlePrint}
@@ -386,9 +619,12 @@ export function ExecutiveLedgerDrawer({
                 const isAdvanceDisburse = entry.entry_type === "advance_disbursement" || eAny.type === "ADVANCE_DISBURSED";
                 const isAdvanceRefund = entry.entry_type === "advance_refund" || eAny.type === "ADVANCE_REFUND";
                 const isExpenseApproved = entry.entry_type === "expense_approved" || eAny.type === "EXPENSE_APPROVED";
+                const isExpenseSubmitted = entry.entry_type === "expense_submitted" || eAny.type === "EXPENSE_SUBMITTED";
+                const isExpenseDraft = entry.entry_type === "expense_draft" || eAny.type === "EXPENSE_DRAFT";
+                const isExpenseRejected = entry.entry_type === "expense_rejected" || eAny.type === "EXPENSE_REJECTED";
                 const isSettlement = entry.entry_type === "settlement_voucher" || entry.entry_type === "payment_entry" || eAny.type === "PAYMENT_ENTRY" || (typeof eAny.type === "string" && eAny.type.startsWith("SETTLEMENT"));
 
-                const itemTitle = entry.title || eAny.description || eAny.category || (isAdvanceRefund ? "Tour Advance Refund" : isAdvanceDisburse ? "Tour Advance Disbursed" : "Ledger Entry");
+                const itemTitle = entry.title || eAny.description || eAny.category || (isAdvanceRefund ? "Tour Advance Refund" : isAdvanceDisburse ? "Tour Advance Disbursed" : isExpenseDraft ? "Draft Claim" : isExpenseSubmitted ? "Submitted Claim" : isExpenseRejected ? "Rejected Claim" : "Ledger Entry");
                 const itemRef = entry.reference || eAny.reference_number || "—";
                 const itemAmount = entry.amount ?? (eAny.debit > 0 ? eAny.debit : eAny.credit) ?? 0;
                 const itemActor = entry.actor_name || (typeof eAny.refunded_by === "object" ? eAny.refunded_by?.name : undefined) || (typeof eAny.disbursed_by === "object" ? eAny.disbursed_by?.name : undefined);
@@ -408,6 +644,12 @@ export function ExecutiveLedgerDrawer({
                               ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
                               : isExpenseApproved
                               ? "bg-sky-500/10 text-sky-600 dark:text-sky-400"
+                              : isExpenseSubmitted
+                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                              : isExpenseDraft
+                              ? "bg-slate-500/10 text-slate-600 dark:text-slate-400"
+                              : isExpenseRejected
+                              ? "bg-rose-500/10 text-rose-600 dark:text-rose-400"
                               : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                           }`}
                         >
@@ -417,6 +659,12 @@ export function ExecutiveLedgerDrawer({
                             <RotateCcw className="h-4 w-4" />
                           ) : isExpenseApproved ? (
                             <Receipt className="h-4 w-4" />
+                          ) : isExpenseSubmitted ? (
+                            <Clock className="h-4 w-4" />
+                          ) : isExpenseDraft ? (
+                            <Receipt className="h-4 w-4" />
+                          ) : isExpenseRejected ? (
+                            <AlertTriangle className="h-4 w-4" />
                           ) : (
                             <FileCheck className="h-4 w-4" />
                           )}

@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { OrderTab as AdminOrderTab } from "@/components/portal/admin/order/components/OrderTab";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 
 type OrderTabProps = {
   orderId?: string;
@@ -19,6 +20,8 @@ export default function OrderTab({
   status: statusProp,
   partyLabel = "—",
 }: OrderTabProps) {
+  const { canSalesMapVolume, canSalesMapPrice } = usePortalSettings();
+
   const readOnlyItems = useMemo(() => {
     if (!detail || !Array.isArray(detail.order_items)) return [];
     return detail.order_items as Record<string, unknown>[];
@@ -41,7 +44,8 @@ export default function OrderTab({
       partyLabel={partyLabel}
       showPdfDownload={true}
       showApprovalBadges={true}
+      showPricing={canSalesMapVolume}
+      allowMapPrice={canSalesMapPrice}
     />
   );
 }
-

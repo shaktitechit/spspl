@@ -11,7 +11,37 @@ import {
   readSessionFromStorage,
   refreshAccessToken,
 } from "@/utils/authStorage";
-import { EXPENSE_SERVICE_URL } from "@/lib/env";
+import { EXPENSE_SERVICE_URL, publicExpenseApiOrigin } from "@/lib/env";
+
+function normalizeRequestArgs(args: string | FetchArgs): string | FetchArgs {
+  const origin = publicExpenseApiOrigin().replace(/\/+$/, "");
+  if (typeof window === "undefined" || origin.includes("localhost") || origin.includes("127.0.0.1")) {
+    return args;
+  }
+  if (typeof args === "string") {
+    if (
+      args.startsWith("http://localhost:7015") ||
+      args.startsWith("http://127.0.0.1:7015") ||
+      args.startsWith("http://expense-backend:7015")
+    ) {
+      return args.replace(/^https?:\/\/[^/]+/, origin);
+    }
+    return args;
+  }
+  if (args && typeof args.url === "string") {
+    if (
+      args.url.startsWith("http://localhost:7015") ||
+      args.url.startsWith("http://127.0.0.1:7015") ||
+      args.url.startsWith("http://expense-backend:7015")
+    ) {
+      return {
+        ...args,
+        url: args.url.replace(/^https?:\/\/[^/]+/, origin),
+      };
+    }
+  }
+  return args;
+}
 
 // @ts-expect-error — shared helper accepts RTK fetchBaseQuery without importing RTK in session-auth-client
 const rawBaseQuery = createServiceBaseQueryWithAuthProxy(fetchBaseQuery, {
@@ -37,10 +67,11 @@ function skipRefresh(url: string): boolean {
 export { refreshAccessToken };
 
 const baseQueryWithAuth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
-  args,
+  rawArgs,
   api,
   extraOptions,
 ) => {
+  const args = normalizeRequestArgs(rawArgs);
   let result = await rawBaseQuery(args, api, extraOptions);
   if (result.error?.status === 401 && !skipRefresh(requestUrl(args))) {
     const ok = await refreshAccessToken();

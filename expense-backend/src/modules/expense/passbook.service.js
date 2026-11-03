@@ -555,6 +555,24 @@ async function getExecutivePassbook(targetUserId, query = {}) {
 
   // Approved Expenses (Credit: Company reimburses employee)
   expenses.forEach((exp) => {
+    const allAtts = [];
+    const seenAttIds = new Set();
+    const addUniqueAtt = (item) => {
+      if (!item) return;
+      const idKey = String(typeof item === 'object' ? (item._id || item.attachment_id || item.filename || item.url) : item);
+      if (idKey && !seenAttIds.has(idKey)) {
+        seenAttIds.add(idKey);
+        if (typeof item === 'object') allAtts.push(item);
+        else allAtts.push({ _id: item, original_name: 'Attachment' });
+      }
+    };
+    if (exp.receipt_attachment) addUniqueAtt(exp.receipt_attachment);
+    if (Array.isArray(exp.attachments)) {
+      for (const a of exp.attachments) addUniqueAtt(a);
+    }
+    if (exp.start_reading_image) addUniqueAtt(exp.start_reading_image);
+    if (exp.end_reading_image) addUniqueAtt(exp.end_reading_image);
+
     ledgerEntries.push({
       id: String(exp._id),
       date: exp.approved_at || exp.expense_date,
@@ -576,7 +594,7 @@ async function getExecutivePassbook(targetUserId, query = {}) {
       actor_name: exp.approved_by?.name || 'Manager',
       approved_at: exp.approved_at,
       attachments: exp.attachments || [],
-      attachment_details: exp.attachment_details || [],
+      attachment_details: allAtts,
     });
   });
 

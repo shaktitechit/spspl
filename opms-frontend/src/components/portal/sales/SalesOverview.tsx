@@ -17,7 +17,9 @@ import {
 
 import PeriodFilter from "@/components/portal/shared/dashboard/PeriodFilter";
 import { useDashboardSummary } from "@/components/portal/shared/dashboard/useDashboardSummary";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 export default function SalesOverview() {
+  const { canSalesMapVolume } = usePortalSettings();
   const user = useAppSelector((state) => state.auth.user);
   const userName =
     typeof user?.name === "string" ? user.name : "Sales Representative";
@@ -136,7 +138,7 @@ export default function SalesOverview() {
         queueCounts={summary?.queueCounts}
         isOrdersFetching={isSummaryFetching}
         role="sales"
-        showPricing={true}
+        showPricing={canSalesMapVolume}
         selectedYears={selectedYears}
         selectedMonths={selectedMonths}
         dateFilter={dateFilter}
@@ -155,12 +157,14 @@ export default function SalesOverview() {
         <ProductLeaderboard
           rows={summary?.leaderboards.products}
           isOrdersFetching={isSummaryFetching}
+          forceMetric={!canSalesMapVolume ? "quantity" : undefined}
           externalFilterCaption={filterCaption}
           qtyBasis={qtyBasis}
         />
         <PartyLeaderboard
           rows={summary?.leaderboards.parties}
           isOrdersFetching={isSummaryFetching}
+          forceMetric={!canSalesMapVolume ? "quantity" : undefined}
           externalFilterCaption={filterCaption}
           qtyBasis={qtyBasis}
         />
@@ -171,6 +175,7 @@ export default function SalesOverview() {
           orders={[]}
           contributions={summary?.contributions}
           isOrdersFetching={isSummaryFetching}
+          forceMetric={!canSalesMapVolume ? "quantity" : undefined}
           forceSalesUserId={user?._id || user?.id ? String(user?._id || user?.id) : undefined}
           forceSalesUserName={userName}
           externalFilterCaption={filterCaption}

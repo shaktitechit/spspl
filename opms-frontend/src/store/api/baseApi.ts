@@ -165,6 +165,7 @@ export const medicaApi = createApi({
     "LeadQuotation",
     "Quotation",
     "TermsAndConditions",
+    "PortalSettings",
   ],
   endpoints: () => ({}),
 });

@@ -25,6 +25,7 @@ import {
   useListProductsQuery,
   useCreateAttachmentMutation,
   useUpdateOrderPerformaMutation,
+  useCheckPartyLineRatesQuery,
 } from "@/store/api";
 import { useAppSelector } from "@/store";
 import { Button } from "@/components/ui/Button";
@@ -44,6 +45,12 @@ import {
   emptyOrderAddress,
   formatAddressOneLine,
 } from "@/components/portal/shared/orders/addresses/OrderAddressSelector";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
+import {
+  rateLookupKey,
+  resolveLineUnitPrice,
+} from "@/components/portal/shared/orders/lib/orderLineRateDisplay";
+import type { CheckOrderRatesItem } from "@/store/api/slices/partyOrderProductsRateApi";
 
 const inputClass =
   "w-full rounded-lg border border-slate-200/95 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-500/25 dark:border-white/15 dark:bg-slate-950 dark:text-slate-50";
@@ -420,6 +427,27 @@ export default function CreateOrderPage() {
   const [lines, setLines] = useState<LineRow[]>(() => [newLine()]);
   const [previousItemsModalOpen, setPreviousItemsModalOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
+
+  const {
+    isPerformaEnabled,
+    isCostSheetEnabled,
+    isKycEnabled,
+    isPOEnabled,
+    isBuyBackEnabled,
+    canSalesMapQuantity,
+    canSalesMapPrice,
+    canSalesMapVolume,
+  } = usePortalSettings();
+
+  const showPriceColumn = canSalesMapVolume || canSalesMapPrice;
+  const canEditPrice = canSalesMapPrice;
+  const showFinancialTotals = canSalesMapVolume;
+
+  useEffect(() => {
+    if (!isPerformaEnabled && step === 2) {
+      setStep(1);
+    }
+  }, [isPerformaEnabled, step]);
   const [performaValues, setPerformaValues] = useState<PerformaFormValues>(INITIAL_PERFORMA_VALUES);
   const [attachmentFiles, setAttachmentFiles] = useState<PerformaAttachmentFiles>({
     po_file: null,
@@ -575,6 +603,88 @@ export default function CreateOrderPage() {
     setLines((prev) => [...prev, newLine()]);
   }, []);
 
+  const lineRateCheckInput = useMemo(() => {
+    if (!partyId) return null;
+    const items = lines
+      .filter((l) => l.productId)
+      .map((l) => ({
+        product: l.productId,
+        applied_rate_type: l.applied_rate_type,
+        product_name: l.product_name,
+        sku: l.sku,
+        unit_price: l.unit_price,
+      }));
+    if (!items.length) return null;
+    return { party: partyId, items };
+  }, [partyId, lines]);
+
+  const rateCheckQ = useCheckPartyLineRatesQuery(lineRateCheckInput!, {
+    skip: !lineRateCheckInput,
+  });
+
+  const rateItemByLine = useMemo(() => {
+    const map = new Map<string, CheckOrderRatesItem>();
+    for (const item of rateCheckQ.data?.items ?? []) {
+      map.set(rateLookupKey(item.product, item.applied_rate_type), item);
+    }
+    return map;
+  }, [rateCheckQ.data]);
+
+  const resolvePriceForLine = useCallback(
+    (
+      productId: string,
+      rateType: string,
+      catalogProduct: Entity | undefined,
+    ) => {
+      const rateItem = productId
+        ? rateItemByLine.get(rateLookupKey(productId, rateType))
+        : undefined;
+      return resolveLineUnitPrice(rateItem, catalogProduct as any, rateType);
+    },
+    [rateItemByLine],
+  );
+
+  useEffect(() => {
+    if (!rateCheckQ.data?.items?.length) return;
+    setLines((prev) => {
+      let changed = false;
+      const next = prev.map((row) => {
+        if (!row.productId) return row;
+        const rateItem = rateItemByLine.get(
+          rateLookupKey(row.productId, row.applied_rate_type),
+        );
+        if (!rateItem?.hasRate || rateItem.currentMappedRate == null) return row;
+        const negotiated = Number(rateItem.currentMappedRate);
+        if (!Number.isFinite(negotiated) || row.unit_price === negotiated) {
+          return row;
+        }
+        changed = true;
+        return { ...row, unit_price: negotiated };
+      });
+      return changed ? next : prev;
+    });
+  }, [rateCheckQ.data, rateItemByLine]);
+
+  const onRateTypeChange = useCallback(
+    (key: string, rateType: string) => {
+      setLines((prev) =>
+        prev.map((row) => {
+          if (row.key !== key) return row;
+          const p = products.find(
+            (x) => String(x._id ?? x.id ?? "") === row.productId,
+          );
+          const price = resolvePriceForLine(row.productId, rateType, p);
+          return {
+            ...row,
+            applied_rate_type: rateType,
+            unit_price: price > 0 ? price : row.unit_price,
+          };
+        }),
+      );
+    },
+    [products, resolvePriceForLine],
+  );
+
   const onProductRowChange = useCallback(
     (key: string, productId: string) => {
       const p = products.find(
@@ -599,7 +709,12 @@ export default function CreateOrderPage() {
             };
           }
           const pid = String(p._id ?? p.id ?? "");
-          const defaultPrice = Number(p.standard_rate ?? p.price ?? p.unit_price ?? p.mrp ?? 0);
+          const rateType = row.applied_rate_type || "SR";
+          const resolvedPrice = resolvePriceForLine(pid, rateType, p);
+          const defaultPrice =
+            resolvedPrice > 0
+              ? resolvedPrice
+              : Number(p.standard_rate ?? p.price ?? p.unit_price ?? p.mrp ?? 0);
           return {
             ...row,
             productId: pid,
@@ -612,11 +727,12 @@ export default function CreateOrderPage() {
             unit: String(p.unit ?? ""),
             unit_price: defaultPrice,
             gst_percent: Number(p.gst_percent ?? p.default_gst_rate ?? p.gst_rate ?? 18),
+            applied_rate_type: rateType,
           };
         }),
       );
     },
-    [products],
+    [products, resolvePriceForLine],
   );
 
   const loadPreviousItems = useCallback(
@@ -805,7 +921,7 @@ export default function CreateOrderPage() {
         const createdOrderId = String(data?._id || data?.id || data?.order_id || "");
 
         if (createdOrderId) {
-          if (attachmentFiles.po_file) {
+          if (isPOEnabled && attachmentFiles.po_file) {
             const fd = new FormData();
             fd.append("file", attachmentFiles.po_file);
             fd.append("entity_type", "order");
@@ -817,7 +933,7 @@ export default function CreateOrderPage() {
             });
           }
 
-          if (attachmentFiles.cost_sheet_file) {
+          if (isCostSheetEnabled && attachmentFiles.cost_sheet_file) {
             const fd = new FormData();
             fd.append("file", attachmentFiles.cost_sheet_file);
             fd.append("entity_type", "order");
@@ -829,7 +945,7 @@ export default function CreateOrderPage() {
             });
           }
 
-          if (attachmentFiles.aadhaar_file) {
+          if (isKycEnabled && attachmentFiles.aadhaar_file) {
             const fd = new FormData();
             fd.append("file", attachmentFiles.aadhaar_file);
             fd.append("entity_type", "order");
@@ -851,7 +967,7 @@ export default function CreateOrderPage() {
             }
           }
 
-          if (attachmentFiles.pan_file) {
+          if (isKycEnabled && attachmentFiles.pan_file) {
             const fd = new FormData();
             fd.append("file", attachmentFiles.pan_file);
             fd.append("entity_type", "order");
@@ -873,7 +989,7 @@ export default function CreateOrderPage() {
             }
           }
 
-          if (attachmentFiles.gst_file) {
+          if (isKycEnabled && attachmentFiles.gst_file) {
             const fd = new FormData();
             fd.append("file", attachmentFiles.gst_file);
             fd.append("entity_type", "order");
@@ -895,7 +1011,7 @@ export default function CreateOrderPage() {
             }
           }
 
-          if (attachmentFiles.kyc_files && attachmentFiles.kyc_files.length > 0) {
+          if (isKycEnabled && attachmentFiles.kyc_files && attachmentFiles.kyc_files.length > 0) {
             for (const file of attachmentFiles.kyc_files) {
               const fd = new FormData();
               fd.append("file", file);
@@ -919,13 +1035,14 @@ export default function CreateOrderPage() {
             }
           }
 
-          // Sync performa after all attachments uploaded to ensure IDs and statuses link immediately
-          await updateOrderPerforma({
-            orderId: createdOrderId,
-            data: finalPerforma,
-          }).unwrap().catch((err) => {
-            console.warn("Failed to sync performa after attachments upload:", err);
-          });
+          if (isPerformaEnabled) {
+            await updateOrderPerforma({
+              orderId: createdOrderId,
+              data: finalPerforma,
+            }).unwrap().catch((err) => {
+              console.warn("Failed to sync performa after attachments upload:", err);
+            });
+          }
         }
 
         toast.success(
@@ -1055,39 +1172,41 @@ export default function CreateOrderPage() {
       </div>
 
       {/* Step Tabs Header */}
-      <div className="flex items-center gap-3 border-b border-slate-200 pb-3 dark:border-white/10">
-        <button
-          type="button"
-          onClick={() => setStep(1)}
-          className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
-            step === 1
-              ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-              : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-          }`}
-        >
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-2xs font-bold text-white">
-            1
-          </span>
-          <span>Order Details & Items</span>
-        </button>
+      {isPerformaEnabled && (
+        <div className="flex items-center gap-3 border-b border-slate-200 pb-3 dark:border-white/10">
+          <button
+            type="button"
+            onClick={() => setStep(1)}
+            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+              step === 1
+                ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+            }`}
+          >
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-2xs font-bold text-white">
+              1
+            </span>
+            <span>Order Details & Items</span>
+          </button>
 
-        <span className="text-slate-300 dark:text-slate-700">/</span>
+          <span className="text-slate-300 dark:text-slate-700">/</span>
 
-        <button
-          type="button"
-          onClick={handleNextToStep2}
-          className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
-            step === 2
-              ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-              : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-          }`}
-        >
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-2xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
-            2
-          </span>
-          <span>Performa Invoice</span>
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={handleNextToStep2}
+            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+              step === 2
+                ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+            }`}
+          >
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-2xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+              2
+            </span>
+            <span>Performa Invoice</span>
+          </button>
+        </div>
+      )}
 
       <form onSubmit={onSubmit} className="space-y-6">
         {/* Step 1: Order Details & Line Items */}
@@ -1200,12 +1319,19 @@ export default function CreateOrderPage() {
                     <thead>
                       <tr className="border-b border-slate-100 dark:border-white/5 text-slate-500 dark:text-slate-400">
                         <th className="pb-2 font-semibold">Product</th>
-                        <th className="pb-2 font-semibold w-24">Qty</th>
+                        <th className="pb-2 font-semibold w-24">Qty {!canSalesMapQuantity && <span className="text-[10px] text-amber-500 font-normal">(locked)</span>}</th>
                         <th className="pb-2 font-semibold w-20">Free</th>
-                        <th className="pb-2 font-semibold w-28">Price (₹)</th>
-                        <th className="pb-2 font-semibold w-20">Disc %</th>
-                        <th className="pb-2 font-semibold w-20">GST %</th>
-                        <th className="pb-2 font-semibold w-28 text-right">Total (₹)</th>
+                        <th className="pb-2 font-semibold w-24">Rate Type</th>
+                        {showPriceColumn && (
+                          <th className="pb-2 font-semibold w-28">Price (₹) {!canEditPrice && <span className="text-[10px] text-amber-500 font-normal">(read-only)</span>}</th>
+                        )}
+                        {showFinancialTotals && (
+                          <>
+                            <th className="pb-2 font-semibold w-20">Disc %</th>
+                            <th className="pb-2 font-semibold w-20">GST %</th>
+                            <th className="pb-2 font-semibold w-28 text-right">Total (₹)</th>
+                          </>
+                        )}
                         <th className="pb-2 font-semibold w-10 text-center"></th>
                       </tr>
                     </thead>
@@ -1245,12 +1371,16 @@ export default function CreateOrderPage() {
                                 type="number"
                                 min={1}
                                 value={line.quantity}
+                                disabled={!canSalesMapQuantity}
                                 onChange={(e) =>
                                   updateLine(line.key, {
                                     quantity: Math.max(1, Number(e.target.value) || 1),
                                   })
                                 }
-                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right"
+                                title={!canSalesMapQuantity ? "Quantity mapping is locked to default for Sales by Super Admin" : undefined}
+                                className={`w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right ${
+                                  !canSalesMapQuantity ? "bg-slate-100 cursor-not-allowed text-slate-500 dark:bg-slate-800 dark:text-slate-400" : ""
+                                }`}
                               />
                             </td>
 
@@ -1268,55 +1398,86 @@ export default function CreateOrderPage() {
                               />
                             </td>
 
-                            <td className="py-2.5 pr-2 align-top">
-                              <input
-                                type="number"
-                                step="any"
-                                min={0}
-                                value={line.unit_price}
-                                onChange={(e) =>
-                                  updateLine(line.key, {
-                                    unit_price: Math.max(0, Number(e.target.value) || 0),
-                                  })
-                                }
-                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right font-mono"
-                              />
+                            <td className="py-2.5 pr-2 align-top w-24">
+                              <select
+                                value={line.applied_rate_type || "SR"}
+                                onChange={(e) => onRateTypeChange(line.key, e.target.value)}
+                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 font-medium cursor-pointer"
+                              >
+                                {line.applied_rate_type === "MANUAL" && (
+                                  <option value="MANUAL">Manual</option>
+                                )}
+                                <option value="SR">SR</option>
+                                <option value="SRA">SRA</option>
+                                <option value="CR">CR</option>
+                              </select>
                             </td>
 
-                            <td className="py-2.5 pr-2 align-top">
-                              <input
-                                type="number"
-                                step="any"
-                                min={0}
-                                max={100}
-                                value={line.discount_percent}
-                                onChange={(e) =>
-                                  updateLine(line.key, {
-                                    discount_percent: Math.max(0, Number(e.target.value) || 0),
-                                  })
-                                }
-                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right"
-                              />
-                            </td>
+                            {showPriceColumn && (
+                              <td className="py-2.5 pr-2 align-top">
+                                {canEditPrice ? (
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min={0}
+                                    value={line.unit_price}
+                                    onChange={(e) =>
+                                      updateLine(line.key, {
+                                        unit_price: Math.max(0, Number(e.target.value) || 0),
+                                        applied_rate_type: "MANUAL",
+                                      })
+                                    }
+                                    className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right font-mono"
+                                  />
+                                ) : (
+                                  <div className="py-1 px-2 text-xs font-mono text-slate-700 dark:text-slate-300 text-right">
+                                    ₹{formatMoney(line.unit_price)}
+                                  </div>
+                                )}
+                              </td>
+                            )}
 
-                            <td className="py-2.5 pr-2 align-top">
-                              <input
-                                type="number"
-                                step="any"
-                                min={0}
-                                value={line.gst_percent}
-                                onChange={(e) =>
-                                  updateLine(line.key, {
-                                    gst_percent: Math.max(0, Number(e.target.value) || 0),
-                                  })
-                                }
-                                className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right"
-                              />
-                            </td>
+                            {showFinancialTotals && (
+                              <>
+                                <td className="py-2.5 pr-2 align-top">
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min={0}
+                                    max={100}
+                                    value={line.discount_percent}
+                                    disabled={!canEditPrice}
+                                    onChange={(e) =>
+                                      updateLine(line.key, {
+                                        discount_percent: Math.max(0, Number(e.target.value) || 0),
+                                      })
+                                    }
+                                    className={`w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right ${
+                                      !canEditPrice ? "bg-slate-100 cursor-not-allowed text-slate-500 dark:bg-slate-800" : ""
+                                    }`}
+                                  />
+                                </td>
 
-                            <td className="py-2.5 pr-2 align-top text-right font-mono font-medium text-slate-900 dark:text-slate-100">
-                              ₹{formatMoney(lineTotal(line))}
-                            </td>
+                                <td className="py-2.5 pr-2 align-top">
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min={0}
+                                    value={line.gst_percent}
+                                    onChange={(e) =>
+                                      updateLine(line.key, {
+                                        gst_percent: Math.max(0, Number(e.target.value) || 0),
+                                      })
+                                    }
+                                    className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-950 dark:text-slate-50 text-right"
+                                  />
+                                </td>
+
+                                <td className="py-2.5 pr-2 align-top text-right font-mono font-medium text-slate-900 dark:text-slate-100">
+                                  ₹{formatMoney(lineTotal(line))}
+                                </td>
+                              </>
+                            )}
 
                             <td className="py-2.5 text-center align-top">
                               <button
@@ -1408,56 +1569,74 @@ export default function CreateOrderPage() {
                       {liveSummary.itemCount}
                     </span>
                   </div>
-                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                    <span>Subtotal</span>
-                    <span className="font-mono text-slate-900 dark:text-slate-200">
-                      ₹{formatMoney(liveSummary.subtotal)}
-                    </span>
-                  </div>
-                  {liveSummary.discount > 0 && (
-                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
-                      <span>Discount</span>
-                      <span className="font-mono">-₹{formatMoney(liveSummary.discount)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                    <span>Taxable Amount</span>
-                    <span className="font-mono text-slate-900 dark:text-slate-200">
-                      ₹{formatMoney(liveSummary.taxable)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                    <span>GST (Estimated)</span>
-                    <span className="font-mono text-slate-900 dark:text-slate-200">
-                      ₹{formatMoney(liveSummary.gst)}
-                    </span>
-                  </div>
+                  {showFinancialTotals && (
+                    <>
+                      <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                        <span>Subtotal</span>
+                        <span className="font-mono text-slate-900 dark:text-slate-200">
+                          ₹{formatMoney(liveSummary.subtotal)}
+                        </span>
+                      </div>
+                      {liveSummary.discount > 0 && (
+                        <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                          <span>Discount</span>
+                          <span className="font-mono">-₹{formatMoney(liveSummary.discount)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                        <span>Taxable Amount</span>
+                        <span className="font-mono text-slate-900 dark:text-slate-200">
+                          ₹{formatMoney(liveSummary.taxable)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                        <span>GST (Estimated)</span>
+                        <span className="font-mono text-slate-900 dark:text-slate-200">
+                          ₹{formatMoney(liveSummary.gst)}
+                        </span>
+                      </div>
 
-                  <div className="border-t border-blue-200/60 pt-2.5 mt-2 flex justify-between text-sm font-bold text-slate-900 dark:text-slate-50">
-                    <span>Estimated Total</span>
-                    <span className="font-mono text-blue-600 dark:text-blue-400">
-                      ₹{formatMoney(liveSummary.total)}
-                    </span>
-                  </div>
+                      <div className="border-t border-blue-200/60 pt-2.5 mt-2 flex justify-between text-sm font-bold text-slate-900 dark:text-slate-50">
+                        <span>Estimated Total</span>
+                        <span className="font-mono text-blue-600 dark:text-blue-400">
+                          ₹{formatMoney(liveSummary.total)}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="mt-5 space-y-2">
-                  <Button
-                    type="button"
-                    variant="primary"
-                    onClick={handleNextToStep2}
-                    className="w-full font-semibold shadow-md shadow-primary/25 gap-2 cursor-pointer"
-                  >
-                    <span>Next: Performa Invoice</span>
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition cursor-pointer"
-                  >
-                    {isLoading ? "Saving draft..." : "Or save draft now without Performa"}
-                  </button>
+                  {isPerformaEnabled ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        onClick={handleNextToStep2}
+                        className="w-full font-semibold shadow-md shadow-primary/25 gap-2 cursor-pointer"
+                      >
+                        <span>Next: Performa Invoice</span>
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                      <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="w-full py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition cursor-pointer"
+                      >
+                        {isLoading ? "Saving draft..." : "Or save draft now without Performa"}
+                      </button>
+                    </>
+                  ) : (
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      disabled={isLoading}
+                      className="w-full font-semibold shadow-md shadow-primary/25 gap-2 cursor-pointer"
+                    >
+                      <span>{isLoading ? "Saving draft..." : "Create Order Draft"}</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </section>
             </div>

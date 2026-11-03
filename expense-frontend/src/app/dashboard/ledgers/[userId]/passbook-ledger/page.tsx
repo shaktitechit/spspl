@@ -23,6 +23,7 @@ import {
   DollarSign,
   Download,
   Filter,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -41,7 +42,15 @@ import { AdvanceDisburseModal } from "@/components/expensePortal/finance/disburs
 import { AdvanceRefundModal } from "@/components/expensePortal/finance/disbursements/AdvanceRefundModal";
 import { SettleExpenseModal } from "@/components/expensePortal/finance/settlements/SettleExpenseModal";
 import { SettlementVoucherModal } from "@/components/expensePortal/finance/settlements/SettlementVoucherModal";
-import { FilePreviewModal } from "@/components/expensePortal/shared/FilePreviewModal";
+import { FilePreviewModal, useFilePreview } from "@/components/expensePortal/shared/FilePreviewModal";
+import { usePdfCompanyLetterhead } from "@/components/expensePortal/shared/pdfCompanyLetterhead";
+import {
+  downloadPdfReport,
+  formatAmountForPdf,
+  formatCurrencyForPdf,
+  type PdfReportColumn,
+  type PdfReportRow,
+} from "@/components/expensePortal/finance/reports/exportPdfReport";
 
 export default function UserPassbookLedgerPage({
   params,
@@ -67,7 +76,14 @@ export default function UserPassbookLedgerPage({
   const [voucherModalId, setVoucherModalId] = useState<string | null>(null);
 
   // File Preview
-  const [previewDoc, setPreviewDoc] = useState<{ name: string; url: string; mime?: string } | null>(null);
+  const {
+    previewDoc,
+    previewBlobUrl,
+    previewLoading,
+    openPreview,
+    closePreview,
+    downloadFile,
+  } = useFilePreview(sessionToken);
 
   // Mutations
   const [approveExpense, { isLoading: isApproving }] = useApproveExpenseMutation();
@@ -128,6 +144,191 @@ export default function UserPassbookLedgerPage({
       refetch();
     } catch (err: any) {
       toast.error(err?.data?.message || err?.message || "Failed to reject claim");
+    }
+  }
+
+  const letterhead = usePdfCompanyLetterhead();
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  async function handleDownloadPdf() {
+    if (downloadingPdf) return;
+    try {
+      setDownloadingPdf(true);
+
+      const activeFilterPanel: Array<{ label: string; value: string }> = [
+        {
+          label: "Employee",
+          value: user?.name || "Employee",
+        },
+        {
+          label: "Department",
+          value: user?.department || "Field Staff",
+        },
+        {
+          label: "Role",
+          value: user?.wp_role || "Executive",
+        },
+      ];
+
+      const activeMetadata: Array<{ label: string; value: string }> = [
+        {
+          label: "Advance in Hand",
+          value: formatCurrencyForPdf(summary?.active_advance_balance || 0),
+        },
+        {
+          label: "Unsettled Claims",
+          value: formatCurrencyForPdf(summary?.unsettled_approved_amount || 0),
+        },
+        {
+          label: "Net Balance Position",
+          value: `${formatCurrencyForPdf(Math.abs(summary?.net_balance || 0))} (${summary?.position || "Balanced"})`,
+        },
+        {
+          label: "Total Reimbursed / Settled",
+          value: formatCurrencyForPdf(summary?.total_reimbursed_amount || 0),
+        },
+      ];
+
+      const columns: PdfReportColumn[] = [
+        { key: "rowNum", label: "#", width: 0.35, align: "center" },
+        { key: "date", label: "Date", width: 0.85, align: "center" },
+        { key: "ref", label: "Reference", width: 1.1, align: "left" },
+        { key: "type", label: "Type / Category", width: 1.4, align: "left" },
+        { key: "particulars", label: "Particulars & Description", width: 2.3, align: "left" },
+        { key: "paymentInfo", label: "Payment Mode / UTR", width: 1.1, align: "left" },
+        { key: "status", label: "Status", width: 0.8, align: "center" },
+        { key: "amount", label: "Amount (INR)", width: 1.0, align: "right" },
+        { key: "advBal", label: "Adv Bal (INR)", width: 1.0, align: "right" },
+        { key: "claimsRec", label: "Claims Rec (INR)", width: 1.0, align: "right" },
+        { key: "runningNet", label: "Running Net (INR)", width: 1.35, align: "right" },
+      ];
+
+      const rows: PdfReportRow[] = entries.map((e: any, idx: number) => {
+        let typeLabel = "Transaction";
+        let statusLabel = "POSTED";
+
+        if (e.entry_type === "advance_disbursement" || e.type === "ADVANCE_DISBURSED") {
+          typeLabel = "Advance Disbursed";
+          statusLabel = "DISBURSED";
+        } else if (e.entry_type === "advance_refund" || e.type === "ADVANCE_REFUND") {
+          typeLabel = "Advance Refund";
+          statusLabel = "REFUNDED";
+        } else if (e.entry_type === "expense_draft" || e.type === "EXPENSE_DRAFT") {
+          typeLabel = `Draft Claim (${e.category || "General"})`;
+          statusLabel = "DRAFT";
+        } else if (e.entry_type === "expense_submitted" || e.type === "EXPENSE_SUBMITTED") {
+          typeLabel = `Submitted Claim (${e.category || "General"})`;
+          statusLabel = "PENDING";
+        } else if (e.entry_type === "expense_approved" || e.type === "EXPENSE_APPROVED") {
+          typeLabel = `Approved Claim (${e.category || "General"})`;
+          statusLabel = "APPROVED";
+        } else if (e.entry_type === "expense_rejected" || e.type === "EXPENSE_REJECTED") {
+          typeLabel = `Rejected Claim (${e.category || "General"})`;
+          statusLabel = "REJECTED";
+        } else if (e.entry_type === "payment_entry" || e.type === "PAYMENT_ENTRY") {
+          typeLabel = "Treasury Payment";
+          statusLabel = "PAID";
+        } else if (e.entry_type === "settlement_voucher" || (typeof e.type === "string" && e.type.startsWith("SETTLEMENT"))) {
+          typeLabel = "Settlement Voucher";
+          statusLabel = "SETTLED";
+        }
+
+        const particulars = [
+          e.title || e.description,
+          e.details && e.details !== e.title ? e.details : "",
+          e.vendor_name || e.vendor ? `Vendor: ${e.vendor_name || e.vendor}` : "",
+        ]
+          .filter(Boolean)
+          .join(" • ");
+
+        const paymentInfo = [
+          e.payment_method ? String(e.payment_method).toUpperCase() : "",
+          e.transaction_reference ? `UTR: ${e.transaction_reference}` : "",
+        ]
+          .filter(Boolean)
+          .join(" / ");
+
+        const netPos = Number(e.running_net_position || 0);
+        let netPosStr = "0.00";
+        if (netPos < 0) {
+          netPosStr = `${formatAmountForPdf(Math.abs(netPos))} (Due Co)`;
+        } else if (netPos > 0) {
+          netPosStr = `${formatAmountForPdf(netPos)} (Due Empl)`;
+        }
+
+        const rawAmt = e.amount ?? (e.debit > 0 ? e.debit : e.credit) ?? 0;
+
+        return {
+          rowNum: idx + 1,
+          date: formatPlanDate(e.date),
+          ref: e.reference || e.reference_number || "—",
+          type: typeLabel,
+          particulars: particulars || "—",
+          paymentInfo: paymentInfo || "—",
+          status: statusLabel,
+          amount: formatAmountForPdf(rawAmt),
+          advBal: formatAmountForPdf(e.running_advance_balance || 0),
+          claimsRec: formatAmountForPdf(e.running_claim_receivable || 0),
+          runningNet: netPosStr,
+        };
+      });
+
+      // Closing totals row
+      const totalAmount = entries.reduce((s: number, e: any) => s + (Number(e.amount ?? (e.debit > 0 ? e.debit : e.credit)) || 0), 0);
+      const latestAdvBal = entries.length > 0 ? (entries[0].running_advance_balance || 0) : 0;
+      const latestClaimsRec = entries.length > 0 ? (entries[0].running_claim_receivable || 0) : 0;
+      const latestNetPos = entries.length > 0 ? (entries[0].running_net_position || 0) : 0;
+      let finalNetStr = "0.00";
+      if (latestNetPos < 0) {
+        finalNetStr = `${formatAmountForPdf(Math.abs(latestNetPos))} (Due Co)`;
+      } else if (latestNetPos > 0) {
+        finalNetStr = `${formatAmountForPdf(latestNetPos)} (Due Empl)`;
+      }
+
+      rows.push({
+        _rowType: "SUBTOTAL",
+        rowNum: "",
+        date: "",
+        ref: "",
+        type: "CLOSING TOTALS",
+        particulars: `Total entries: ${entries.length}`,
+        paymentInfo: "",
+        status: "",
+        amount: formatAmountForPdf(totalAmount),
+        advBal: formatAmountForPdf(latestAdvBal),
+        claimsRec: formatAmountForPdf(latestClaimsRec),
+        runningNet: finalNetStr,
+      });
+
+      const safeName = (user?.name || "employee").toLowerCase().replace(/[^a-z0-9]+/g, "_");
+      const dateStr = new Date().toISOString().slice(0, 10);
+
+      await downloadPdfReport({
+        letterhead,
+        filename: `passbook_statement_${safeName}_${dateStr}.pdf`,
+        title: "Executive Financial Passbook & Statement of Account",
+        subtitle: `Statement of Account & Claims Ledger for ${user?.name || "Employee"} (${user?.department || "Field Staff"})`,
+        downloadedBy: session?.user?.name ? `${session.user.name} (${session.user.email || "Admin"})` : "Finance Governance",
+        timestamp: new Date().toLocaleString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        }),
+        filterPanel: activeFilterPanel,
+        metadata: activeMetadata,
+        columns,
+        rows,
+      });
+
+      toast.success("Passbook statement downloaded on company letterhead");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to generate PDF";
+      toast.error(msg);
+    } finally {
+      setDownloadingPdf(false);
     }
   }
 
@@ -278,6 +479,21 @@ export default function UserPassbookLedgerPage({
                 )}
               </>
             )}
+
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={downloadingPdf || isLoading}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2 text-xs font-bold text-foreground hover:bg-surface-muted active:scale-95 transition shadow-xs cursor-pointer disabled:opacity-50"
+              title="Download Passbook Statement PDF (with Company Letterhead)"
+            >
+              {downloadingPdf ? (
+                <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+              ) : (
+                <Download className="h-4 w-4 text-primary" />
+              )}
+              <span>Statement PDF</span>
+            </button>
           </div>
         </div>
 
@@ -627,13 +843,12 @@ export default function UserPassbookLedgerPage({
                             <button
                               type="button"
                               onClick={() => {
-                                const url = typeof claim.receipt_attachment === "string"
-                                  ? claim.receipt_attachment
-                                  : claim.receipt_attachment.url;
-                                const mime = typeof claim.receipt_attachment === "string" ? undefined : claim.receipt_attachment.mime_type;
-                                setPreviewDoc({
-                                  name: `Receipt-${claim.category}`,
-                                  url: withFileAccessToken(resolvePublicAssetUrl(url), sessionToken),
+                                const rawAtt = claim.receipt_attachment;
+                                const url = typeof rawAtt === "string" ? rawAtt : rawAtt?.url || rawAtt?._id || rawAtt?.attachment_id;
+                                const mime = typeof rawAtt === "string" ? undefined : rawAtt?.mime_type;
+                                openPreview({
+                                  name: `Receipt-${claim.category || "Expense"}`,
+                                  url: resolvePublicAssetUrl(url, sessionToken),
                                   mime,
                                 });
                               }}
@@ -766,12 +981,13 @@ export default function UserPassbookLedgerPage({
                             <button
                               type="button"
                               onClick={() => {
-                                const url = typeof claim.receipt_attachment === "string"
-                                  ? claim.receipt_attachment
-                                  : claim.receipt_attachment.url;
-                                setPreviewDoc({
-                                  name: `Receipt-${claim.category}`,
-                                  url: withFileAccessToken(resolvePublicAssetUrl(url), sessionToken),
+                                const rawAtt = claim.receipt_attachment;
+                                const url = typeof rawAtt === "string" ? rawAtt : rawAtt?.url || rawAtt?._id || rawAtt?.attachment_id;
+                                const mime = typeof rawAtt === "string" ? undefined : rawAtt?.mime_type;
+                                openPreview({
+                                  name: `Receipt-${claim.category || "Expense"}`,
+                                  url: resolvePublicAssetUrl(url, sessionToken),
+                                  mime,
                                 });
                               }}
                               className="inline-flex items-center gap-1 rounded bg-surface-muted border border-border px-2 py-1 text-[11px] text-foreground hover:border-primary/40 transition cursor-pointer"
@@ -1165,10 +1381,10 @@ export default function UserPassbookLedgerPage({
       {previewDoc && (
         <FilePreviewModal
           doc={previewDoc}
-          blobUrl={previewDoc.url}
-          loading={false}
-          onClose={() => setPreviewDoc(null)}
-          onDownload={() => window.open(previewDoc.url, "_blank")}
+          blobUrl={previewBlobUrl}
+          loading={previewLoading}
+          onClose={closePreview}
+          onDownload={downloadFile}
         />
       )}
     </div>

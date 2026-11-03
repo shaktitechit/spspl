@@ -86,6 +86,7 @@ export const baseApi = createApi({
     "TermsAndConditions",
     "Notifications",
     "LeadTeam",
+    "PortalSettings",
   ],
   endpoints: () => ({}),
 });

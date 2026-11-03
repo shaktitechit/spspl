@@ -12,6 +12,7 @@ import {
   type PreviewFile,
 } from "@/components/portal/shared/ui/modals/FilePreviewModal";
 import { billDocumentMeta, formatDateOnly } from "@/components/portal/shared/orders/detail/orderDetailUtils";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 
 type DispatchesTabProps = {
   orderId: string;
@@ -44,6 +45,7 @@ function formatAgentType(t: unknown): string {
 }
 
 export function DispatchesTab({ orderId, detail }: DispatchesTabProps) {
+  const { canSalesMapQuantity } = usePortalSettings();
   const token = useAppSelector((state) => state.auth.token);
   const {
     previewDoc,
@@ -230,8 +232,12 @@ export function DispatchesTab({ orderId, detail }: DispatchesTabProps) {
                           <thead className="bg-slate-50 dark:bg-slate-950 text-slate-500 font-medium">
                             <tr>
                               <th className="px-3 py-2">Product</th>
-                              <th className="px-3 py-2 text-center w-24">Ordered</th>
-                              <th className="px-3 py-2 text-right w-24">This Batch</th>
+                              {canSalesMapQuantity && (
+                                <>
+                                  <th className="px-3 py-2 text-center w-24">Ordered</th>
+                                  <th className="px-3 py-2 text-right w-24">This Batch</th>
+                                </>
+                              )}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 dark:divide-white/5">
@@ -249,12 +255,16 @@ export function DispatchesTab({ orderId, detail }: DispatchesTabProps) {
                                   <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-200">
                                     {productName}
                                   </td>
-                                  <td className="px-3 py-2 text-center text-slate-600 dark:text-slate-400">
-                                    {orderedQty}
-                                  </td>
-                                  <td className="px-3 py-2 text-right font-semibold text-blue-600 dark:text-blue-400">
-                                    {item.dispatched_quantity ?? item.dispatch_quantity ?? "—"}
-                                  </td>
+                                  {canSalesMapQuantity && (
+                                    <>
+                                      <td className="px-3 py-2 text-center text-slate-600 dark:text-slate-400">
+                                        {orderedQty}
+                                      </td>
+                                      <td className="px-3 py-2 text-right font-semibold text-blue-600 dark:text-blue-400">
+                                        {item.dispatched_quantity ?? item.dispatch_quantity ?? "—"}
+                                      </td>
+                                    </>
+                                  )}
                                 </tr>
                               );
                             })}

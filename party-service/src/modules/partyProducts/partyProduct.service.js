@@ -8,6 +8,7 @@ const { ApiError } = require('../../utils/ApiError');
 const { softDeleteActiveById, restoreSoftDeletedById, listDeletedLean } = require('../../utils/mongoSoftDelete');
 const activityService = require('../activity/activity.service');
 const { RATE_STATUSES } = require('./partyProduct.validation');
+const { getRoleAccessSettings, isSalesUser } = require('../../utils/portalSettingsHelper');
 
 const mappingNf = 'Party product mapping not found';
 const rateNf = 'Party product rate not found';
@@ -191,6 +192,16 @@ async function createRatesForMapping(mappingId, partyId, productId, rates, user)
 async function create(body, user) {
   const { Party, Product, PartyProductMapping } = getModels();
 
+  if (isSalesUser(user)) {
+    const roleSettings = await getRoleAccessSettings();
+    if (!roleSettings?.sales_mapping?.can_see_and_map_price && Array.isArray(body.rates) && body.rates.length > 0) {
+      throw new ApiError(403, 'Sales role is not authorized to map product prices.');
+    }
+    if (!roleSettings?.sales_mapping?.can_see_and_map_quantity) {
+      delete body.expected_order_quantity;
+    }
+  }
+
   // Validate existence of party and product
   const partyExists = await Party.exists({ _id: body.party, deletedAt: null });
   if (!partyExists) throw new ApiError(400, 'Party not found or inactive');
@@ -312,6 +323,13 @@ async function create(body, user) {
 async function update(id, patch, user) {
   const { PartyProductMapping, PartyProductRate } = getModels();
 
+  if (isSalesUser(user)) {
+    const roleSettings = await getRoleAccessSettings();
+    if (!roleSettings?.sales_mapping?.can_see_and_map_quantity && 'expected_order_quantity' in patch) {
+      delete patch.expected_order_quantity;
+    }
+  }
+
   const doc = await PartyProductMapping.findOne({ _id: id, deletedAt: null });
   if (!doc) throw new ApiError(404, mappingNf);
 
@@ -413,6 +431,17 @@ async function restore(id, user) {
 async function addRate(mappingId, rateData, user) {
   const { PartyProductMapping, PartyProductRate } = getModels();
 
+  if (isSalesUser(user)) {
+    const roleSettings = await getRoleAccessSettings();
+    if (!roleSettings?.sales_mapping?.can_see_and_map_price) {
+      throw new ApiError(403, 'Sales role is not authorized to map product prices.');
+    }
+    if (!roleSettings?.sales_mapping?.can_see_and_map_quantity) {
+      rateData.min_qty = 1;
+      rateData.max_qty = 999999;
+    }
+  }
+
   const mappingDoc = await PartyProductMapping.findOne({ _id: mappingId, deletedAt: null })
     .populate('party')
     .populate('product')
@@ -462,6 +491,17 @@ async function addRate(mappingId, rateData, user) {
 
 async function updateRate(rateId, patch, user) {
   const { PartyProductRate } = getModels();
+
+  if (isSalesUser(user)) {
+    const roleSettings = await getRoleAccessSettings();
+    if (!roleSettings?.sales_mapping?.can_see_and_map_price && 'rate' in patch) {
+      throw new ApiError(403, 'Sales role is not authorized to modify rate prices.');
+    }
+    if (!roleSettings?.sales_mapping?.can_see_and_map_quantity) {
+      delete patch.min_qty;
+      delete patch.max_qty;
+    }
+  }
 
   const doc = await PartyProductRate.findOne({ _id: rateId, deletedAt: null });
   if (!doc) throw new ApiError(404, rateNf);

@@ -71,6 +71,7 @@ export { default as SuperAdminOrdersPage } from "./super_admin/SuperAdminOrdersP
 export { default as ListSuperAdminOrdersPage } from "./super_admin/order/ListSuperAdminOrdersPage";
 export { default as SuperAdminOrderDetail } from "./super_admin/order/SuperAdminOrderDetail";
 export { default as SuperAdminCreateOrderPage } from "./super_admin/SuperAdminCreateOrderPage";
+export { default as SuperAdminSettingsPage } from "./super_admin/settings/SuperAdminSettingsPage";
 
 export { default as ProfilePage } from "./shared/profile/ProfilePage";
 export { default as UnbilledOrdersPage } from "./shared/orders/list/UnbilledOrdersPage";

@@ -151,6 +151,10 @@ interface OrderTabProps {
   canSendToFinance?: boolean;
   onSendToFinance?: () => void;
   sendToFinanceBusy?: boolean;
+  /** Whether to show financial breakdown totals (volume). Defaults to true. */
+  showPricing?: boolean;
+  /** Whether price mapping is allowed for this role. Defaults to true. */
+  allowMapPrice?: boolean;
 }
 
 export function OrderTab({
@@ -169,6 +173,8 @@ export function OrderTab({
   canSendToFinance = false,
   onSendToFinance,
   sendToFinanceBusy = false,
+  showPricing = true,
+  allowMapPrice = true,
 }: OrderTabProps) {
   const orderId = String(detail?._id ?? detail?.id ?? "");
   const partyId = idFromRef(detail?.party);
@@ -193,7 +199,9 @@ export function OrderTab({
   const letterhead = usePdfCompanyLetterhead();
 
   const canMapPrice =
-    (status === "submitted" || status === "on_hold") && Boolean(partyId);
+    allowMapPrice &&
+    (status === "submitted" || status === "on_hold") &&
+    Boolean(partyId);
   const canApprove = canOpenAdminApprovalModal(
     status,
     readOnlyItems as Record<string, unknown>[],
@@ -896,51 +904,53 @@ export function OrderTab({
             ) : null}
           </div>
 
-          <div className="border-t border-slate-200/90 pt-5 dark:border-white/10">
-            <div className="mb-3">
-              <h3 className="font-sans text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Financial Breakdown
-              </h3>
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                Aggregated totals and payment state.
-              </p>
-            </div>
+          {showPricing && (
+            <div className="border-t border-slate-200/90 pt-5 dark:border-white/10">
+              <div className="mb-3">
+                <h3 className="font-sans text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Financial Breakdown
+                </h3>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                  Aggregated totals and payment state.
+                </p>
+              </div>
 
-            <div className="grid gap-3 text-sm font-normal font-sans sm:grid-cols-4">
-              <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
-                <span className="block text-xs text-slate-500 dark:text-slate-400">
-                  Grand Total
-                </span>
-                <span className="mt-1 block font-mono text-base font-semibold text-slate-900 dark:text-slate-50">
-                  {formatMoney(financialBreakdown.grandTotal)}
-                </span>
-              </div>
-              <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
-                <span className="block text-xs text-slate-500 dark:text-slate-400">
-                  Subtotal
-                </span>
-                <span className="mt-1 block font-mono text-base font-semibold text-slate-900 dark:text-slate-50">
-                  {formatMoney(financialBreakdown.subtotal)}
-                </span>
-              </div>
-              <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
-                <span className="block text-xs text-slate-500 dark:text-slate-400">
-                  GST
-                </span>
-                <span className="mt-1 block font-mono text-base font-semibold text-slate-900 dark:text-slate-50">
-                  {formatMoney(financialBreakdown.gst)}
-                </span>
-              </div>
-              <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
-                <span className="block text-xs text-slate-500 dark:text-slate-400">
-                  Header Discount
-                </span>
-                <span className="mt-1 block font-mono text-base font-semibold text-rose-700 dark:text-rose-300">
-                  -{formatMoney(financialBreakdown.discount)}
-                </span>
+              <div className="grid gap-3 text-sm font-normal font-sans sm:grid-cols-4">
+                <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
+                  <span className="block text-xs text-slate-500 dark:text-slate-400">
+                    Grand Total
+                  </span>
+                  <span className="mt-1 block font-mono text-base font-semibold text-slate-900 dark:text-slate-50">
+                    {formatMoney(financialBreakdown.grandTotal)}
+                  </span>
+                </div>
+                <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
+                  <span className="block text-xs text-slate-500 dark:text-slate-400">
+                    Subtotal
+                  </span>
+                  <span className="mt-1 block font-mono text-base font-semibold text-slate-900 dark:text-slate-50">
+                    {formatMoney(financialBreakdown.subtotal)}
+                  </span>
+                </div>
+                <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
+                  <span className="block text-xs text-slate-500 dark:text-slate-400">
+                    GST
+                  </span>
+                  <span className="mt-1 block font-mono text-base font-semibold text-slate-900 dark:text-slate-50">
+                    {formatMoney(financialBreakdown.gst)}
+                  </span>
+                </div>
+                <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
+                  <span className="block text-xs text-slate-500 dark:text-slate-400">
+                    Header Discount
+                  </span>
+                  <span className="mt-1 block font-mono text-base font-semibold text-rose-700 dark:text-rose-300">
+                    -{formatMoney(financialBreakdown.discount)}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </DashboardCard>
 

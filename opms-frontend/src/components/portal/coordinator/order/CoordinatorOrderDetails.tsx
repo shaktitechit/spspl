@@ -67,6 +67,7 @@ import SubmitOrderPreviewModal from "./components/SubmitOrderPreviewModal";
 import { mobileTabIcon } from "@/components/portal/shared/orders/detail/orderDetailMobileIcons";
 import { formatDateShort, detailRefId } from "@/components/portal/shared/orders/detail/orderDetailUtils";
 import type { WorkflowEmailOptions } from "@/components/portal/shared/orders/modals/WorkflowEmailControls";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 
 const btnSecondaryClass =
   "rounded-lg border border-slate-200/95 px-3 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-50 dark:border-white/15 dark:text-slate-100 dark:hover:bg-white/5";
@@ -116,8 +117,26 @@ export default function CoordinatorOrderDetails({ orderId }: { orderId: string }
   const { data, isLoading, isFetching, isError, refetch } = useGetOrderQuery(orderId);
   const user = useAppSelector((s) => s.auth.user);
 
+  const {
+    isPerformaEnabled,
+    isCostSheetEnabled,
+    isKycEnabled,
+    isPOEnabled,
+  } = usePortalSettings();
+
   const [activeTab, setActiveTab] = useState<SalesTabId>("approvals");
   const [mobileTabOpen, setMobileTabOpen] = useState(false);
+
+  useEffect(() => {
+    const disabledTabs: SalesTabId[] = [];
+    if (!isPOEnabled) disabledTabs.push("po");
+    if (!isPerformaEnabled) disabledTabs.push("performa");
+    if (!isCostSheetEnabled) disabledTabs.push("cost_sheet");
+    if (!isKycEnabled) disabledTabs.push("kyc");
+    if (disabledTabs.includes(activeTab)) {
+      setActiveTab("approvals");
+    }
+  }, [isPOEnabled, isPerformaEnabled, isCostSheetEnabled, isKycEnabled, activeTab]);
 
   const [isSubmitPreviewOpen, setIsSubmitPreviewOpen] = useState(false);
   const [isFulfillmentModalOpen, setIsFulfillmentModalOpen] = useState(false);
@@ -205,7 +224,9 @@ export default function CoordinatorOrderDetails({ orderId }: { orderId: string }
     { order: orderId },
     { skip: !orderId },
   );
-  const performaQ = useGetOrderPerformaQuery(orderId, { skip: !orderId });
+  const performaQ = useGetOrderPerformaQuery(orderId, {
+    skip: !orderId || !isPerformaEnabled,
+  });
   const messagesQ = useListMessagesQuery(
     { order: orderId, limit: "1" },
     { skip: !orderId },
@@ -498,69 +519,79 @@ export default function CoordinatorOrderDetails({ orderId }: { orderId: string }
   }, [detail, resolveUser]);
 
   const desktopTabs = useMemo(
-    () => [
-      {
-        id: "approvals",
-        name: "Order Approval",
-        count: approvalsCount,
-        hasData: approvalsCount > 0,
-      },
-      {
-        id: "po",
-        name: "PO",
-        count: poCount,
-        hasData: poCount > 0,
-      },
-      {
-        id: "performa",
-        name: "Performa",
-        count: performaCount,
-        hasData: performaCount > 0,
-      },
-      {
-        id: "cost_sheet",
-        name: "Cost Sheet",
-        count: costSheetCount,
-        hasData: costSheetCount > 0,
-      },
-      {
-        id: "kyc",
-        name: "KYC",
-        count: kycCount,
-        hasData: kycCount > 0,
-      },
-      {
-        id: "dispatches",
-        name: "Dispatches",
-        count: dispatchesCount,
-        hasData: dispatchesCount > 0,
-      },
-      {
-        id: "transports",
-        name: "Transports",
-        count: transportsCount,
-        hasData: transportsCount > 0,
-      },
-      {
-        id: "flags",
-        name: "Flags",
-        count: openFlagsCount,
-        hasData: openFlagsCount > 0,
-        dangerBadge: true,
-      },
-      {
-        id: "attachments",
-        name: "Attachments",
-        count: attachmentsCount,
-        hasData: attachmentsCount > 0,
-      },
-      {
-        id: "communication",
-        name: "Communication",
-        count: messagesCount,
-        hasData: messagesCount > 0,
-      },
-    ],
+    () => {
+      const list = [
+        {
+          id: "approvals",
+          name: "Order Approval",
+          count: approvalsCount,
+          hasData: approvalsCount > 0,
+        },
+        {
+          id: "po",
+          name: "PO",
+          count: poCount,
+          hasData: poCount > 0,
+        },
+        {
+          id: "performa",
+          name: "Performa",
+          count: performaCount,
+          hasData: performaCount > 0,
+        },
+        {
+          id: "cost_sheet",
+          name: "Cost Sheet",
+          count: costSheetCount,
+          hasData: costSheetCount > 0,
+        },
+        {
+          id: "kyc",
+          name: "KYC",
+          count: kycCount,
+          hasData: kycCount > 0,
+        },
+        {
+          id: "dispatches",
+          name: "Dispatches",
+          count: dispatchesCount,
+          hasData: dispatchesCount > 0,
+        },
+        {
+          id: "transports",
+          name: "Transports",
+          count: transportsCount,
+          hasData: transportsCount > 0,
+        },
+        {
+          id: "flags",
+          name: "Flags",
+          count: openFlagsCount,
+          hasData: openFlagsCount > 0,
+          dangerBadge: true,
+        },
+        {
+          id: "attachments",
+          name: "Attachments",
+          count: attachmentsCount,
+          hasData: attachmentsCount > 0,
+        },
+        {
+          id: "communication",
+          name: "Communication",
+          count: messagesCount,
+          hasData: messagesCount > 0,
+        },
+      ];
+
+      return list.filter((t) => {
+        if (t.id === "po" && !isPOEnabled) return false;
+        if (t.id === "performa" && !isPerformaEnabled) return false;
+        if (t.id === "cost_sheet" && !isCostSheetEnabled) return false;
+        if (t.id === "kyc" && !isKycEnabled) return false;
+        return true;
+      });
+    },
     [
       approvalsCount,
       poCount,
@@ -572,22 +603,36 @@ export default function CoordinatorOrderDetails({ orderId }: { orderId: string }
       openFlagsCount,
       attachmentsCount,
       messagesCount,
+      isPOEnabled,
+      isPerformaEnabled,
+      isCostSheetEnabled,
+      isKycEnabled,
     ],
   );
 
   const mobileTabs = useMemo(
-    () => [
-      { id: "approvals" as const, name: "Approval", count: approvalsCount, hasData: approvalsCount > 0, dangerBadge: false },
-      { id: "po" as const, name: "PO", count: poCount, hasData: poCount > 0, dangerBadge: false },
-      { id: "performa" as const, name: "Performa", count: performaCount, hasData: performaCount > 0, dangerBadge: false },
-      { id: "cost_sheet" as const, name: "Cost Sheet", count: costSheetCount, hasData: costSheetCount > 0, dangerBadge: false },
-      { id: "kyc" as const, name: "KYC", count: kycCount, hasData: kycCount > 0, dangerBadge: false },
-      { id: "dispatches" as const, name: "Dispatch", count: dispatchesCount, hasData: dispatchesCount > 0, dangerBadge: false },
-      { id: "transports" as const, name: "Transport", count: transportsCount, hasData: transportsCount > 0, dangerBadge: false },
-      { id: "flags" as const, name: "Flags", count: openFlagsCount, hasData: openFlagsCount > 0, dangerBadge: true },
-      { id: "attachments" as const, name: "Files", count: attachmentsCount, hasData: attachmentsCount > 0, dangerBadge: false },
-      { id: "communication" as const, name: "Chat", count: messagesCount, hasData: messagesCount > 0, dangerBadge: false },
-    ],
+    () => {
+      const list = [
+        { id: "approvals" as const, name: "Approval", count: approvalsCount, hasData: approvalsCount > 0, dangerBadge: false },
+        { id: "po" as const, name: "PO", count: poCount, hasData: poCount > 0, dangerBadge: false },
+        { id: "performa" as const, name: "Performa", count: performaCount, hasData: performaCount > 0, dangerBadge: false },
+        { id: "cost_sheet" as const, name: "Cost Sheet", count: costSheetCount, hasData: costSheetCount > 0, dangerBadge: false },
+        { id: "kyc" as const, name: "KYC", count: kycCount, hasData: kycCount > 0, dangerBadge: false },
+        { id: "dispatches" as const, name: "Dispatch", count: dispatchesCount, hasData: dispatchesCount > 0, dangerBadge: false },
+        { id: "transports" as const, name: "Transport", count: transportsCount, hasData: transportsCount > 0, dangerBadge: false },
+        { id: "flags" as const, name: "Flags", count: openFlagsCount, hasData: openFlagsCount > 0, dangerBadge: true },
+        { id: "attachments" as const, name: "Files", count: attachmentsCount, hasData: attachmentsCount > 0, dangerBadge: false },
+        { id: "communication" as const, name: "Chat", count: messagesCount, hasData: messagesCount > 0, dangerBadge: false },
+      ];
+
+      return list.filter((t) => {
+        if (t.id === "po" && !isPOEnabled) return false;
+        if (t.id === "performa" && !isPerformaEnabled) return false;
+        if (t.id === "cost_sheet" && !isCostSheetEnabled) return false;
+        if (t.id === "kyc" && !isKycEnabled) return false;
+        return true;
+      });
+    },
     [
       approvalsCount,
       poCount,
@@ -599,6 +644,10 @@ export default function CoordinatorOrderDetails({ orderId }: { orderId: string }
       openFlagsCount,
       attachmentsCount,
       messagesCount,
+      isPOEnabled,
+      isPerformaEnabled,
+      isCostSheetEnabled,
+      isKycEnabled,
     ],
   );
 

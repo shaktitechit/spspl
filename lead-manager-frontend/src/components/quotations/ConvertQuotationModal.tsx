@@ -64,6 +64,7 @@ import {
   resolveLineUnitPrice,
   resolveRateDisplayStatus,
 } from "@/components/portal/shared/orders/lib/orderLineRateDisplay";
+import { usePortalSettings } from "@/hooks/usePortalSettings";
 
 function formatMoney(v: unknown): string {
   const n = Number(v);
@@ -648,7 +649,40 @@ export function ConvertQuotationModal({
     });
   }, [usersRaw]);
 
+  const {
+    isPerformaEnabled,
+    isCostSheetEnabled,
+    isKycEnabled,
+    isPOEnabled,
+    isBuyBackEnabled,
+    canSalesMapQuantity,
+    canSalesMapPrice,
+  } = usePortalSettings();
+
+  const isSales = useMemo(() => {
+    if (!currentUser || typeof currentUser !== "object") return false;
+    const u = currentUser as any;
+    const dept = String(u.department?.code || u.department?.name || u.department || "").toLowerCase();
+    if (dept === "sales") return true;
+    const roles = [
+      ...(Array.isArray(u.roles) ? u.roles : []),
+      ...(Array.isArray(u.role_codes) ? u.role_codes : []),
+      ...(Array.isArray(u.access_roles) ? u.access_roles : []),
+    ].map((r: any) => String(typeof r === "object" ? r.code || r.name : r).toLowerCase());
+    if (roles.includes("admin") || roles.includes("super_admin") || roles.includes("superadmin")) return false;
+    return roles.some((r) => r === "sales" || r === "sales_executive" || r === "executive" || r.includes("executive"));
+  }, [currentUser]);
+
+  const priceRestricted = isSales && !canSalesMapPrice;
+  const quantityRestricted = isSales && !canSalesMapQuantity;
+
   const [step, setStep] = useState<1 | 2>(1);
+
+  useEffect(() => {
+    if (!isPerformaEnabled && step === 2) {
+      setStep(1);
+    }
+  }, [isPerformaEnabled, step]);
   const [partyId, setPartyId] = useState("");
   const [prevItemsModalOpen, setPrevItemsModalOpen] = useState(false);
   const [quickAddPartyOpen, setQuickAddPartyOpen] = useState(false);
@@ -1099,6 +1133,10 @@ export function ConvertQuotationModal({
   };
 
   const openMapPriceModalForLine = (index: number) => {
+    if (priceRestricted) {
+      toast.error("Price mapping is restricted for Sales by Super Admin.");
+      return;
+    }
     if (!partyId) {
       toast.error("Please select a party first");
       return;
@@ -1447,7 +1485,7 @@ export function ConvertQuotationModal({
         let panAttId: string | undefined;
         let gstAttId: string | undefined;
 
-        if (performa.po_file) {
+        if (isPOEnabled && performa.po_file) {
           try {
             const fd = new FormData();
             fd.append("file", performa.po_file);
@@ -1462,7 +1500,7 @@ export function ConvertQuotationModal({
           }
         }
 
-        if (performa.cost_sheet_file) {
+        if (isCostSheetEnabled && performa.cost_sheet_file) {
           try {
             const fd = new FormData();
             fd.append("file", performa.cost_sheet_file);
@@ -1481,7 +1519,7 @@ export function ConvertQuotationModal({
           }
         }
 
-        if (performa.aadhaar_file) {
+        if (isKycEnabled && performa.aadhaar_file) {
           try {
             const fd = new FormData();
             fd.append("file", performa.aadhaar_file);
@@ -1510,7 +1548,7 @@ export function ConvertQuotationModal({
           }
         }
 
-        if (performa.pan_file) {
+        if (isKycEnabled && performa.pan_file) {
           try {
             const fd = new FormData();
             fd.append("file", performa.pan_file);
@@ -1539,7 +1577,7 @@ export function ConvertQuotationModal({
           }
         }
 
-        if (performa.gst_file) {
+        if (isKycEnabled && performa.gst_file) {
           try {
             const fd = new FormData();
             fd.append("file", performa.gst_file);
@@ -1568,7 +1606,7 @@ export function ConvertQuotationModal({
           }
         }
 
-        if (performa.kyc_files && performa.kyc_files.length > 0) {
+        if (isKycEnabled && performa.kyc_files && performa.kyc_files.length > 0) {
           for (const kf of performa.kyc_files) {
             try {
               const fd = new FormData();
@@ -1599,12 +1637,13 @@ export function ConvertQuotationModal({
         }
 
         if (
-          poAttId ||
-          costSheetAttId ||
-          aadhaarAttId ||
-          panAttId ||
-          gstAttId ||
-          (performa.kyc_files && performa.kyc_files.length > 0)
+          isPerformaEnabled &&
+          (poAttId ||
+            costSheetAttId ||
+            aadhaarAttId ||
+            panAttId ||
+            gstAttId ||
+            (performa.kyc_files && performa.kyc_files.length > 0))
         ) {
           const {
             po_file: _po,
@@ -1703,41 +1742,50 @@ export function ConvertQuotationModal({
                     : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                   }`}
               >
-                <span
-                  className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${step === 1
-                      ? "bg-white text-teal-700"
-                      : "bg-slate-300 text-slate-700"
-                    }`}
-                >
-                  1
-                </span>
+                {isPerformaEnabled && (
+                  <span
+                    className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${step === 1
+                        ? "bg-white text-teal-700"
+                        : "bg-slate-300 text-slate-700"
+                      }`}
+                  >
+                    1
+                  </span>
+                )}
                 Order Details & Items
               </button>
-              <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
-              <button
-                type="button"
-                onClick={handleGoToStep2}
-                className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${step === 2
-                    ? "bg-teal-600 text-white shadow-2xs"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-              >
-                <span
-                  className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${step === 2
-                      ? "bg-white text-teal-700"
-                      : "bg-slate-300 text-slate-700"
-                    }`}
-                >
-                  2
-                </span>
-                <FileText className="h-3.5 w-3.5" />
-                Performa Invoice
-              </button>
+
+              {isPerformaEnabled && (
+                <>
+                  <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                  <button
+                    type="button"
+                    onClick={handleGoToStep2}
+                    className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${step === 2
+                        ? "bg-teal-600 text-white shadow-2xs"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      }`}
+                  >
+                    <span
+                      className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${step === 2
+                          ? "bg-white text-teal-700"
+                          : "bg-slate-300 text-slate-700"
+                        }`}
+                    >
+                      2
+                    </span>
+                    <FileText className="h-3.5 w-3.5" />
+                    Performa Invoice
+                  </button>
+                </>
+              )}
             </div>
             <span className="text-[11px] font-medium text-slate-500">
-              {step === 1
+              {!isPerformaEnabled
+                ? "Select party, products & quantities"
+                : step === 1
                 ? "Step 1 of 2: Select party, products & quantities"
-                : "Step 2 of 2: Fill Performa Invoice & attach PO / Cost Sheet / KYC"}
+                : "Step 2 of 2: Fill Performa Invoice & compliance documents"}
             </span>
           </div>
 
@@ -1955,22 +2003,29 @@ export function ConvertQuotationModal({
                                       />
                                       <button
                                         type="button"
-                                        disabled={!partyId}
+                                        disabled={!partyId || priceRestricted}
                                         onClick={() =>
                                           openMapPriceModalForLine(i)
                                         }
                                         title={
-                                          !partyId
+                                          priceRestricted
+                                            ? "Price mapping is restricted for Sales by Super Admin"
+                                            : !partyId
                                             ? "Select a party first"
                                             : "Create or renew party product rate"
                                         }
-                                        className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-semibold transition-colors disabled:opacity-40 ${rateUiState === "negotiated"
+                                        className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-semibold transition-colors disabled:opacity-40 ${
+                                          priceRestricted
+                                            ? "border border-slate-200 bg-slate-100 text-slate-500 cursor-not-allowed"
+                                            : rateUiState === "negotiated"
                                             ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                                             : "bg-teal-600 text-white shadow-2xs hover:bg-teal-700"
-                                          }`}
+                                        }`}
                                       >
                                         <Tag className="h-2.5 w-2.5" />
-                                        {rateUiState === "negotiated"
+                                        {priceRestricted
+                                          ? "Restricted"
+                                          : rateUiState === "negotiated"
                                           ? "Update Rate"
                                           : rateUiState === "expired"
                                             ? "Renew Rate"
@@ -2014,6 +2069,8 @@ export function ConvertQuotationModal({
                                       line.quantity === 0 ? "" : line.quantity
                                     }
                                     placeholder="1"
+                                    disabled={quantityRestricted}
+                                    title={quantityRestricted ? "Quantity mapping is locked to default for Sales by Super Admin" : undefined}
                                     onFocus={(e) => e.currentTarget.select()}
                                     onChange={(e) =>
                                       updateLine(i, {
@@ -2031,7 +2088,11 @@ export function ConvertQuotationModal({
                                         updateLine(i, { quantity: 1 });
                                       }
                                     }}
-                                    className="h-[34px] w-full rounded border border-slate-300 px-1.5 text-center text-xs focus:border-teal-500 focus:outline-none"
+                                    className={`h-[34px] w-full rounded border px-1.5 text-center text-xs focus:border-teal-500 focus:outline-none ${
+                                      quantityRestricted
+                                        ? "border-slate-200 bg-slate-100 text-slate-500 cursor-not-allowed"
+                                        : "border-slate-300"
+                                    }`}
                                   />
                                 </td>
                                 <td className="px-1.5 py-2.5">
@@ -2068,6 +2129,8 @@ export function ConvertQuotationModal({
                                         : line.unit_price
                                     }
                                     placeholder="0"
+                                    disabled={priceRestricted}
+                                    title={priceRestricted ? "Price editing is disabled for Sales by Super Admin" : undefined}
                                     onFocus={(e) => e.currentTarget.select()}
                                     onChange={(e) =>
                                       updateLine(i, {
@@ -2080,11 +2143,14 @@ export function ConvertQuotationModal({
                                             ),
                                       })
                                     }
-                                    className={`h-[34px] w-full rounded border px-1.5 text-right text-xs focus:border-teal-500 focus:outline-none ${line.productId &&
+                                    className={`h-[34px] w-full rounded border px-1.5 text-right text-xs focus:border-teal-500 focus:outline-none ${
+                                      priceRestricted
+                                        ? "border-slate-200 bg-slate-100 text-slate-500 cursor-not-allowed"
+                                        : line.productId &&
                                         rateUiState !== "negotiated"
                                         ? "border-rose-300 bg-rose-50/40 text-rose-900"
                                         : "border-slate-300"
-                                      }`}
+                                    }`}
                                   />
                                 </td>
                                 <td className="px-1.5 py-2.5">
@@ -2260,33 +2326,54 @@ export function ConvertQuotationModal({
                         </p>
                       )}
 
-                    <button
-                      type="button"
-                      onClick={handleGoToStep2}
-                      disabled={
-                        isConverting || !assignedSales || !allItemsNegotiated
-                      }
-                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-md bg-teal-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-50"
-                    >
-                      Next: Performa Invoice
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </button>
+                    {isPerformaEnabled ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleGoToStep2}
+                          disabled={
+                            isConverting || !assignedSales || !allItemsNegotiated
+                          }
+                          className="mt-4 flex w-full items-center justify-center gap-2 rounded-md bg-teal-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-50"
+                        >
+                          Next: Performa Invoice
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </button>
 
-                    <button
-                      type="button"
-                      onClick={() => void handleSubmit()}
-                      disabled={
-                        isConverting || !assignedSales || !allItemsNegotiated
-                      }
-                      className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
-                    >
-                      {isConverting && (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      )}
-                      {isConverting
-                        ? "Creating & Submitting..."
-                        : "Or create & submit without Performa"}
-                    </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleSubmit()}
+                          disabled={
+                            isConverting || !assignedSales || !allItemsNegotiated
+                          }
+                          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                        >
+                          {isConverting && (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          )}
+                          {isConverting
+                            ? "Creating & Submitting..."
+                            : "Or create & submit without Performa"}
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void handleSubmit()}
+                        disabled={
+                          isConverting || !assignedSales || !allItemsNegotiated
+                        }
+                        className="mt-4 flex w-full items-center justify-center gap-2 rounded-md bg-teal-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-50"
+                      >
+                        {isConverting && (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        )}
+                        {isConverting
+                          ? "Creating & Submitting..."
+                          : "Convert Quotation to Order"}
+                        {!isConverting && <ArrowRight className="h-3.5 w-3.5" />}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2300,8 +2387,10 @@ export function ConvertQuotationModal({
                       Step 2: Performa Invoice Details
                     </div>
                     <p className="mt-0.5 text-xs text-teal-700">
-                      Review & fill commercial terms, upload Purchase Order (PO),
-                      Cost Sheet, and KYC documents before submitting.
+                      Review & fill commercial terms
+                      {isPOEnabled || isCostSheetEnabled || isKycEnabled
+                        ? ", and upload verification documents before submitting."
+                        : " before submitting."}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-4 text-xs">

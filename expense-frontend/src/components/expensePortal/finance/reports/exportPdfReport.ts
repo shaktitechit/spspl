@@ -1,10 +1,9 @@
 /**
  * @fileoverview Client-side vector PDF report generator with company letterhead integration.
- * @module components/workPlanner/exportPdfReport
+ * @module components/expensePortal/finance/reports/exportPdfReport
  */
 
 import { stripHtml } from "@/components/expensePortal/shared/workPlanUtils";
-
 import type { PdfCompanyLetterhead } from "@/components/expensePortal/shared/pdfCompanyLetterhead";
 
 export function cleanPdfText(text: unknown): string {
@@ -13,8 +12,30 @@ export function cleanPdfText(text: unknown): string {
   return s
     .replace(/[\u20B9₹]/g, "Rs. ")
     .replace(/Rs\.\s*Rs\./g, "Rs. ")
+    .replace(/\u00A0/g, " ") // replace non-breaking spaces
     .replace(/\s+/g, " ")
     .trim();
+}
+
+export function formatAmountForPdf(val: number | string | null | undefined): string {
+  if (val == null || val === "" || val === "—") return "—";
+  const num = typeof val === "number" ? val : Number(String(val).replace(/[^0-9.-]+/g, ""));
+  if (Number.isNaN(num)) return "—";
+  if (num === 0) return "0.00";
+  return new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(num);
+}
+
+export function formatCurrencyForPdf(val: number | string | null | undefined): string {
+  if (val == null || val === "" || val === "—") return "Rs. 0.00";
+  const num = typeof val === "number" ? val : Number(String(val).replace(/[^0-9.-]+/g, ""));
+  if (Number.isNaN(num)) return "Rs. 0.00";
+  return `Rs. ${new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(num)}`;
 }
 
 export type PdfReportColumn = {
@@ -119,14 +140,14 @@ export async function downloadPdfReport({
   const timeStr = timestamp || new Date().toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
   const userStr = downloadedBy || "System User";
 
-  let y = 10;
+  let y = 9;
 
   const drawLetterheadHeader = (isFirstPage: boolean) => {
     if (isFirstPage) {
       // 1. Logo & Company Name Brand Block
       const headerStartY = y;
-      const logoW = 32;
-      const logoH = 14;
+      const logoW = 34;
+      const logoH = 15;
 
       if (logoObj?.dataUrl) {
         try {
@@ -137,9 +158,11 @@ export async function downloadPdfReport({
       }
 
       const centerX = pageWidth / 2;
-      let textCursorY = headerStartY + 4;
+      let textCursorY = headerStartY + 3.5;
 
-      const compName = letterhead.companyName || process.env.NEXT_PUBLIC_COMPANY_NAME || "Medica Enterprises";
+      const compName = cleanPdfText(
+        letterhead.companyName || (typeof process !== "undefined" ? process.env?.NEXT_PUBLIC_COMPANY_NAME : "") || "Medica Enterprises",
+      );
       doc.setFont("helvetica", "bold");
       doc.setFontSize(14);
       doc.setTextColor(30, 58, 95);
@@ -150,7 +173,7 @@ export async function downloadPdfReport({
         doc.setFont("helvetica", "normal");
         doc.setFontSize(8);
         doc.setTextColor(71, 85, 105);
-        doc.text(letterhead.addressLine, centerX, textCursorY, { align: "center" });
+        doc.text(cleanPdfText(letterhead.addressLine), centerX, textCursorY, { align: "center" });
       }
 
       if (letterhead.contactLine) {
@@ -158,21 +181,21 @@ export async function downloadPdfReport({
         doc.setFont("helvetica", "normal");
         doc.setFontSize(7.5);
         doc.setTextColor(100, 116, 139);
-        doc.text(letterhead.contactLine, centerX, textCursorY, { align: "center" });
+        doc.text(cleanPdfText(letterhead.contactLine), centerX, textCursorY, { align: "center" });
       }
 
       y = Math.max(headerStartY + logoH + 2, textCursorY + 4);
 
-      // Decorative Brand Rule
+      // Decorative Brand Rule (dual tone)
       doc.setDrawColor(30, 58, 95);
-      doc.setLineWidth(0.6);
+      doc.setLineWidth(0.7);
       doc.line(marginX, y, pageWidth - marginX, y);
       doc.setDrawColor(59, 130, 246);
-      doc.setLineWidth(0.3);
-      doc.line(marginX, y + 0.5, pageWidth - marginX, y + 0.5);
+      doc.setLineWidth(0.35);
+      doc.line(marginX, y + 0.6, pageWidth - marginX, y + 0.6);
       y += 2.5;
 
-      // Bottom of Letterhead Metadata: Downloaded By & Timestamp
+      // Letterhead Metadata: Downloaded By (left) & Timestamp (right)
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7.5);
       doc.setTextColor(30, 58, 95);
@@ -180,9 +203,9 @@ export async function downloadPdfReport({
       const dByW = doc.getTextWidth("Downloaded By: ");
       doc.setFont("helvetica", "normal");
       doc.setTextColor(51, 65, 85);
-      doc.text(userStr, marginX + dByW, y + 3);
+      doc.text(cleanPdfText(userStr), marginX + dByW, y + 3);
 
-      const fullTimeLbl = `Timestamp: ${timeStr}`;
+      const fullTimeLbl = `Timestamp: ${cleanPdfText(timeStr)}`;
       const timeLblW = doc.getTextWidth(fullTimeLbl);
       const timeX = pageWidth - marginX - timeLblW;
 
@@ -192,20 +215,20 @@ export async function downloadPdfReport({
       const tOnW = doc.getTextWidth("Timestamp: ");
       doc.setFont("helvetica", "normal");
       doc.setTextColor(51, 65, 85);
-      doc.text(timeStr, timeX + tOnW, y + 3);
+      doc.text(cleanPdfText(timeStr), timeX + tOnW, y + 3);
 
       y += 6.5;
 
       doc.setDrawColor(226, 232, 240);
       doc.setLineWidth(0.2);
       doc.line(marginX, y, pageWidth - marginX, y);
-      y += 5;
+      y += 4.5;
     } else {
       // Compact top rule for subsequent pages
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8);
       doc.setTextColor(100, 116, 139);
-      doc.text(`${letterhead.companyName || "Medica Enterprises"} — ${title}`, marginX, y + 2);
+      doc.text(`${cleanPdfText(letterhead.companyName || "Medica Enterprises")} — ${cleanPdfText(title)}`, marginX, y + 2);
       y += 4;
       doc.setDrawColor(203, 213, 225);
       doc.setLineWidth(0.3);
@@ -213,7 +236,7 @@ export async function downloadPdfReport({
       y += 4;
     }
 
-    // 2. Report Title & Subtitle
+    // 2. Report Title & Subtitle (First page only)
     if (isFirstPage) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
@@ -232,25 +255,25 @@ export async function downloadPdfReport({
       // 3. Filter Panel Box
       if (filterPanel && filterPanel.length > 0) {
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(8);
+        doc.setFontSize(7.5);
         doc.setTextColor(30, 58, 95);
-        doc.text("APPLIED FILTER PANEL & PARAMETERS", marginX, y + 3);
-        y += 4.5;
+        doc.text("APPLIED FILTERS & PARAMETERS", marginX, y + 2.5);
+        y += 4;
 
-        const colsPerRow = 4;
+        const colsPerRow = Math.min(4, filterPanel.length);
         const colW = usableWidth / colsPerRow;
         const rowsCount = Math.ceil(filterPanel.length / colsPerRow);
-        const boxHeight = rowsCount * 5.2 + 3.5;
+        const boxHeight = rowsCount * 5.5 + 2.5;
 
         doc.setFillColor(248, 250, 252);
-        doc.setDrawColor(203, 213, 225);
+        doc.setDrawColor(226, 232, 240);
         doc.roundedRect(marginX, y, usableWidth, boxHeight, 1.5, 1.5, "FD");
 
         filterPanel.forEach((item, idx) => {
           const colIndex = idx % colsPerRow;
           const rowIndex = Math.floor(idx / colsPerRow);
           const itemX = marginX + colIndex * colW + 3;
-          const itemY = y + 4.2 + rowIndex * 5.2;
+          const itemY = y + 4.2 + rowIndex * 5.5;
 
           const lbl = cleanPdfText(item.label);
           const rawVal = cleanPdfText(item.value || "All");
@@ -263,44 +286,64 @@ export async function downloadPdfReport({
           const lblW = doc.getTextWidth(`${lbl}: `);
           doc.setFont("helvetica", "normal");
           doc.setTextColor(51, 65, 85);
-          const maxValW = colW - lblW - 4;
+          const maxValW = colW - lblW - 5;
           const valText = doc.splitTextToSize(rawVal, maxValW)[0] || rawVal;
           doc.text(valText, itemX + lblW, itemY);
         });
 
-        y += boxHeight + 4.5;
+        y += boxHeight + 4;
       }
 
-      // Summary Metrics box (if provided)
-      if (metadata.length > 0) {
-        doc.setFillColor(241, 245, 249);
-        doc.setDrawColor(226, 232, 240);
-        doc.roundedRect(marginX, y, usableWidth, 7, 1, 1, "FD");
+      // 4. Summary / KPI Metrics Cards Grid
+      if (metadata && metadata.length > 0) {
+        const cardCount = metadata.length;
+        const cardGap = 2.5;
+        const cardWidth = (usableWidth - (cardCount - 1) * cardGap) / cardCount;
+        const cardHeight = 13.5;
 
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(7.5);
-        doc.setTextColor(51, 65, 85);
+        metadata.forEach((item, idx) => {
+          const cardX = marginX + idx * (cardWidth + cardGap);
 
-        let metaX = marginX + 3;
-        metadata.forEach((item) => {
-          const lbl = cleanPdfText(item.label);
-          const val = cleanPdfText(item.value);
+          // Card container
+          doc.setFillColor(248, 250, 252);
+          doc.setDrawColor(203, 213, 225);
+          doc.roundedRect(cardX, y, cardWidth, cardHeight, 1.5, 1.5, "FD");
+
+          // Top accent bar
+          doc.setFillColor(30, 58, 95);
+          doc.rect(cardX, y, cardWidth, 1.2, "F");
+
+          // Card Label
           doc.setFont("helvetica", "bold");
-          doc.text(`${lbl}: `, metaX, y + 4.5);
-          const labelWidth = doc.getTextWidth(`${lbl}: `);
-          doc.setFont("helvetica", "normal");
-          doc.text(val, metaX + labelWidth, y + 4.5);
-          metaX += labelWidth + doc.getTextWidth(val) + 10;
+          doc.setFontSize(6.5);
+          doc.setTextColor(100, 116, 139);
+          const lbl = cleanPdfText(item.label).toUpperCase();
+          doc.text(lbl, cardX + 2.5, y + 4.5);
+
+          // Card Value
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(9);
+          doc.setTextColor(15, 23, 42);
+          const val = cleanPdfText(item.value);
+          const valLines = doc.splitTextToSize(val, cardWidth - 5);
+          doc.text(valLines[0] || val, cardX + 2.5, y + 9.0);
+
+          if (valLines.length > 1) {
+            doc.setFontSize(6.5);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(100, 116, 139);
+            doc.text(valLines[1], cardX + 2.5, y + 12.0);
+          }
         });
 
-        y += 10;
+        y += cardHeight + 4.5;
       }
     }
   };
 
   const drawTableHeaders = () => {
     doc.setFillColor(30, 58, 95);
-    doc.rect(marginX, y, usableWidth, 6, "F");
+    doc.rect(marginX, y, usableWidth, 6.5, "F");
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
@@ -310,11 +353,16 @@ export async function downloadPdfReport({
     for (let i = 0; i < columns.length; i++) {
       const col = columns[i];
       const align = col.align || "left";
-      const textX = align === "right" ? x + colWidths[i] - 1.5 : align === "center" ? x + colWidths[i] / 2 : x + 1.5;
-      doc.text(cleanPdfText(col.label), textX, y + 4.2, { align });
+      const textX =
+        align === "right"
+          ? x + colWidths[i] - 2
+          : align === "center"
+          ? x + colWidths[i] / 2
+          : x + 2;
+      doc.text(cleanPdfText(col.label), textX, y + 4.5, { align });
       x += colWidths[i];
     }
-    y += 6;
+    y += 6.5;
   };
 
   // Draw Page 1 Header
@@ -332,14 +380,18 @@ export async function downloadPdfReport({
     const isItemRow = String(row._rowType || "").includes("VISIT") || String(row._rowType || "").includes("TASK");
     const isDateHeader = row._rowType === "DATE_HEADER";
     const isUserHeader = row._rowType === "USER_HEADER";
-    const isSubtotal = row._rowType === "USER_SUBTOTAL" || row._rowType === "DATE_TOTAL" || row._rowType === "SUBTOTAL";
+    const isSubtotal =
+      row._rowType === "USER_SUBTOTAL" ||
+      row._rowType === "DATE_TOTAL" ||
+      row._rowType === "SUBTOTAL" ||
+      row._rowType === "TOTAL";
 
     // 1. Full-width Date Group Header
     if (isDateHeader) {
       const headerHeight = 6.8;
       if (y + headerHeight > pageHeight - marginBottom) {
         doc.addPage();
-        y = 10;
+        y = 9;
         drawLetterheadHeader(false);
         drawTableHeaders();
       }
@@ -367,7 +419,7 @@ export async function downloadPdfReport({
       const headerHeight = 5.8;
       if (y + headerHeight > pageHeight - marginBottom) {
         doc.addPage();
-        y = 10;
+        y = 9;
         drawLetterheadHeader(false);
         drawTableHeaders();
       }
@@ -398,70 +450,73 @@ export async function downloadPdfReport({
       continue;
     }
 
-    // 3. Subtotal / Date Total Row
+    // 3. Subtotal / Date Total / Grand Total Row
     if (isSubtotal) {
       const isDateTotal = row._rowType === "DATE_TOTAL";
-      const subtotalHeight = isDateTotal ? 5.8 : 5.0;
+      const subtotalHeight = isDateTotal ? 6.0 : 5.8;
       if (y + subtotalHeight > pageHeight - marginBottom) {
         doc.addPage();
-        y = 10;
+        y = 9;
         drawLetterheadHeader(false);
         drawTableHeaders();
       }
 
-      if (isDateTotal) {
-        doc.setFillColor(226, 232, 240);
-      } else {
-        doc.setFillColor(248, 250, 252);
-      }
+      doc.setFillColor(241, 245, 249);
       doc.rect(marginX, y, usableWidth, subtotalHeight, "F");
+
+      // Top double-line / highlight border
+      doc.setDrawColor(148, 163, 184);
+      doc.setLineWidth(0.35);
+      doc.line(marginX, y, pageWidth - marginX, y);
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7.5);
-      if (isDateTotal) {
-        doc.setTextColor(15, 23, 42);
-      } else {
-        doc.setTextColor(71, 85, 105);
-      }
-      doc.text(cleanPdfText(row.title || "Subtotal"), marginX + 4, y + 3.6);
+      doc.setTextColor(15, 23, 42);
 
-      if (row.amount || row.total || row.summaryRight) {
-        const amtText = cleanPdfText(row.amount || row.total || row.summaryRight);
-        doc.setFont("helvetica", "bold");
-        if (isDateTotal) {
-          doc.setTextColor(15, 23, 42);
-        } else {
-          doc.setTextColor(30, 58, 95);
+      let x = marginX;
+      for (let i = 0; i < columns.length; i++) {
+        const col = columns[i];
+        const align = col.align || "left";
+        const val = row[col.key];
+        const text = val == null ? "" : cleanPdfText(val);
+        const textX =
+          align === "right"
+            ? x + colWidths[i] - 2
+            : align === "center"
+            ? x + colWidths[i] / 2
+            : x + 2;
+
+        if (text) {
+          doc.text(text, textX, y + 4.0, { align });
         }
-        doc.text(amtText, pageWidth - marginX - 3, y + 3.6, { align: "right" });
+        x += colWidths[i];
       }
 
       y += subtotalHeight;
-      if (isDateTotal) {
-        doc.setDrawColor(148, 163, 184);
-      } else {
-        doc.setDrawColor(226, 232, 240);
-      }
-      doc.setLineWidth(isDateTotal ? 0.35 : 0.2);
+
+      // Bottom double border
+      doc.setDrawColor(148, 163, 184);
+      doc.setLineWidth(0.35);
       doc.line(marginX, y, pageWidth - marginX, y);
 
       isZebra = false;
       continue;
     }
 
+    // Standard Row
     const cellLines = columns.map((col, i) => {
       const val = row[col.key];
       const text = val == null ? "" : cleanPdfText(val);
-      return doc.splitTextToSize(text || "—", colWidths[i] - 2);
+      return doc.splitTextToSize(text || "—", colWidths[i] - 2.5);
     });
 
     const maxLineCount = Math.max(1, ...cellLines.map((lines) => lines.length));
-    const rowHeight = Math.max(4.8, maxLineCount * 3.5);
+    const rowHeight = Math.max(5.0, maxLineCount * 3.4 + 1.6);
 
     // Page overflow check
     if (y + rowHeight > pageHeight - marginBottom) {
       doc.addPage();
-      y = 10;
+      y = 9;
       drawLetterheadHeader(false);
       drawTableHeaders();
       doc.setFont("helvetica", "normal");
@@ -481,7 +536,12 @@ export async function downloadPdfReport({
     for (let i = 0; i < columns.length; i++) {
       const col = columns[i];
       const align = col.align || "left";
-      const textX = align === "right" ? x + colWidths[i] - 1.5 : align === "center" ? x + colWidths[i] / 2 : x + 1.5;
+      const textX =
+        align === "right"
+          ? x + colWidths[i] - 2
+          : align === "center"
+          ? x + colWidths[i] / 2
+          : x + 2;
 
       if (isPlanRow) {
         doc.setFont("helvetica", "bold");
@@ -494,12 +554,13 @@ export async function downloadPdfReport({
         doc.setTextColor(15, 23, 42);
       }
 
-      doc.text(cellLines[i], textX, y + 3.2, { align });
+      doc.text(cellLines[i], textX, y + 3.4, { align });
       x += colWidths[i];
     }
 
     y += rowHeight;
 
+    // Row divider line
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.15);
     doc.line(marginX, y, pageWidth - marginX, y);
@@ -513,17 +574,20 @@ export async function downloadPdfReport({
     doc.setPage(i);
 
     doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.3);
-    doc.line(marginX, pageHeight - 10, pageWidth - marginX, pageHeight - 10);
+    doc.setLineWidth(0.25);
+    doc.line(marginX, pageHeight - 9, pageWidth - marginX, pageHeight - 9);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(100, 116, 139);
 
-    const footerText = `${letterhead.companyName || process.env.NEXT_PUBLIC_COMPANY_NAME || "Expense Portal"} | Downloaded by ${userStr} on ${timeStr}`;
-    doc.text(footerText, marginX, pageHeight - 5);
+    const footerBrand = cleanPdfText(
+      letterhead.companyName || (typeof process !== "undefined" ? process.env?.NEXT_PUBLIC_COMPANY_NAME : "") || "Medica Enterprises",
+    );
+    const footerText = `${footerBrand} — Confidential Financial Record | Generated by ${cleanPdfText(userStr)} on ${cleanPdfText(timeStr)}`;
+    doc.text(footerText, marginX, pageHeight - 4.5);
 
-    doc.text(`Page ${i} of ${pageCount}`, pageWidth - marginX, pageHeight - 5, {
+    doc.text(`Page ${i} of ${pageCount}`, pageWidth - marginX, pageHeight - 4.5, {
       align: "right",
     });
   }
