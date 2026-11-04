@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   X,
   Download,
@@ -22,6 +22,8 @@ import {
   FileText,
   ExternalLink,
   Eye,
+  Layers,
+  List,
 } from "lucide-react";
 import {
   useLazyGetExpensesQuery,
@@ -44,6 +46,10 @@ import {
   salesUserLabel,
   WORK_PLAN_EXPENSE_STATUS_TABS,
   renderExpenseStatusBadge,
+  renderWorkPlanBadge,
+  formatWorkPlanTasksVisits,
+  formatWorkPlanLocation,
+  formatWorkPlanSummaryText,
 } from "./workPlanUtils";
 import { calculateDateRange, type DateFilterPreset, toYmdString } from "./DashboardDateFilter";
 import { usePdfCompanyLetterhead } from "./pdfCompanyLetterhead";
@@ -78,6 +84,52 @@ function resolveExpenseSalesUser(e?: WorkPlanExpenseRecord | null) {
     return salesUserLabel(e.work_plan.sales_user);
   }
   return salesUserLabel(e.sales_user);
+}
+
+function extractRecordYmd(dateVal: any): string {
+  if (!dateVal) return "";
+  const s = String(dateVal);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  try {
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  } catch {}
+  return "";
+}
+
+function formatModalDateHeader(rawDate: any): {
+  mainDate: string;
+  weekday: string;
+  isToday: boolean;
+  isYesterday: boolean;
+} {
+  const ymd = extractRecordYmd(rawDate);
+  const now = new Date();
+  const todayYmd = now.toISOString().slice(0, 10);
+  const yest = new Date(now.getTime() - 86400000);
+  const yesterdayYmd = yest.toISOString().slice(0, 10);
+
+  const isToday = ymd === todayYmd;
+  const isYesterday = ymd === yesterdayYmd;
+
+  if (!rawDate) {
+    return { mainDate: "Unknown Date", weekday: "", isToday: false, isYesterday: false };
+  }
+  try {
+    const d = new Date(rawDate);
+    if (isNaN(d.getTime())) {
+      return { mainDate: String(rawDate), weekday: "", isToday, isYesterday };
+    }
+    const weekday = d.toLocaleDateString("en-IN", { weekday: "long" });
+    const mainDate = d.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+    return { mainDate, weekday, isToday, isYesterday };
+  } catch {
+    return { mainDate: String(rawDate), weekday: "", isToday, isYesterday };
+  }
 }
 
 export function DownloadExpensesModal({
@@ -131,6 +183,7 @@ export function DownloadExpensesModal({
   const [teamFilter, setTeamFilter] = useState("all");
   const [executiveFilter, setExecutiveFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [claimsViewMode, setClaimsViewMode] = useState<"grouped" | "flat">("grouped");
 
   // Hierarchy Queries (Strict portal role filtered)
   const { data: tree } = useGetTeamTreeQuery(undefined, { skip: !adminRole });
@@ -329,6 +382,98 @@ export function DownloadExpensesModal({
     searchQuery,
   ]);
 
+  // Group claims by date (latest to oldest), and per user under each date
+  const groupedDateClaims = useMemo(() => {
+    const dateMap = new Map<
+      string,
+      {
+        dateKey: string;
+        mainDate: string;
+        weekday: string;
+        isToday: boolean;
+        isYesterday: boolean;
+        userMap: Map<
+          string,
+          {
+            userId: string;
+            userName: string;
+            workPlanId?: string;
+            expenses: WorkPlanExpenseRecord[];
+            totalAmount: number;
+            workPlan?: any;
+          }
+        >;
+        totalAmount: number;
+        totalExpensesCount: number;
+      }
+    >();
+
+    for (const e of filteredClaims) {
+      const wp = e.work_plan && typeof e.work_plan === "object" ? e.work_plan : null;
+      const rawDate = wp?.plan_date || e.expense_date || e.bill_date || (e as any).createdAt;
+      const ymd = extractRecordYmd(rawDate) || "unknown";
+
+      if (!dateMap.has(ymd)) {
+        const headerInfo = formatModalDateHeader(rawDate);
+        dateMap.set(ymd, {
+          dateKey: ymd,
+          mainDate: headerInfo.mainDate,
+          weekday: headerInfo.weekday,
+          isToday: headerInfo.isToday,
+          isYesterday: headerInfo.isYesterday,
+          userMap: new Map(),
+          totalAmount: 0,
+          totalExpensesCount: 0,
+        });
+      }
+
+      const dateEntry = dateMap.get(ymd)!;
+      const amount = Number(e.amount) || 0;
+      dateEntry.totalAmount += amount;
+      dateEntry.totalExpensesCount += 1;
+
+      const userName = resolveExpenseSalesUser(e) || "Unassigned";
+      const userId = extractOwnerId(e) || userName;
+      const wpId = wp?._id || (typeof e.work_plan === "string" ? e.work_plan : "");
+      const userGroupKey = `${userId}__${wpId || "direct"}`;
+
+      if (!dateEntry.userMap.has(userGroupKey)) {
+        dateEntry.userMap.set(userGroupKey, {
+          userId,
+          userName,
+          workPlanId: wpId,
+          expenses: [],
+          totalAmount: 0,
+          workPlan: wp,
+        });
+      }
+
+      const userEntry = dateEntry.userMap.get(userGroupKey)!;
+      userEntry.expenses.push(e);
+      userEntry.totalAmount += amount;
+      if (!userEntry.workPlan && wp) {
+        userEntry.workPlan = wp;
+      }
+    }
+
+    const result = Array.from(dateMap.values()).map((d) => {
+      const userGroups = Array.from(d.userMap.values()).sort((a, b) =>
+        a.userName.localeCompare(b.userName)
+      );
+      return {
+        ...d,
+        userGroups,
+        totalUsersCount: userGroups.length,
+      };
+    });
+
+    return result.sort((a, b) => {
+      if (a.dateKey === "unknown") return 1;
+      if (b.dateKey === "unknown") return -1;
+      return b.dateKey.localeCompare(a.dateKey);
+    });
+  }, [filteredClaims]);
+
   // Filtered Advances
   const filteredAdvances = useMemo(() => {
     return advancesItems.filter((adv) => {
@@ -459,50 +604,131 @@ export function DownloadExpensesModal({
       const timestamp = new Date().toISOString().slice(0, 10);
 
       if (activeTab === "claims") {
-        headers = [
-          "Row #",
-          "Expense Date",
-          "Sales Executive",
-          "Category",
-          "Sub Category",
-          "Amount (₹)",
-          "Payment Mode",
-          "Vendor",
-          "Bill No",
-          "Bill Date",
-          "Start Odometer",
-          "Closing Odometer",
-          "Total KM",
-          "Attachments Count",
-          "Status",
-          "Description",
-        ];
-        rows = filteredClaims.map((e, idx) => {
-          const user = resolveExpenseSalesUser(e);
-          const attCount = Array.isArray(e.attachments)
-            ? e.attachments.length
-            : e.receipt_attachment
-            ? 1
-            : 0;
-          return [
-            idx + 1,
-            formatPlanDate(e.expense_date),
-            `"${user.replace(/"/g, '""')}"`,
-            e.category || "Other",
-            e.sub_category || "—",
-            e.amount || 0,
-            e.payment_mode || "Cash",
-            `"${(e.vendor_name || "").replace(/"/g, '""')}"`,
-            `"${(e.bill_number || "").replace(/"/g, '""')}"`,
-            e.bill_date ? formatPlanDate(e.bill_date) : "—",
-            e.start_reading ?? "—",
-            e.closing_reading ?? "—",
-            e.total_km ?? "—",
-            attCount,
-            e.status,
-            `"${(e.description || "").replace(/"/g, '""')}"`,
+        if (claimsViewMode === "grouped") {
+          headers = [
+            "Row #",
+            "Category",
+            "Sub Category",
+            "Amount (₹)",
+            "Payment Mode",
+            "Vendor",
+            "Bill No",
+            "Bill Date",
+            "Start Odometer",
+            "Closing Odometer",
+            "Total KM",
+            "Attachments Count",
+            "Status",
+            "Description",
           ];
-        });
+          let globalIdx = 0;
+          for (const dateGroup of groupedDateClaims) {
+            const weekdayStr = dateGroup.weekday ? ` (${dateGroup.weekday.toUpperCase()})` : "";
+            rows.push([
+              `"--- DATE: ${dateGroup.mainDate.toUpperCase()}${weekdayStr} | ${dateGroup.totalUsersCount} Executives | ${dateGroup.totalExpensesCount} Claims | Daily Total: Rs. ${formatMoney(dateGroup.totalAmount)} ---"`,
+            ]);
+            for (const userGroup of dateGroup.userGroups) {
+              const wp = userGroup.workPlan;
+              const wpSummary = wp ? formatWorkPlanSummaryText(wp) : "";
+              const planSnippet = wpSummary && wpSummary !== "—" ? ` | Plan: ${wpSummary}` : " | Direct Claims (No Work Plan)";
+              rows.push([
+                `"--- Executive: ${userGroup.userName}${planSnippet} | ${userGroup.expenses.length} Claims | Subtotal: Rs. ${formatMoney(userGroup.totalAmount)} ---"`,
+              ]);
+              for (const e of userGroup.expenses) {
+                globalIdx++;
+                const attCount = Array.isArray(e.attachments)
+                  ? e.attachments.length
+                  : e.receipt_attachment
+                  ? 1
+                  : 0;
+                rows.push([
+                  globalIdx,
+                  `"${(e.category || "Other").replace(/"/g, '""')}"`,
+                  `"${(e.sub_category || "—").replace(/"/g, '""')}"`,
+                  e.amount || 0,
+                  e.payment_mode || "Cash",
+                  `"${(e.vendor_name || "—").replace(/"/g, '""')}"`,
+                  `"${(e.bill_number || "—").replace(/"/g, '""')}"`,
+                  e.bill_date ? formatPlanDate(e.bill_date) : "—",
+                  e.start_reading ?? "—",
+                  e.closing_reading ?? "—",
+                  e.total_km ?? "—",
+                  attCount,
+                  e.status,
+                  `"${(e.description || "—").replace(/"/g, '""')}"`,
+                ]);
+              }
+              if (userGroup.expenses.length > 1) {
+                rows.push([
+                  "",
+                  `"Subtotal — ${userGroup.userName}"`,
+                  "",
+                  userGroup.totalAmount,
+                ]);
+              }
+            }
+            if (dateGroup.totalUsersCount > 1) {
+              rows.push([
+                "",
+                `"Daily Total — ${dateGroup.mainDate}"`,
+                "",
+                dateGroup.totalAmount,
+              ]);
+            }
+          }
+        } else {
+          headers = [
+            "Row #",
+            "Expense Date",
+            "Sales Executive",
+            "Day Plan Type",
+            "Tasks / Visits",
+            "Plan Location",
+            "Category",
+            "Sub Category",
+            "Amount (₹)",
+            "Payment Mode",
+            "Vendor",
+            "Bill No",
+            "Bill Date",
+            "Start Odometer",
+            "Closing Odometer",
+            "Total KM",
+            "Attachments Count",
+            "Status",
+            "Description",
+          ];
+          rows = filteredClaims.map((e, idx) => {
+            const user = resolveExpenseSalesUser(e);
+            const attCount = Array.isArray(e.attachments)
+              ? e.attachments.length
+              : e.receipt_attachment
+              ? 1
+              : 0;
+            const wp = e.work_plan && typeof e.work_plan === "object" ? e.work_plan : null;
+            return [
+              idx + 1,
+              formatPlanDate(e.expense_date),
+              `"${user.replace(/"/g, '""')}"`,
+              `"${(wp?.plan_type || "—").replace(/"/g, '""')}"`,
+              `"${(formatWorkPlanTasksVisits(wp) || "—").replace(/"/g, '""')}"`,
+              `"${(formatWorkPlanLocation(wp) || "—").replace(/"/g, '""')}"`,
+              e.category || "Other",
+              e.sub_category || "—",
+              e.amount || 0,
+              e.payment_mode || "Cash",
+              `"${(e.vendor_name || "").replace(/"/g, '""')}"`,
+              `"${(e.bill_number || "").replace(/"/g, '""')}"`,
+              e.bill_date ? formatPlanDate(e.bill_date) : "—",
+              e.start_reading ?? "—",
+              e.closing_reading ?? "—",
+              e.total_km ?? "—",
+              attCount,
+              e.status,
+              `"${(e.description || "").replace(/"/g, '""')}"`,
+            ];
+          });
+        }
       } else if (activeTab === "advances") {
         headers = [
           "Row #",
@@ -596,57 +822,160 @@ export function DownloadExpensesModal({
       const timestamp = new Date().toISOString().slice(0, 10);
 
       if (activeTab === "claims") {
-        const columns = [
-          { key: "rowNum", label: "#" },
-          { key: "expense_date", label: "Date" },
-          { key: "sales_user", label: "Executive" },
-          { key: "category", label: "Category" },
-          { key: "sub_category", label: "Sub Category" },
-          { key: "amount", label: "Amount (₹)" },
-          { key: "payment_mode", label: "Payment Mode" },
-          { key: "vendor_name", label: "Vendor" },
-          { key: "bill_number", label: "Bill #" },
-          { key: "bill_date", label: "Bill Date" },
-          { key: "start_reading", label: "Start KM" },
-          { key: "closing_reading", label: "Closing KM" },
-          { key: "total_km", label: "Total Distance" },
-          { key: "attachments_count", label: "Attachments" },
-          { key: "status", label: "Status" },
-          { key: "description", label: "Description" },
-        ];
-        const rows = filteredClaims.map((r, i) => {
-          const attCount = Array.isArray(r.attachments)
-            ? r.attachments.length
-            : r.receipt_attachment
-            ? 1
-            : 0;
-          return {
-            rowNum: i + 1,
-            expense_date: formatPlanDate(r.expense_date),
-            sales_user: resolveExpenseSalesUser(r),
-            category: r.category || "Other",
-            sub_category: r.sub_category || "—",
-            amount: Number(r.amount) || 0,
-            payment_mode: r.payment_mode || "Cash",
-            vendor_name: r.vendor_name || "—",
-            bill_number: r.bill_number || "—",
-            bill_date: formatPlanDate(r.bill_date),
-            start_reading: r.start_reading ?? "—",
-            closing_reading: r.closing_reading ?? "—",
-            total_km: r.total_km ?? "—",
-            attachments_count: attCount > 0 ? `${attCount} file(s)` : "None",
-            status: (r.status || "draft").toUpperCase(),
-            description: r.description || "—",
-          };
-        });
+        if (claimsViewMode === "grouped") {
+          const columns = [
+            { key: "rowNum", label: "#" },
+            { key: "category", label: "Category" },
+            { key: "sub_category", label: "Sub Category" },
+            { key: "amount", label: "Amount (₹)" },
+            { key: "payment_mode", label: "Payment Mode" },
+            { key: "vendor_name", label: "Vendor" },
+            { key: "bill_number", label: "Bill #" },
+            { key: "bill_date", label: "Bill Date" },
+            { key: "start_reading", label: "Start KM" },
+            { key: "closing_reading", label: "Closing KM" },
+            { key: "total_km", label: "Total Distance" },
+            { key: "attachments_count", label: "Attachments" },
+            { key: "status", label: "Status" },
+            { key: "description", label: "Description" },
+          ];
+          const rows: any[] = [];
+          let globalIdx = 0;
+          for (const dateGroup of groupedDateClaims) {
+            const weekdayStr = dateGroup.weekday ? ` (${dateGroup.weekday.toUpperCase()})` : "";
+            rows.push({
+              rowNum: "",
+              category: `DATE: ${dateGroup.mainDate.toUpperCase()}${weekdayStr} — ${dateGroup.totalUsersCount} Executives | ${dateGroup.totalExpensesCount} Claims`,
+              sub_category: "Daily Total",
+              amount: dateGroup.totalAmount,
+            });
+            for (const userGroup of dateGroup.userGroups) {
+              const wp = userGroup.workPlan;
+              const wpSummary = wp ? formatWorkPlanSummaryText(wp) : "";
+              const planSnippet = wpSummary && wpSummary !== "—" ? ` | Plan: ${wpSummary}` : " — Direct Claims (No Work Plan)";
+              rows.push({
+                rowNum: "",
+                category: `Executive: ${userGroup.userName}${planSnippet} — ${userGroup.expenses.length} Claims`,
+                sub_category: "User Subtotal",
+                amount: userGroup.totalAmount,
+              });
+              for (const r of userGroup.expenses) {
+                globalIdx++;
+                const attCount = Array.isArray(r.attachments)
+                  ? r.attachments.length
+                  : r.receipt_attachment
+                  ? 1
+                  : 0;
+                rows.push({
+                  rowNum: globalIdx,
+                  category: r.category || "Other",
+                  sub_category: r.sub_category || "—",
+                  amount: Number(r.amount) || 0,
+                  payment_mode: r.payment_mode || "Cash",
+                  vendor_name: r.vendor_name || "—",
+                  bill_number: r.bill_number || "—",
+                  bill_date: formatPlanDate(r.bill_date),
+                  start_reading: r.start_reading ?? "—",
+                  closing_reading: r.closing_reading ?? "—",
+                  total_km: r.total_km ?? "—",
+                  attachments_count: attCount > 0 ? `${attCount} file(s)` : "None",
+                  status: (r.status || "draft").toUpperCase(),
+                  description: r.description || "—",
+                });
+              }
+              if (userGroup.expenses.length > 1) {
+                rows.push({
+                  rowNum: "",
+                  category: `Subtotal — ${userGroup.userName}`,
+                  sub_category: "",
+                  amount: userGroup.totalAmount,
+                });
+              }
+            }
+            if (dateGroup.totalUsersCount > 1) {
+              rows.push({
+                rowNum: "",
+                category: `Daily Total — ${dateGroup.mainDate}`,
+                sub_category: "",
+                amount: dateGroup.totalAmount,
+              });
+            }
+          }
+          // Grand Total
+          rows.push({
+            rowNum: "",
+            category: "GRAND TOTAL",
+            sub_category: "",
+            amount: summaryMetrics.totalAmount,
+          });
 
-        downloadExcelReport({
-          filename: `expense_claims_report_${timestamp}.xlsx`,
-          sheetName: "Expense Claims",
-          title: "Expense Claims Master Sheet",
-          columns,
-          rows,
-        });
+          downloadExcelReport({
+            filename: `expense_claims_grouped_report_${timestamp}.xlsx`,
+            sheetName: "Grouped Claims",
+            title: "Expense Claims Master Sheet (Grouped by Date & Executive)",
+            columns,
+            rows,
+          });
+        } else {
+          const columns = [
+            { key: "rowNum", label: "#" },
+            { key: "expense_date", label: "Date" },
+            { key: "sales_user", label: "Executive" },
+            { key: "plan_type", label: "Day Plan Type" },
+            { key: "plan_tasks_visits", label: "Tasks / Visits" },
+            { key: "plan_location", label: "Plan Location" },
+            { key: "category", label: "Category" },
+            { key: "sub_category", label: "Sub Category" },
+            { key: "amount", label: "Amount (₹)" },
+            { key: "payment_mode", label: "Payment Mode" },
+            { key: "vendor_name", label: "Vendor" },
+            { key: "bill_number", label: "Bill #" },
+            { key: "bill_date", label: "Bill Date" },
+            { key: "start_reading", label: "Start KM" },
+            { key: "closing_reading", label: "Closing KM" },
+            { key: "total_km", label: "Total Distance" },
+            { key: "attachments_count", label: "Attachments" },
+            { key: "status", label: "Status" },
+            { key: "description", label: "Description" },
+          ];
+          const rows = filteredClaims.map((r, i) => {
+            const attCount = Array.isArray(r.attachments)
+              ? r.attachments.length
+              : r.receipt_attachment
+              ? 1
+              : 0;
+            const wp = r.work_plan && typeof r.work_plan === "object" ? r.work_plan : null;
+            return {
+              rowNum: i + 1,
+              expense_date: formatPlanDate(r.expense_date),
+              sales_user: resolveExpenseSalesUser(r),
+              plan_type: wp?.plan_type || "—",
+              plan_tasks_visits: formatWorkPlanTasksVisits(wp) || "—",
+              plan_location: formatWorkPlanLocation(wp) || "—",
+              category: r.category || "Other",
+              sub_category: r.sub_category || "—",
+              amount: Number(r.amount) || 0,
+              payment_mode: r.payment_mode || "Cash",
+              vendor_name: r.vendor_name || "—",
+              bill_number: r.bill_number || "—",
+              bill_date: formatPlanDate(r.bill_date),
+              start_reading: r.start_reading ?? "—",
+              closing_reading: r.closing_reading ?? "—",
+              total_km: r.total_km ?? "—",
+              attachments_count: attCount > 0 ? `${attCount} file(s)` : "None",
+              status: (r.status || "draft").toUpperCase(),
+              description: r.description || "—",
+            };
+          });
+
+          downloadExcelReport({
+            filename: `expense_claims_report_${timestamp}.xlsx`,
+            sheetName: "Expense Claims",
+            title: "Expense Claims Master Sheet",
+            columns,
+            rows,
+          });
+        }
       } else if (activeTab === "advances") {
         const columns = [
           { key: "rowNum", label: "#" },
@@ -774,60 +1103,215 @@ export function DownloadExpensesModal({
       ];
 
       if (activeTab === "claims") {
-        const rows = filteredClaims.map((e, idx) => {
-          const userLabel = resolveExpenseSalesUser(e);
-          const attCount = Array.isArray(e.attachments)
-            ? e.attachments.length
-            : e.receipt_attachment
-            ? 1
-            : 0;
-          return {
-            rowNum: idx + 1,
-            date: formatPlanDate(e.expense_date),
-            executive: userLabel,
-            category: (e.category || "").toUpperCase(),
-            subCategory: e.sub_category || "—",
-            amount: `₹${formatMoney(e.amount)}`,
-            paymentMode: (e.payment_mode || "cash").toUpperCase(),
-            vendor: e.vendor_name || "—",
-            attachments: attCount > 0 ? `${attCount} doc(s)` : "—",
-            status: (e.status || "").toUpperCase(),
-            description: e.description || "—",
-          };
-        });
+        const rows: any[] = [];
+        let globalIndex = 0;
 
-        await downloadPdfReport({
-          letterhead,
-          filename: `expenses_report_${new Date().toISOString().slice(0, 10)}.pdf`,
-          title: "Work Planner Expense Claims Master Report",
-          subtitle: "Claims & Reimbursements Summary (Vehicle Rate: ₹3.50/KM)",
-          downloadedBy,
-          timestamp,
-          filterPanel: activeFilterPanel,
-          metadata: [
-            { label: "Total Claims", value: String(summaryMetrics.totalCount) },
-            { label: "Total Amount", value: `₹${formatMoney(summaryMetrics.totalAmount)}` },
-            {
-              label: "Approved Amount",
-              value: `₹${formatMoney(summaryMetrics.approvedAmount)}`,
-            },
-            { label: "Pending Claims", value: String(summaryMetrics.pendingCount) },
-          ],
-          columns: [
-            { key: "rowNum", label: "#", width: 0.5, align: "left" },
-            { key: "date", label: "Date", width: 1.1, align: "left" },
-            { key: "executive", label: "Executive", width: 1.5, align: "left" },
-            { key: "category", label: "Category", width: 1.1, align: "left" },
-            { key: "subCategory", label: "Sub Category", width: 1.2, align: "left" },
-            { key: "amount", label: "Amount", width: 1.2, align: "right" },
-            { key: "paymentMode", label: "Pay Mode", width: 1.0, align: "center" },
-            { key: "vendor", label: "Vendor", width: 1.3, align: "left" },
-            { key: "attachments", label: "Docs", width: 0.9, align: "center" },
-            { key: "status", label: "Status", width: 1.0, align: "center" },
-            { key: "description", label: "Description", width: 1.8, align: "left" },
-          ],
-          rows,
-        });
+        if (claimsViewMode === "grouped") {
+          for (const dateGroup of groupedDateClaims) {
+            // Day Header row
+            const weekdayStr = dateGroup.weekday ? ` (${dateGroup.weekday.toUpperCase()})` : "";
+            const dateTitle = `DATE: ${dateGroup.mainDate.toUpperCase()}${weekdayStr}`;
+            const dateSummary = `${dateGroup.totalUsersCount} Executive${dateGroup.totalUsersCount !== 1 ? "s" : ""}  |  ${dateGroup.totalExpensesCount} Claim${dateGroup.totalExpensesCount !== 1 ? "s" : ""}`;
+            const dateTotal = `Daily Total: ₹${formatMoney(dateGroup.totalAmount)}`;
+
+            rows.push({
+              _rowType: "DATE_HEADER",
+              title: `${dateTitle}  —  ${dateSummary}`,
+              summaryRight: dateTotal,
+            });
+
+            for (const userGroup of dateGroup.userGroups) {
+              // Executive Header row with Day Work Plan details
+              const wp = userGroup.workPlan;
+              const wpSummary = wp ? formatWorkPlanSummaryText(wp) : "";
+              const planSnippet = wpSummary && wpSummary !== "—" ? `  |  Plan: ${wpSummary}` : "  |  Direct Claims (No Work Plan)";
+              const userTitle = `Executive: ${userGroup.userName}${planSnippet}`;
+              const userSummary = `${userGroup.expenses.length} Claim${userGroup.expenses.length !== 1 ? "s" : ""}`;
+              const userTotal = `Subtotal: ₹${formatMoney(userGroup.totalAmount)}`;
+
+              rows.push({
+                _rowType: "USER_HEADER",
+                title: `${userTitle}  —  ${userSummary}`,
+                summaryRight: userTotal,
+              });
+
+              // Expense rows — Omits Date, Executive, Plan Type, Location columns (already in headers)
+              for (const e of userGroup.expenses) {
+                globalIndex++;
+                const attCount = Array.isArray(e.attachments)
+                  ? e.attachments.length
+                  : e.receipt_attachment
+                  ? 1
+                  : 0;
+                const startKm = e.start_reading ?? null;
+                const closeKm = e.closing_reading ?? null;
+                const odoText =
+                  startKm != null && closeKm != null
+                    ? `${startKm} → ${closeKm} (${(closeKm - startKm)} KM)`
+                    : e.total_km != null
+                    ? `${e.total_km} KM`
+                    : "—";
+
+                const billDateStr = e.bill_date ? formatPlanDate(e.bill_date) : "";
+                const billInfo = e.bill_number
+                  ? billDateStr
+                    ? `${e.bill_number} (${billDateStr})`
+                    : e.bill_number
+                  : billDateStr || "—";
+
+                rows.push({
+                  rowNum: globalIndex,
+                  category: (e.category || "").toUpperCase(),
+                  subCategory: e.sub_category || "—",
+                  amount: `₹${formatMoney(e.amount)}`,
+                  paymentMode: (e.payment_mode || "cash").toUpperCase(),
+                  vendor: e.vendor_name || "—",
+                  billInfo,
+                  distance: odoText,
+                  attachments: attCount > 0 ? `${attCount} doc(s)` : "—",
+                  status: (e.status || "").toUpperCase(),
+                  description: e.description || "—",
+                });
+              }
+
+              // User Subtotal row if user has > 1 claim
+              if (userGroup.expenses.length > 1) {
+                rows.push({
+                  _rowType: "USER_SUBTOTAL",
+                  title: `Subtotal — ${userGroup.userName} (${userGroup.expenses.length} claims)`,
+                  amount: `₹${formatMoney(userGroup.totalAmount)}`,
+                });
+              }
+            }
+
+            // Daily Total footer if date has > 1 user
+            if (dateGroup.totalUsersCount > 1) {
+              rows.push({
+                _rowType: "DATE_TOTAL",
+                title: `Daily Total — ${dateGroup.mainDate} (${dateGroup.totalExpensesCount} claims across ${dateGroup.totalUsersCount} executives)`,
+                amount: `₹${formatMoney(dateGroup.totalAmount)}`,
+              });
+            }
+          }
+
+          // Grand Total row
+          rows.push({
+            _rowType: "TOTAL",
+            title: "GRAND TOTAL",
+            amount: `₹${formatMoney(summaryMetrics.totalAmount)}`,
+          });
+
+          await downloadPdfReport({
+            letterhead,
+            filename: `expenses_report_${new Date().toISOString().slice(0, 10)}.pdf`,
+            title: "Work Planner Expense Claims Master Report (Grouped)",
+            subtitle: "Claims & Reimbursements Summary with Day Work Plan Details (Vehicle Rate: ₹3.50/KM)",
+            downloadedBy,
+            timestamp,
+            filterPanel: activeFilterPanel,
+            metadata: [
+              { label: "Total Claims", value: String(summaryMetrics.totalCount) },
+              { label: "Total Amount", value: `₹${formatMoney(summaryMetrics.totalAmount)}` },
+              {
+                label: "Approved Amount",
+                value: `₹${formatMoney(summaryMetrics.approvedAmount)}`,
+              },
+              { label: "Pending Claims", value: String(summaryMetrics.pendingCount) },
+            ],
+            columns: [
+              { key: "rowNum", label: "#", width: 0.45, align: "center" },
+              { key: "category", label: "Category", width: 1.15, align: "left" },
+              { key: "subCategory", label: "Sub Category", width: 1.15, align: "left" },
+              { key: "amount", label: "Amount", width: 1.25, align: "right" },
+              { key: "paymentMode", label: "Pay Mode", width: 0.85, align: "center" },
+              { key: "vendor", label: "Vendor", width: 1.35, align: "left" },
+              { key: "billInfo", label: "Bill / Date", width: 1.25, align: "left" },
+              { key: "distance", label: "Distance / KM", width: 1.15, align: "left" },
+              { key: "attachments", label: "Docs", width: 0.65, align: "center" },
+              { key: "status", label: "Status", width: 0.85, align: "center" },
+              { key: "description", label: "Description", width: 2.3, align: "left" },
+            ],
+            rows,
+          });
+        } else {
+          // Flat list format
+          for (const e of filteredClaims) {
+            globalIndex++;
+            const attCount = Array.isArray(e.attachments)
+              ? e.attachments.length
+              : e.receipt_attachment
+              ? 1
+              : 0;
+            const wpRow = e.work_plan && typeof e.work_plan === "object" ? e.work_plan : null;
+            const startKm = e.start_reading ?? null;
+            const closeKm = e.closing_reading ?? null;
+            const odoText =
+              startKm != null && closeKm != null
+                ? `${startKm} → ${closeKm} (${(closeKm - startKm)} KM)`
+                : e.total_km != null
+                ? `${e.total_km} KM`
+                : "—";
+
+            rows.push({
+              rowNum: globalIndex,
+              date: formatPlanDate(e.expense_date),
+              executive: resolveExpenseSalesUser(e),
+              planType: wpRow?.plan_type || "—",
+              planLocation: formatWorkPlanLocation(wpRow),
+              category: (e.category || "").toUpperCase(),
+              subCategory: e.sub_category || "—",
+              amount: `₹${formatMoney(e.amount)}`,
+              paymentMode: (e.payment_mode || "cash").toUpperCase(),
+              vendor: e.vendor_name || "—",
+              distance: odoText,
+              attachments: attCount > 0 ? `${attCount} doc(s)` : "—",
+              status: (e.status || "").toUpperCase(),
+              description: e.description || "—",
+            });
+          }
+
+          rows.push({
+            _rowType: "TOTAL",
+            title: "GRAND TOTAL",
+            amount: `₹${formatMoney(summaryMetrics.totalAmount)}`,
+          });
+
+          await downloadPdfReport({
+            letterhead,
+            filename: `expenses_flat_report_${new Date().toISOString().slice(0, 10)}.pdf`,
+            title: "Work Planner Expense Claims Master Report (Flat)",
+            subtitle: "Claims & Reimbursements Ledger (Vehicle Rate: ₹3.50/KM)",
+            downloadedBy,
+            timestamp,
+            filterPanel: activeFilterPanel,
+            metadata: [
+              { label: "Total Claims", value: String(summaryMetrics.totalCount) },
+              { label: "Total Amount", value: `₹${formatMoney(summaryMetrics.totalAmount)}` },
+              {
+                label: "Approved Amount",
+                value: `₹${formatMoney(summaryMetrics.approvedAmount)}`,
+              },
+              { label: "Pending Claims", value: String(summaryMetrics.pendingCount) },
+            ],
+            columns: [
+              { key: "rowNum", label: "#", width: 0.45, align: "center" },
+              { key: "date", label: "Date", width: 0.95, align: "left" },
+              { key: "executive", label: "Executive", width: 1.35, align: "left" },
+              { key: "planType", label: "Plan", width: 0.95, align: "left" },
+              { key: "planLocation", label: "Location", width: 1.05, align: "left" },
+              { key: "category", label: "Category", width: 1.05, align: "left" },
+              { key: "subCategory", label: "Sub Category", width: 1.05, align: "left" },
+              { key: "amount", label: "Amount", width: 1.15, align: "right" },
+              { key: "paymentMode", label: "Pay Mode", width: 0.8, align: "center" },
+              { key: "vendor", label: "Vendor", width: 1.15, align: "left" },
+              { key: "distance", label: "KM", width: 1.0, align: "left" },
+              { key: "attachments", label: "Docs", width: 0.65, align: "center" },
+              { key: "status", label: "Status", width: 0.8, align: "center" },
+              { key: "description", label: "Description", width: 1.8, align: "left" },
+            ],
+            rows,
+          });
+        }
       } else if (activeTab === "advances") {
         const rows = filteredAdvances.map((adv, idx) => ({
           rowNum: idx + 1,
@@ -1274,6 +1758,38 @@ export function DownloadExpensesModal({
                   </div>
                 )}
 
+                {/* View Mode Toggle when on Claims tab */}
+                {activeTab === "claims" && (
+                  <div className="flex items-center gap-1 rounded-lg border border-border bg-surface-muted/80 p-0.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setClaimsViewMode("grouped")}
+                      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition cursor-pointer ${
+                        claimsViewMode === "grouped"
+                          ? "bg-card text-foreground shadow-2xs"
+                          : "text-muted hover:text-foreground"
+                      }`}
+                      title="Group claims day-wide by date with day work plan details"
+                    >
+                      <Layers className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+                      <span>Grouped by Date</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setClaimsViewMode("flat")}
+                      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition cursor-pointer ${
+                        claimsViewMode === "flat"
+                          ? "bg-card text-foreground shadow-2xs"
+                          : "text-muted hover:text-foreground"
+                      }`}
+                      title="Flat list of all individual claims"
+                    >
+                      <List className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+                      <span>Flat List</span>
+                    </button>
+                  </div>
+                )}
+
                 <div className="relative min-w-[280px] flex-1 max-w-md">
                   <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted" />
                   <input
@@ -1311,8 +1827,13 @@ export function DownloadExpensesModal({
                     <th className="w-12 border-r border-border px-3 py-2 text-center bg-surface-muted">
                       #
                     </th>
-                    <th className="border-r border-border px-3 py-2 w-32">Expense Date</th>
-                    <th className="border-r border-border px-3 py-2 w-44">Sales Executive</th>
+                    {claimsViewMode === "flat" && (
+                      <>
+                        <th className="border-r border-border px-3 py-2 w-32">Expense Date</th>
+                        <th className="border-r border-border px-3 py-2 w-44">Sales Executive</th>
+                        <th className="border-r border-border px-3 py-2 min-w-[200px]">Day Work Plan</th>
+                      </>
+                    )}
                     <th className="border-r border-border px-3 py-2 w-32">Category</th>
                     <th className="border-r border-border px-3 py-2 w-36">Sub Category</th>
                     <th className="border-r border-border px-3 py-2 w-32 text-right">Amount (₹)</th>
@@ -1328,130 +1849,347 @@ export function DownloadExpensesModal({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  {filteredClaims.map((e, idx) => {
-                    const exec = resolveExpenseSalesUser(e);
-                    const isBike = e.category === "Travel" && e.sub_category === "Private Bike";
-                    const startKm = e.start_reading ?? null;
-                    const closeKm = e.closing_reading ?? null;
-                    const odoText =
-                      startKm != null && closeKm != null
-                        ? `${startKm.toLocaleString()} → ${closeKm.toLocaleString()} (${(closeKm - startKm).toLocaleString()} KM${isBike ? " @ ₹3.5" : ""})`
-                        : "—";
+                  {claimsViewMode === "grouped" ? (
+                    groupedDateClaims.map((dateGroup) => (
+                      <Fragment key={dateGroup.dateKey}>
+                        {/* Date Header Row */}
+                        <tr className="border-y-2 border-border/80 bg-surface-muted/90 text-foreground sticky top-8 z-[5]">
+                          <td colSpan={11} className="px-4 py-2">
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Calendar className="h-4 w-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                                <span className="text-xs sm:text-sm font-bold">{dateGroup.mainDate}</span>
+                                {dateGroup.weekday && (
+                                  <span className="text-xs text-muted font-medium">({dateGroup.weekday})</span>
+                                )}
+                                {dateGroup.isToday && (
+                                  <span className="text-[10px] uppercase font-extrabold px-1.5 py-0.5 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20">
+                                    Today
+                                  </span>
+                                )}
+                                {dateGroup.isYesterday && (
+                                  <span className="text-[10px] uppercase font-extrabold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                    Yesterday
+                                  </span>
+                                )}
+                                <span className="text-muted text-[11px] font-normal ml-1">
+                                  ({dateGroup.totalUsersCount} {dateGroup.totalUsersCount === 1 ? "executive" : "executives"} · {dateGroup.totalExpensesCount} {dateGroup.totalExpensesCount === 1 ? "claim" : "claims"})
+                                </span>
+                              </div>
+                              <div className="text-right text-xs sm:text-sm font-extrabold text-foreground whitespace-nowrap">
+                                <span className="text-[11px] text-muted font-normal mr-1.5">Daily Total:</span>
+                                ₹{formatMoney(dateGroup.totalAmount)}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
 
-                    let rawAtts: any[] = [];
-                    if (Array.isArray(e.attachments) && e.attachments.length > 0) {
-                      rawAtts = e.attachments;
-                    } else if (e.receipt_attachment) {
-                      rawAtts = [e.receipt_attachment];
-                    }
+                        {/* User Groups under this date */}
+                        {dateGroup.userGroups.map((userGroup) => (
+                          <Fragment key={`${dateGroup.dateKey}__${userGroup.userId}__${userGroup.workPlanId || "direct"}`}>
+                            {/* User Sub-Header Row */}
+                            <tr className="border-b border-border/70 bg-card hover:bg-surface-muted/20">
+                              <td colSpan={11} className="px-5 py-2">
+                                <div className="flex items-center justify-between gap-3 flex-wrap">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <div className="h-5 w-5 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 text-[10px] font-bold flex items-center justify-center shrink-0">
+                                      {userGroup.userName.charAt(0).toUpperCase()}
+                                    </div>
+                                    <span className="font-bold text-xs text-foreground">{userGroup.userName}</span>
+                                    <span className="text-[11px] text-muted font-normal">
+                                      ({userGroup.expenses.length} {userGroup.expenses.length === 1 ? "claim" : "claims"})
+                                    </span>
+                                    <div className="ml-2">
+                                      {userGroup.workPlan ? (
+                                        renderWorkPlanBadge(userGroup.workPlan)
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-muted italic bg-surface-muted/50 border border-border/50">
+                                          Direct Claims (No Work Plan)
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="text-xs font-bold text-foreground whitespace-nowrap">
+                                    <span className="text-[10px] text-muted font-normal mr-1.5">User Total:</span>
+                                    ₹{formatMoney(userGroup.totalAmount)}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
 
-                    const attachmentsList = rawAtts
-                      .map((attItem: any, attIdx: number) => {
-                        if (typeof attItem === "string") {
+                            {/* User Claims */}
+                            {userGroup.expenses.map((e, idx) => {
+                              const isBike = e.category === "Travel" && e.sub_category === "Private Bike";
+                              const startKm = e.start_reading ?? null;
+                              const closeKm = e.closing_reading ?? null;
+                              const odoText =
+                                startKm != null && closeKm != null
+                                  ? `${startKm.toLocaleString()} → ${closeKm.toLocaleString()} (${(closeKm - startKm).toLocaleString()} KM${isBike ? " @ ₹3.5" : ""})`
+                                  : "—";
+
+                              const rawAtts = (Array.isArray(e.attachments) && e.attachments.length > 0)
+                                ? e.attachments
+                                : e.receipt_attachment
+                                ? [e.receipt_attachment]
+                                : [];
+                              const attachmentsList = rawAtts
+                                .map((attItem: any, attIdx: number) => {
+                                  if (typeof attItem === "string") {
+                                    return {
+                                      original_name: `Attachment #${attIdx + 1}`,
+                                      filename: `Attachment #${attIdx + 1}`,
+                                      name: `Attachment #${attIdx + 1}`,
+                                      url: `/api/work-planner/attachments/${attItem}/preview`,
+                                      mime_type: "",
+                                      mime: "",
+                                    };
+                                  }
+                                  const id =
+                                    attItem?._id || attItem?.attachment_id || attItem?.file_id || attItem?.id;
+                                  const resolvedUrl =
+                                    typeof attItem?.url === "string"
+                                      ? attItem.url
+                                      : (attItem?.url && typeof attItem.url.url === "string")
+                                      ? attItem.url.url
+                                      : id
+                                      ? `/api/work-planner/attachments/${id}/preview`
+                                      : "";
+                                  const name =
+                                    attItem?.original_name ||
+                                    attItem?.filename ||
+                                    attItem?.name ||
+                                    `Attachment #${attIdx + 1}`;
+                                  const mime = attItem?.mime_type || attItem?.mime || "";
+                                  return {
+                                    original_name: name,
+                                    filename: name,
+                                    name,
+                                    url: resolvedUrl,
+                                    mime_type: mime,
+                                    mime,
+                                  };
+                                })
+                                .filter((a) => Boolean(a.url));
+
+                              return (
+                                <tr
+                                  key={e._id || e.id || idx}
+                                  className="hover:bg-surface-muted/60 transition group"
+                                >
+                                  <td className="border-r border-border/60 px-3 py-2 text-center text-muted font-mono font-medium bg-surface-muted/30 group-hover:bg-surface-muted">
+                                    {idx + 1}
+                                  </td>
+                                  <td className="border-r border-border/60 px-3 py-2 whitespace-nowrap">
+                                    <span className="rounded bg-teal-500/10 text-teal-600 dark:text-teal-400 px-2 py-0.5 text-[11px] font-bold">
+                                      {e.category || "Other"}
+                                    </span>
+                                  </td>
+                                  <td className="border-r border-border/60 px-3 py-2 text-muted whitespace-nowrap">
+                                    {e.sub_category || "—"}
+                                  </td>
+                                  <td className="border-r border-border/60 px-3 py-2 text-right font-bold text-foreground tabular-nums">
+                                    ₹{formatMoney(e.amount)}
+                                  </td>
+                                  <td className="border-r border-border/60 px-3 py-2 text-muted whitespace-nowrap">
+                                    {e.payment_mode || "Cash"}
+                                  </td>
+                                  <td className="border-r border-border/60 px-3 py-2 text-foreground truncate max-w-[160px]">
+                                    {e.vendor_name || "—"}
+                                  </td>
+                                  <td className="border-r border-border/60 px-3 py-2 font-mono text-muted whitespace-nowrap">
+                                    {e.bill_number || "—"}
+                                  </td>
+                                  <td className="border-r border-border/60 px-3 py-2 text-muted font-mono text-[11px] whitespace-nowrap">
+                                    {odoText}
+                                  </td>
+                                  <td className="border-r border-border/60 px-3 py-2 text-center whitespace-nowrap">
+                                    {attachmentsList.length > 0 && attachmentsList[0]?.url ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const a0 = attachmentsList[0];
+                                          openPreview({
+                                            name: a0.original_name || a0.filename || (a0 as any).name || "Expense Attachment",
+                                            url: typeof a0.url === "string" ? a0.url : "",
+                                            mime: a0.mime_type || (a0 as any).mime,
+                                          });
+                                        }}
+                                        className="inline-flex items-center gap-1 rounded bg-teal-500/10 hover:bg-teal-500/20 px-2 py-0.5 text-[11px] font-bold text-teal-600 dark:text-teal-400 transition"
+                                        title="Click to preview attachment"
+                                      >
+                                        <Eye className="h-3 w-3" />
+                                        {attachmentsList.length} file{attachmentsList.length > 1 ? "s" : ""}
+                                      </button>
+                                    ) : (
+                                      <span className="text-muted">—</span>
+                                    )}
+                                  </td>
+                                  <td className="border-r border-border/60 px-3 py-2 whitespace-nowrap">
+                                    {renderExpenseStatusBadge(e.status)}
+                                  </td>
+                                  <td className="px-3 py-2 text-muted truncate max-w-[250px]">
+                                    {e.description || "—"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+
+                            {/* User Subtotal row if > 1 claim */}
+                            {userGroup.expenses.length > 1 && (
+                              <tr className="bg-surface-muted/30 border-b border-border/60 text-xs">
+                                <td colSpan={3} className="px-3 py-1.5 text-right font-semibold text-muted">
+                                  Subtotal — {userGroup.userName}:
+                                </td>
+                                <td className="px-3 py-1.5 text-right font-extrabold text-foreground tabular-nums whitespace-nowrap">
+                                  ₹{formatMoney(userGroup.totalAmount)}
+                                </td>
+                                <td colSpan={7} />
+                              </tr>
+                            )}
+                          </Fragment>
+                        ))}
+
+                        {/* Date Total Footer if > 1 user on this date */}
+                        {dateGroup.totalUsersCount > 1 && (
+                          <tr className="bg-surface-muted/60 border-b-2 border-border text-xs font-bold">
+                            <td colSpan={3} className="px-3 py-2 text-right text-foreground">
+                              Daily Total — {dateGroup.mainDate}:
+                            </td>
+                            <td className="px-3 py-2 text-right font-extrabold text-foreground tabular-nums whitespace-nowrap">
+                              ₹{formatMoney(dateGroup.totalAmount)}
+                            </td>
+                            <td colSpan={7} />
+                          </tr>
+                        )}
+                      </Fragment>
+                    ))
+                  ) : (
+                    filteredClaims.map((e, idx) => {
+                      const exec = resolveExpenseSalesUser(e);
+                      const isBike = e.category === "Travel" && e.sub_category === "Private Bike";
+                      const startKm = e.start_reading ?? null;
+                      const closeKm = e.closing_reading ?? null;
+                      const odoText =
+                        startKm != null && closeKm != null
+                          ? `${startKm.toLocaleString()} → ${closeKm.toLocaleString()} (${(closeKm - startKm).toLocaleString()} KM${isBike ? " @ ₹3.5" : ""})`
+                          : "—";
+
+                      const rawAtts = (Array.isArray(e.attachments) && e.attachments.length > 0)
+                        ? e.attachments
+                        : e.receipt_attachment
+                        ? [e.receipt_attachment]
+                        : [];
+                      const attachmentsList = rawAtts
+                        .map((attItem: any, attIdx: number) => {
+                          if (typeof attItem === "string") {
+                            return {
+                              original_name: `Attachment #${attIdx + 1}`,
+                              filename: `Attachment #${attIdx + 1}`,
+                              name: `Attachment #${attIdx + 1}`,
+                              url: `/api/work-planner/attachments/${attItem}/preview`,
+                              mime_type: "",
+                              mime: "",
+                            };
+                          }
+                          const id =
+                            attItem?._id || attItem?.attachment_id || attItem?.file_id || attItem?.id;
+                          const resolvedUrl =
+                            typeof attItem?.url === "string"
+                              ? attItem.url
+                              : (attItem?.url && typeof attItem.url.url === "string")
+                              ? attItem.url.url
+                              : id
+                              ? `/api/work-planner/attachments/${id}/preview`
+                              : "";
+                          const name =
+                            attItem?.original_name ||
+                            attItem?.filename ||
+                            attItem?.name ||
+                            `Attachment #${attIdx + 1}`;
+                          const mime = attItem?.mime_type || attItem?.mime || "";
                           return {
-                            original_name: `Attachment #${attIdx + 1}`,
-                            filename: `Attachment #${attIdx + 1}`,
-                            name: `Attachment #${attIdx + 1}`,
-                            url: `/api/work-planner/attachments/${attItem}/preview`,
-                            mime_type: "",
-                            mime: "",
+                            original_name: name,
+                            filename: name,
+                            name,
+                            url: resolvedUrl,
+                            mime_type: mime,
+                            mime,
                           };
-                        }
-                        const id =
-                          attItem?._id || attItem?.attachment_id || attItem?.file_id || attItem?.id;
-                        const resolvedUrl =
-                          typeof attItem?.url === "string"
-                            ? attItem.url
-                            : (attItem?.url && typeof attItem.url.url === "string")
-                            ? attItem.url.url
-                            : id
-                            ? `/api/work-planner/attachments/${id}/preview`
-                            : "";
-                        const name =
-                          attItem?.original_name ||
-                          attItem?.filename ||
-                          attItem?.name ||
-                          `Attachment #${attIdx + 1}`;
-                        const mime = attItem?.mime_type || attItem?.mime || "";
-                        return {
-                          original_name: name,
-                          filename: name,
-                          name,
-                          url: resolvedUrl,
-                          mime_type: mime,
-                          mime,
-                        };
-                      })
-                      .filter((a) => Boolean(a.url));
+                        })
+                        .filter((a) => Boolean(a.url));
 
-                    return (
-                      <tr
-                        key={e._id || e.id || idx}
-                        className="hover:bg-surface-muted/60 transition group"
-                      >
-                        <td className="border-r border-border/60 px-3 py-2 text-center text-muted font-mono font-medium bg-surface-muted/30 group-hover:bg-surface-muted">
-                          {idx + 1}
-                        </td>
-                        <td className="border-r border-border/60 px-3 py-2 font-medium text-foreground whitespace-nowrap">
-                          {formatPlanDate(e.expense_date)}
-                        </td>
-                        <td className="border-r border-border/60 px-3 py-2 font-semibold text-foreground whitespace-nowrap">
-                          {exec}
-                        </td>
-                        <td className="border-r border-border/60 px-3 py-2 whitespace-nowrap">
-                          <span className="rounded bg-teal-500/10 text-teal-600 dark:text-teal-400 px-2 py-0.5 text-[11px] font-bold">
-                            {e.category || "Other"}
-                          </span>
-                        </td>
-                        <td className="border-r border-border/60 px-3 py-2 text-muted whitespace-nowrap">
-                          {e.sub_category || "—"}
-                        </td>
-                        <td className="border-r border-border/60 px-3 py-2 text-right font-bold text-foreground tabular-nums">
-                          ₹{formatMoney(e.amount)}
-                        </td>
-                        <td className="border-r border-border/60 px-3 py-2 text-muted whitespace-nowrap">
-                          {e.payment_mode || "Cash"}
-                        </td>
-                        <td className="border-r border-border/60 px-3 py-2 text-foreground truncate max-w-[160px]">
-                          {e.vendor_name || "—"}
-                        </td>
-                        <td className="border-r border-border/60 px-3 py-2 font-mono text-muted whitespace-nowrap">
-                          {e.bill_number || "—"}
-                        </td>
-                        <td className="border-r border-border/60 px-3 py-2 text-muted font-mono text-[11px] whitespace-nowrap">
-                          {odoText}
-                        </td>
-                        <td className="border-r border-border/60 px-3 py-2 text-center whitespace-nowrap">
-                          {attachmentsList.length > 0 && attachmentsList[0]?.url ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const a0 = attachmentsList[0];
-                                openPreview({
-                                  name: a0.original_name || a0.filename || (a0 as any).name || "Expense Attachment",
-                                  url: typeof a0.url === "string" ? a0.url : "",
-                                  mime: a0.mime_type || (a0 as any).mime,
-                                });
-                              }}
-                              className="inline-flex items-center gap-1 rounded bg-teal-500/10 hover:bg-teal-500/20 px-2 py-0.5 text-[11px] font-bold text-teal-600 dark:text-teal-400 transition"
-                              title="Click to preview attachment"
-                            >
-                              <Eye className="h-3 w-3" />
-                              {attachmentsList.length} file{attachmentsList.length > 1 ? "s" : ""}
-                            </button>
-                          ) : (
-                            <span className="text-muted">—</span>
-                          )}
-                        </td>
-                        <td className="border-r border-border/60 px-3 py-2 whitespace-nowrap">
-                          {renderExpenseStatusBadge(e.status)}
-                        </td>
-                        <td className="px-3 py-2 text-muted truncate max-w-[250px]">
-                          {e.description || "—"}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                      return (
+                        <tr
+                          key={e._id || e.id || idx}
+                          className="hover:bg-surface-muted/60 transition group"
+                        >
+                          <td className="border-r border-border/60 px-3 py-2 text-center text-muted font-mono font-medium bg-surface-muted/30 group-hover:bg-surface-muted">
+                            {idx + 1}
+                          </td>
+                          <td className="border-r border-border/60 px-3 py-2 font-medium text-foreground whitespace-nowrap">
+                            {formatPlanDate(e.expense_date)}
+                          </td>
+                          <td className="border-r border-border/60 px-3 py-2 font-semibold text-foreground whitespace-nowrap">
+                            {exec}
+                          </td>
+                          <td className="border-r border-border/60 px-3 py-2">
+                            {renderWorkPlanBadge(e.work_plan)}
+                          </td>
+                          <td className="border-r border-border/60 px-3 py-2 whitespace-nowrap">
+                            <span className="rounded bg-teal-500/10 text-teal-600 dark:text-teal-400 px-2 py-0.5 text-[11px] font-bold">
+                              {e.category || "Other"}
+                            </span>
+                          </td>
+                          <td className="border-r border-border/60 px-3 py-2 text-muted whitespace-nowrap">
+                            {e.sub_category || "—"}
+                          </td>
+                          <td className="border-r border-border/60 px-3 py-2 text-right font-bold text-foreground tabular-nums">
+                            ₹{formatMoney(e.amount)}
+                          </td>
+                          <td className="border-r border-border/60 px-3 py-2 text-muted whitespace-nowrap">
+                            {e.payment_mode || "Cash"}
+                          </td>
+                          <td className="border-r border-border/60 px-3 py-2 text-foreground truncate max-w-[160px]">
+                            {e.vendor_name || "—"}
+                          </td>
+                          <td className="border-r border-border/60 px-3 py-2 font-mono text-muted whitespace-nowrap">
+                            {e.bill_number || "—"}
+                          </td>
+                          <td className="border-r border-border/60 px-3 py-2 text-muted font-mono text-[11px] whitespace-nowrap">
+                            {odoText}
+                          </td>
+                          <td className="border-r border-border/60 px-3 py-2 text-center whitespace-nowrap">
+                            {attachmentsList.length > 0 && attachmentsList[0]?.url ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const a0 = attachmentsList[0];
+                                  openPreview({
+                                    name: a0.original_name || a0.filename || (a0 as any).name || "Expense Attachment",
+                                    url: typeof a0.url === "string" ? a0.url : "",
+                                    mime: a0.mime_type || (a0 as any).mime,
+                                  });
+                                }}
+                                className="inline-flex items-center gap-1 rounded bg-teal-500/10 hover:bg-teal-500/20 px-2 py-0.5 text-[11px] font-bold text-teal-600 dark:text-teal-400 transition"
+                                title="Click to preview attachment"
+                              >
+                                <Eye className="h-3 w-3" />
+                                {attachmentsList.length} file{attachmentsList.length > 1 ? "s" : ""}
+                              </button>
+                            ) : (
+                              <span className="text-muted">—</span>
+                            )}
+                          </td>
+                          <td className="border-r border-border/60 px-3 py-2 whitespace-nowrap">
+                            {renderExpenseStatusBadge(e.status)}
+                          </td>
+                          <td className="px-3 py-2 text-muted truncate max-w-[250px]">
+                            {e.description || "—"}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             ) : activeTab === "advances" ? (

@@ -27,6 +27,12 @@ const DEFAULT_PORTALS = [
     description: 'Field staff travel & expense claims, tour advances, and passbook settlements',
     access_roles: ['super_admin', 'admin', 'finance'],
   },
+  {
+    name: 'User Management Portal',
+    code: 'user_manager',
+    description: 'Users, departments, roles, and access control',
+    access_roles: ['super_admin', 'admin'],
+  },
 ];
 
 async function listPortals(query = {}) {

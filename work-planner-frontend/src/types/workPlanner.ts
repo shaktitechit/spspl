@@ -95,26 +95,31 @@ export type WorkPlanExpenseAttachment = {
   key?: string;
 };
 
-export type WorkPlanExpenseRecord = {
+export interface WorkPlanDaySummary {
   _id?: string;
   id?: string;
-  work_plan?:
+  plan_date?: string;
+  plan_type?: string;
+  location?: string;
+  visit_count?: number;
+  work_count?: number;
+  task_count?: number;
+  status?: WorkPlanStatus | string;
+  remarks?: string;
+  sales_user?:
     | string
     | {
         _id?: string;
-        id?: string;
-        plan_date?: string;
-        location?: string;
-        status?: WorkPlanStatus;
-        sales_user?:
-          | string
-          | {
-              _id?: string;
-              name?: string;
-              email?: string;
-              department?: string;
-            };
+        name?: string;
+        email?: string;
+        department?: string;
       };
+}
+
+export type WorkPlanExpenseRecord = {
+  _id?: string;
+  id?: string;
+  work_plan?: string | WorkPlanDaySummary;
   work_plan_visit?:
     | string
     | {
@@ -296,6 +301,8 @@ export type PassbookLedgerEntry = {
   expense_id?: string;
   advance_id?: string;
   entry_type:
+    | "advance_requested"
+    | "advance_approved"
     | "advance_disbursement"
     | "advance_refund"
     | "advance_rejected"
@@ -352,6 +359,10 @@ export type ExecutivePassbookData = {
   opening_payment_entry?: number;
   opening_claim_receivable?: number;
   opening_net_position?: number;
+  lifetime_advance_balance?: number;
+  lifetime_payment_entry?: number;
+  lifetime_claim_receivable?: number;
+  lifetime_net_position?: number;
   entries: PassbookLedgerEntry[];
 };
 

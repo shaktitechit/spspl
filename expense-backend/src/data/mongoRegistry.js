@@ -146,6 +146,8 @@ function registerModels() {
         plan_date: { type: Date, index: true },
         sales_user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
         status: { type: String, index: true },
+        plan_type: { type: String, index: true },
+        location: { type: String, trim: true },
         remarks: { type: String, trim: true },
         deletedAt: { type: Date, default: null, index: true },
       },
@@ -153,6 +155,42 @@ function registerModels() {
     );
     workPlanSchema.plugin(softDeletePlugin);
     mongoose.model('WorkPlan', workPlanSchema);
+  }
+
+  // WorkPlanVisit schema
+  if (!mongoose.models.WorkPlanVisit) {
+    const workPlanVisitSchema = new mongoose.Schema(
+      {
+        work_plan: { type: mongoose.Schema.Types.ObjectId, ref: 'WorkPlan', index: true },
+        sales_user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
+        plan_date: { type: Date, index: true },
+        sequence: { type: Number },
+        party_name: { type: String, trim: true },
+        status: { type: String, index: true },
+        deletedAt: { type: Date, default: null, index: true },
+      },
+      { timestamps: true }
+    );
+    workPlanVisitSchema.plugin(softDeletePlugin);
+    mongoose.model('WorkPlanVisit', workPlanVisitSchema);
+  }
+
+  // WorkPlanWork schema (tasks)
+  if (!mongoose.models.WorkPlanWork) {
+    const workPlanWorkSchema = new mongoose.Schema(
+      {
+        work_plan: { type: mongoose.Schema.Types.ObjectId, ref: 'WorkPlan', index: true },
+        sales_user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
+        plan_date: { type: Date, index: true },
+        sequence: { type: Number },
+        title: { type: String, trim: true },
+        status: { type: String, index: true },
+        deletedAt: { type: Date, default: null, index: true },
+      },
+      { timestamps: true }
+    );
+    workPlanWorkSchema.plugin(softDeletePlugin);
+    mongoose.model('WorkPlanWork', workPlanWorkSchema);
   }
 
   // WorkPlanExpense / Expense schema
@@ -666,6 +704,8 @@ function registerModels() {
     Notification: mongoose.model('Notification'),
     ActivityLog: mongoose.model('ActivityLog'),
     WorkPlan: mongoose.model('WorkPlan'),
+    WorkPlanVisit: mongoose.model('WorkPlanVisit'),
+    WorkPlanWork: mongoose.model('WorkPlanWork'),
     WorkPlanExpense: mongoose.model('WorkPlanExpense'),
     Expense: mongoose.model('WorkPlanExpense'),
     WorkPlanTourAdvance: mongoose.model('WorkPlanTourAdvance'),

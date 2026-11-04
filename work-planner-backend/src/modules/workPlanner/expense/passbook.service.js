@@ -299,17 +299,24 @@ async function getExecutiveBalances(query = {}, actor) {
  */
 async function getExecutivePassbook(targetUserId, query = {}, actor) {
   const { User, WorkPlan, WorkPlanExpense, WorkPlanTourAdvance, WorkPlanExpenseSettlement } = getModels();
-  const targetId = String(targetUserId || userId(actor));
+  const rawTarget =
+    targetUserId && targetUserId !== 'me' && targetUserId !== 'null' && targetUserId !== 'undefined'
+      ? String(targetUserId)
+      : String(userId(actor) || '');
 
-  if (targetId !== String(userId(actor))) {
-    await assertAuthorityOverSalesUser(targetId, actor, 'view financial passbook for');
+  const actorId = String(userId(actor) || '');
+  if (rawTarget && rawTarget !== actorId) {
+    await assertAuthorityOverSalesUser(rawTarget, actor, 'view financial passbook for');
   }
 
-  const userDoc = await User.findById(asObjectId(targetId))
+  const userDoc = await User.findOne({
+    $or: [{ _id: asObjectId(rawTarget) }, { id: rawTarget }].filter(Boolean),
+  })
     .select('_id name email department phone')
     .lean();
 
-  const userMatchIds = buildMatchUserIds([targetId]);
+  const finalTargetId = userDoc ? String(userDoc._id) : rawTarget;
+  const userMatchIds = buildMatchUserIds([finalTargetId, rawTarget]);
   const userPlanIds = await WorkPlan.find({
     sales_user: { $in: userMatchIds },
     deletedAt: null,
@@ -329,22 +336,19 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
       deletedAt: null,
       $or: [
         { sales_user: { $in: userMatchIds } },
-        {
-          $and: [
-            { sales_user: { $in: [null, undefined] } },
-            { work_plan: { $in: userPlanIds } },
-          ],
-        },
+        { work_plan: { $in: userPlanIds } },
       ],
     })
-      .populate('work_plan', 'plan_date title sales_user')
+      .populate('work_plan', 'plan_date title sales_user plan_type location')
       .populate('approved_by', 'name email')
       .populate('receipt_attachment')
       .populate('attachments')
       .lean(),
     WorkPlanExpenseSettlement.find({
-      sales_user: { $in: userMatchIds },
       deletedAt: null,
+      $or: [
+        { sales_user: { $in: userMatchIds } },
+      ],
     })
       .populate('settled_by', 'name email')
       .lean(),
@@ -352,43 +356,103 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
 
   const rawLedger = [];
 
-  // 1. Tour Advances: Disbursements and Refunds
+  // 1. Tour Advances: Requested, Approved, Disbursed, Refunds, Rejected
   for (const adv of advances) {
+    const advRef = adv.advance_number || `ADV-${String(adv._id).slice(-6).toUpperCase()}`;
+
+    // A. Pending Requisition
+    if (adv.status === 'pending') {
+      const reqDate = adv.request_date || adv.createdAt;
+      const reqAmount = Number(adv.amount || 0);
+      rawLedger.push({
+        id: `ADV-REQ-${adv._id}`,
+        advance_id: String(adv._id),
+        entry_type: 'advance_requested',
+        advance_status: 'pending',
+        date: reqDate,
+        reference: advRef,
+        title: `Tour Advance Requested (${adv.purpose || 'Tour'})`,
+        amount: reqAmount,
+        impact_advance_balance: 0,
+        impact_payment_entry: 0,
+        impact_claim_receivable: 0,
+        payment_method: 'Advance Request',
+        actor_name: userDoc?.name || 'Self',
+        details: adv.purpose || 'Tour advance request pending approval',
+        attachments: adv.attachments || [],
+        attachment_details: adv.attachment_details || (Array.isArray(adv.attachments) ? adv.attachments : []),
+      });
+    }
+
+    // B. Approved Awaiting Disbursement
+    if (adv.status === 'approved' && !adv.disbursed_at) {
+      const appDate = adv.approved_at || adv.updatedAt || adv.createdAt;
+      const appAmount = Number(adv.amount || 0);
+      rawLedger.push({
+        id: `ADV-APP-${adv._id}`,
+        advance_id: String(adv._id),
+        entry_type: 'advance_approved',
+        advance_status: 'approved',
+        date: appDate,
+        reference: advRef,
+        title: `Tour Advance Approved (${adv.purpose || 'Tour'})`,
+        amount: appAmount,
+        impact_advance_balance: 0,
+        impact_payment_entry: 0,
+        impact_claim_receivable: 0,
+        payment_method: 'Approved (Pending Payout)',
+        actor_name: adv.approved_by?.name || 'Manager',
+        details: 'Tour advance approved — awaiting disbursement by treasury / finance',
+        attachments: adv.attachments || [],
+        attachment_details: adv.attachment_details || (Array.isArray(adv.attachments) ? adv.attachments : []),
+      });
+    }
+
+    // C. Disbursed Advance
     if (adv.disbursed_at || ['disbursed', 'settled', 'recovered', 'refunded'].includes(adv.status)) {
       const disbDate = adv.disbursed_at || adv.updatedAt || adv.createdAt;
       const disbAmount = adv.disbursed_amount || adv.amount || 0;
       if (disbAmount > 0) {
         rawLedger.push({
           id: `ADV-DISB-${adv._id}`,
+          advance_id: String(adv._id),
           entry_type: 'advance_disbursement',
+          advance_status: adv.status,
           date: disbDate,
-          reference: adv.advance_number || `ADV-${String(adv._id).slice(-6).toUpperCase()}`,
+          reference: advRef,
           title: `Tour Advance Disbursed (${adv.purpose || 'Tour'})`,
           amount: disbAmount,
           impact_advance_balance: +disbAmount,
+          impact_payment_entry: 0,
           impact_claim_receivable: 0,
           payment_method: adv.payment_method || 'Bank Transfer',
           transaction_reference: adv.transaction_reference,
           actor_name: adv.disbursed_by?.name || 'Finance Authority',
           details: adv.disbursement_notes || adv.purpose || 'Tour advance funds disbursed',
+          attachments: adv.disbursement_attachments || adv.attachments || [],
+          attachment_details: adv.disbursement_attachments || adv.attachment_details || [],
         });
       }
     }
 
+    // D. Refunds
     if (Array.isArray(adv.refunds) && adv.refunds.length > 0) {
       for (const ref of adv.refunds) {
         const refAmount = ref.amount || 0;
         if (refAmount > 0) {
           rawLedger.push({
             id: `ADV-REF-${adv._id}-${ref._id || ref.refund_date}`,
+            advance_id: String(adv._id),
             entry_type: 'advance_refund',
+            advance_status: 'refunded',
             date: ref.refund_date || ref.accepted_at || adv.updatedAt,
-            reference: adv.advance_number || `ADV-${String(adv._id).slice(-6).toUpperCase()}`,
+            reference: advRef,
             title: `Tour Advance Refund (${adv.advance_number || 'Advance'})`,
             amount: refAmount,
             impact_advance_balance: -refAmount,
+            impact_payment_entry: 0,
             impact_claim_receivable: 0,
-            payment_method: ref.payment_method || 'bank_transfer',
+            payment_method: ref.payment_method || 'Bank Transfer',
             transaction_reference: ref.transaction_reference,
             actor_name: ref.accepted_by ? (ref.accepted_by?.name || 'Manager / Finance') : 'Company',
             details: ref.notes || 'Unspent advance refunded back to company',
@@ -403,11 +467,13 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
         id: `ADV-REF-${adv._id}`,
         advance_id: String(adv._id),
         entry_type: 'advance_refund',
+        advance_status: 'refunded',
         date: adv.refunded_at || adv.updatedAt || adv.createdAt,
-        reference: adv.advance_number || `ADV-${String(adv._id).slice(-6).toUpperCase()}`,
+        reference: advRef,
         title: `Tour Advance Refund (${adv.advance_number || 'Advance'})`,
         amount: refAmount,
         impact_advance_balance: -refAmount,
+        impact_payment_entry: 0,
         impact_claim_receivable: 0,
         payment_method: adv.refund_reference ? 'Bank / UPI' : 'Refund',
         transaction_reference: adv.refund_reference,
@@ -416,7 +482,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
       });
     }
 
-    // 3. Rejected Advance event
+    // E. Rejected Advance
     if (adv.status === 'rejected') {
       const rejDate = adv.approved_at || adv.updatedAt || adv.createdAt;
       const rejAmount = Number(adv.amount || 0);
@@ -426,10 +492,11 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
         entry_type: 'advance_rejected',
         advance_status: 'rejected',
         date: rejDate,
-        reference: adv.advance_number || `ADV-${String(adv._id).slice(-6).toUpperCase()}`,
+        reference: advRef,
         title: `Rejected Tour Advance (${adv.purpose || 'Advance'})`,
         amount: rejAmount,
         impact_advance_balance: 0,
+        impact_payment_entry: 0,
         impact_claim_receivable: 0,
         payment_method: 'Advance Request',
         actor_name: adv.approved_by?.name || 'Manager / Authority',
@@ -453,7 +520,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
   for (const rawExp of expenses) {
     const exp = (await withFreshExpenseAttachmentUrls(rawExp).catch(() => rawExp)) || rawExp;
     const effectiveOwner = resolveEffectiveSalesUser(exp, exp.work_plan);
-    if (effectiveOwner && effectiveOwner !== targetId) continue;
+    if (effectiveOwner && !userMatchIds.map(String).includes(String(effectiveOwner))) continue;
 
     const allAtts = [];
     const seenAttIds = new Set();
@@ -485,6 +552,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
         title: `Draft Expense Claim (${exp.category || 'General'})`,
         amount: exp.amount,
         impact_advance_balance: 0,
+        impact_payment_entry: 0,
         impact_claim_receivable: 0,
         actor_name: userDoc?.name || 'Self',
         details: exp.description || exp.category || 'Draft field expense claim (Unsubmitted)',
@@ -508,6 +576,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
         title: `Submitted Expense Claim (${exp.category || 'General'})`,
         amount: exp.amount,
         impact_advance_balance: 0,
+        impact_payment_entry: 0,
         impact_claim_receivable: 0,
         actor_name: userDoc?.name || 'Self',
         details: exp.description || exp.category || 'Field expense claim submitted for approval',
@@ -531,6 +600,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
         title: `Approved Expense Claim (${exp.category || 'General'})`,
         amount: exp.amount,
         impact_advance_balance: 0,
+        impact_payment_entry: 0,
         impact_claim_receivable: +exp.amount,
         actor_name: exp.approved_by?.name || 'Manager',
         details: exp.description || exp.category || 'Verified field expense claim',
@@ -553,6 +623,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
         title: `Rejected Expense Claim (${exp.category || 'General'})`,
         amount: exp.amount,
         impact_advance_balance: 0,
+        impact_payment_entry: 0,
         impact_claim_receivable: 0,
         actor_name: exp.approved_by?.name || 'Manager',
         details: exp.rejection_reason ? `Rejected: ${exp.rejection_reason}` : (exp.description || 'Expense claim rejected'),
@@ -614,8 +685,36 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
     });
   }
 
-  // Sort chronological
-  rawLedger.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  // Chronological sort with type priority so on matching dates/timestamps:
+  // Advances disbursed first, then expenses approved, then settlements applied, then refunds
+  const typePriority = {
+    advance_disbursement: 1,
+    advance_approved: 2,
+    advance_requested: 3,
+    expense_draft: 4,
+    expense_submitted: 5,
+    expense_approved: 6,
+    settlement_voucher: 7,
+    payment_entry: 8,
+    advance_refund: 9,
+    advance_rejected: 10,
+    expense_rejected: 11,
+  };
+  rawLedger.sort((a, b) => {
+    const diff = new Date(a.date).getTime() - new Date(b.date).getTime();
+    if (diff !== 0) return diff;
+    return (typePriority[a.entry_type] || 50) - (typePriority[b.entry_type] || 50);
+  });
+
+  // Calculate Lifetime Balances across entire history
+  let lifetimeAdvance = 0;
+  let lifetimePaymentEntry = 0;
+  let lifetimeReceivable = 0;
+  for (const item of rawLedger) {
+    lifetimeAdvance += item.impact_advance_balance || 0;
+    lifetimePaymentEntry += item.impact_payment_entry || 0;
+    lifetimeReceivable += item.impact_claim_receivable || 0;
+  }
 
   // Handle Date Filtering with Opening Balance
   const fromDate = query.from_date || query.from ? startOfDay(query.from_date || query.from) : null;
@@ -644,13 +743,14 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
       continue;
     }
 
+    if (toDate && itemDate > toDate) {
+      // Future item beyond date filter: does not affect filtered period balance or entries
+      continue;
+    }
+
     runningAdvance += item.impact_advance_balance || 0;
     runningPaymentEntry += item.impact_payment_entry || 0;
     runningReceivable += item.impact_claim_receivable || 0;
-
-    if (toDate && itemDate > toDate) {
-      continue;
-    }
 
     const runningNet = Math.round((runningReceivable - runningAdvance - runningPaymentEntry) * 100) / 100;
 
@@ -664,7 +764,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
   }
 
   return {
-    sales_user: toPlain(userDoc) || { _id: targetId, name: 'Executive' },
+    sales_user: toPlain(userDoc) || { _id: finalTargetId, name: 'Executive' },
     opening_advance_balance: Math.round(openingAdvance * 100) / 100,
     opening_payment_entry: Math.round(openingPaymentEntry * 100) / 100,
     opening_claim_receivable: Math.round(openingReceivable * 100) / 100,
@@ -674,6 +774,10 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
     total_payment_entries: Math.round(runningPaymentEntry * 100) / 100,
     current_claim_receivable: Math.round(runningReceivable * 100) / 100,
     current_net_position: Math.round((runningReceivable - runningAdvance - runningPaymentEntry) * 100) / 100,
+    lifetime_advance_balance: Math.round(lifetimeAdvance * 100) / 100,
+    lifetime_payment_entry: Math.round(lifetimePaymentEntry * 100) / 100,
+    lifetime_claim_receivable: Math.round(lifetimeReceivable * 100) / 100,
+    lifetime_net_position: Math.round((lifetimeReceivable - lifetimeAdvance - lifetimePaymentEntry) * 100) / 100,
     draft_claim_amount: Math.round(draftClaimsAmount * 100) / 100,
     draft_claim_count: draftClaimsCount,
     submitted_claim_amount: Math.round(submittedClaimsAmount * 100) / 100,

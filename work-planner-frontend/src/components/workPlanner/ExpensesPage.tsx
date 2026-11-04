@@ -18,6 +18,7 @@ import {
   User,
   Plus,
   Clock,
+  CheckCircle,
   XCircle,
   FileText,
   Download,
@@ -50,14 +51,14 @@ export function ExpensesPage() {
   const session = readSessionFromStorage();
   const currentUser = session?.user;
   const sessionToken = session?.token;
-  const userId = currentUser?._id || "";
+  const userId = String(currentUser?._id || (currentUser as any)?.id || "");
 
-  // Filter States - Default to current month
+  // Filter States - Default to all time to display complete chronological passbook
   const defaultRange = useMemo(() => calculateDateRange("current_month"), []);
-  const [fromDate, setFromDate] = useState<string>(defaultRange.from);
-  const [toDate, setToDate] = useState<string>(defaultRange.to);
+  const [fromDate, setFromDate] = useState<string>("");
+  const [toDate, setToDate] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<"all" | "advance" | "payment" | "expense" | "settlement">("all");
-  const [advanceSubFilter, setAdvanceSubFilter] = useState<"all" | "disbursed" | "refund" | "rejected">("all");
+  const [advanceSubFilter, setAdvanceSubFilter] = useState<"all" | "disbursed" | "pending" | "refund" | "rejected">("all");
   const [claimSubFilter, setClaimSubFilter] = useState<"all" | "draft" | "submitted" | "approved" | "rejected">("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
@@ -130,6 +131,7 @@ export function ExpensesPage() {
   const counts = useMemo(() => {
     let advances = 0;
     let advancesDisbursed = 0;
+    let advancesPending = 0;
     let advancesRefund = 0;
     let advancesRejected = 0;
     let payments = 0;
@@ -143,12 +145,16 @@ export function ExpensesPage() {
     for (const e of rawEntries) {
       if (
         e.entry_type === "advance_disbursement" ||
+        e.entry_type === "advance_requested" ||
+        e.entry_type === "advance_approved" ||
         e.entry_type === "advance_refund" ||
         e.entry_type === "advance_rejected"
       ) {
         advances++;
         if (e.entry_type === "advance_disbursement") {
           advancesDisbursed++;
+        } else if (e.entry_type === "advance_requested" || e.entry_type === "advance_approved") {
+          advancesPending++;
         } else if (e.entry_type === "advance_refund") {
           advancesRefund++;
         } else if (e.entry_type === "advance_rejected") {
@@ -181,6 +187,7 @@ export function ExpensesPage() {
       all: rawEntries.length,
       advances,
       advancesDisbursed,
+      advancesPending,
       advancesRefund,
       advancesRejected,
       payments,
@@ -201,11 +208,15 @@ export function ExpensesPage() {
       list = list.filter(
         (e) =>
           e.entry_type === "advance_disbursement" ||
+          e.entry_type === "advance_requested" ||
+          e.entry_type === "advance_approved" ||
           e.entry_type === "advance_refund" ||
           e.entry_type === "advance_rejected"
       );
       if (advanceSubFilter === "disbursed") {
         list = list.filter((e) => e.entry_type === "advance_disbursement");
+      } else if (advanceSubFilter === "pending") {
+        list = list.filter((e) => e.entry_type === "advance_requested" || e.entry_type === "advance_approved");
       } else if (advanceSubFilter === "refund") {
         list = list.filter((e) => e.entry_type === "advance_refund");
       } else if (advanceSubFilter === "rejected") {
@@ -403,7 +414,13 @@ export function ExpensesPage() {
         let typeLabel = "Transaction";
         let statusLabel = "POSTED";
 
-        if (e.entry_type === "advance_disbursement") {
+        if (e.entry_type === "advance_requested") {
+          typeLabel = "Advance Requested";
+          statusLabel = "PENDING";
+        } else if (e.entry_type === "advance_approved") {
+          typeLabel = "Advance Approved";
+          statusLabel = "APPROVED";
+        } else if (e.entry_type === "advance_disbursement") {
           typeLabel = "Advance Disbursed";
           statusLabel = "DISBURSED";
         } else if (e.entry_type === "advance_refund") {
@@ -973,6 +990,20 @@ export function ExpensesPage() {
             Disbursed ({counts.advancesDisbursed})
           </button>
 
+          {counts.advancesPending > 0 && (
+            <button
+              type="button"
+              onClick={() => setAdvanceSubFilter("pending")}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold whitespace-nowrap active:scale-95 transition cursor-pointer ${
+                advanceSubFilter === "pending"
+                  ? "bg-amber-600 text-white font-bold shadow-xs"
+                  : "bg-surface-muted text-muted hover:text-foreground hover:bg-card border border-border"
+              }`}
+            >
+              Pending ({counts.advancesPending})
+            </button>
+          )}
+
           {counts.advancesRefund > 0 && (
             <button
               type="button"
@@ -1107,7 +1138,49 @@ export function ExpensesPage() {
             No passbook transactions match the selected filters or date range.
           </div>
         ) : (
-          groupedByDate.map((group) => (
+          <div className="space-y-3">
+            {/* Opening Balance Banner when date filter is active */}
+            {(fromDate || toDate) && passbookData && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-2xl border border-primary/20 bg-primary/5 p-3.5 text-xs text-foreground">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="rounded-md bg-primary/20 px-2 py-0.5 text-[10px] font-bold text-primary uppercase">
+                    Opening Balance
+                  </span>
+                  <span className="text-muted text-[11px]">
+                    {fromDate ? `Prior to ${formatPlanDate(fromDate)}` : "Prior to filter period"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 flex-wrap text-[11px]">
+                  <span>
+                    Opening Adv: <strong className="text-purple-600 dark:text-purple-400 font-mono">{formatCurrency(passbookData.opening_advance_balance || 0)}</strong>
+                  </span>
+                  <span>
+                    Opening Claims: <strong className="text-sky-600 dark:text-sky-400 font-mono">{formatCurrency(passbookData.opening_claim_receivable || 0)}</strong>
+                  </span>
+                  <span>
+                    Opening Net:{" "}
+                    <strong
+                      className={`font-mono font-bold ${
+                        (passbookData.opening_net_position || 0) > 0
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : (passbookData.opening_net_position || 0) < 0
+                          ? "text-rose-600 dark:text-rose-400"
+                          : "text-foreground"
+                      }`}
+                    >
+                      {formatCurrency(Math.abs(passbookData.opening_net_position || 0))}
+                      {(passbookData.opening_net_position || 0) < 0
+                        ? " (Due Co.)"
+                        : (passbookData.opening_net_position || 0) > 0
+                        ? " (Due Empl)"
+                        : " (Balanced)"}
+                    </strong>
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {groupedByDate.map((group) => (
             <div key={group.dateKey} className="space-y-2">
               {/* Date Section Header */}
               <div className="flex items-center gap-3 px-1 pt-2">
@@ -1126,6 +1199,8 @@ export function ExpensesPage() {
 
               {/* Entries within this date */}
               {group.entries.map((entry) => {
+            const isAdvanceRequested = entry.entry_type === "advance_requested";
+            const isAdvanceApproved = entry.entry_type === "advance_approved";
             const isAdvanceDisburse = entry.entry_type === "advance_disbursement";
             const isAdvanceRefund = entry.entry_type === "advance_refund";
             const isAdvanceRejected = entry.entry_type === "advance_rejected";
@@ -1143,8 +1218,10 @@ export function ExpensesPage() {
               <div
                 key={entry.id}
                 className={`rounded-2xl border bg-card p-4 shadow-2xs hover:shadow-xs transition space-y-3 ${
-                  isExpenseSubmitted
+                  isExpenseSubmitted || isAdvanceRequested
                     ? "border-amber-500/30"
+                    : isAdvanceApproved
+                    ? "border-sky-500/30"
                     : isExpenseRejected || isAdvanceRejected
                     ? "border-rose-500/30"
                     : isExpenseDraft
@@ -1157,7 +1234,11 @@ export function ExpensesPage() {
                   <div className="flex items-center gap-3">
                     <div
                       className={`rounded-xl p-2.5 shrink-0 ${
-                        isAdvanceDisburse
+                        isAdvanceRequested
+                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                          : isAdvanceApproved
+                          ? "bg-sky-500/10 text-sky-600 dark:text-sky-400"
+                          : isAdvanceDisburse
                           ? "bg-purple-500/10 text-purple-600 dark:text-purple-400"
                           : isAdvanceRefund
                           ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
@@ -1176,7 +1257,11 @@ export function ExpensesPage() {
                           : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                       }`}
                     >
-                      {isAdvanceDisburse ? (
+                      {isAdvanceRequested ? (
+                        <Clock className="h-5 w-5" />
+                      ) : isAdvanceApproved ? (
+                        <CheckCircle className="h-5 w-5" />
+                      ) : isAdvanceDisburse ? (
                         <Wallet className="h-5 w-5" />
                       ) : isAdvanceRefund ? (
                         <RotateCcw className="h-5 w-5" />
@@ -1201,6 +1286,16 @@ export function ExpensesPage() {
                         <span className="text-xs sm:text-sm font-bold text-foreground">
                           {entry.title}
                         </span>
+                        {isAdvanceRequested && (
+                          <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase">
+                            Advance Requested
+                          </span>
+                        )}
+                        {isAdvanceApproved && (
+                          <span className="rounded-md bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold text-sky-600 dark:text-sky-400 uppercase">
+                            Advance Approved
+                          </span>
+                        )}
                         {isAdvanceRejected && (
                           <span className="rounded-md bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase">
                             Advance Rejected
@@ -1364,6 +1459,16 @@ export function ExpensesPage() {
                           (Advance Rejected — not added to advance in hand)
                         </span>
                       )}
+                      {isAdvanceRequested && (
+                        <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                          (Advance Requested — pending approval)
+                        </span>
+                      )}
+                      {isAdvanceApproved && (
+                        <span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-600 dark:text-sky-400">
+                          (Advance Approved — awaiting payout)
+                        </span>
+                      )}
                       {isExpenseSubmitted && (
                         <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
                           (Pending Approval — not added to receivable balance yet)
@@ -1401,7 +1506,8 @@ export function ExpensesPage() {
             );
           })}
             </div>
-          ))
+          ))}
+          </div>
         )}
       </div>
 

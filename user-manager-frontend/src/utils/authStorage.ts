@@ -44,15 +44,32 @@ function deleteCookie(name: string) {
   document.cookie = `${name}=; max-age=0; path=/`;
 }
 
-export function hasSuperAdminAccess(user: any): boolean {
+export function hasUserManagerPortalAccess(user: any): boolean {
   if (!user) return false;
-  if (user.department === "super_admin" || user.department === "admin") return true;
-  if (Array.isArray(user.role_codes) && (user.role_codes.includes("super_admin") || user.role_codes.includes("admin"))) return true;
-  if (Array.isArray(user.roles) && (user.roles.includes("super_admin") || user.roles.includes("admin"))) return true;
-  const portals = Array.isArray(user.portals) ? user.portals : (Array.isArray(user.portal_access) ? user.portal_access : []);
-  const p = portals.find((x: any) => x && (x.portal_code === "user_manager" || x.portal === "user_manager"));
-  if (p && Array.isArray(p.access_roles) && (p.access_roles.includes("super_admin") || p.access_roles.includes("admin"))) return true;
-  return false;
+  if (user.is_active === false || user.active === false) return false;
+
+  const portals = Array.isArray(user.portals)
+    ? user.portals
+    : Array.isArray(user.portal_access)
+    ? user.portal_access
+    : [];
+
+  const p = portals.find((x: any) => {
+    if (!x) return false;
+    const code = String(
+      x.portal_code ||
+      x.code ||
+      (typeof x.portal === "object" ? x.portal?.code || x.portal?.portal_code : x.portal) ||
+      ""
+    ).toLowerCase().trim().replace(/-/g, "_");
+    return code === "user_manager";
+  });
+
+  return Boolean(p);
+}
+
+export function hasSuperAdminAccess(user: any): boolean {
+  return hasUserManagerPortalAccess(user);
 }
 
 function parseJwtUser(token: string): AuthUser | null {
@@ -69,13 +86,13 @@ function parseJwtUser(token: string): AuthUser | null {
     );
     const decoded = JSON.parse(jsonPayload);
     return {
-      _id: decoded._id || decoded.id || "superadmin",
-      name: decoded.name || "Super Administrator",
-      email: decoded.email || "superadmin@example.com",
-      department: decoded.department || "super_admin",
-      roles: decoded.roles || ["super_admin"],
+      _id: decoded._id || decoded.id || decoded.sub || "user",
+      name: decoded.name || "User",
+      email: decoded.email || "",
+      department: decoded.department || "",
+      roles: decoded.roles || [],
       role_codes: decoded.role_codes || [],
-      portals: decoded.portals || [],
+      portals: decoded.portals || decoded.portal_access || [],
     } as any;
   } catch {
     return null;
@@ -132,18 +149,15 @@ export function readSessionFromStorage(): UserSession | null {
     const urlToken = urlParams.get("token");
     if (urlToken) {
       const userFromJwt = parseJwtUser(urlToken);
-      const session: UserSession = {
-        token: urlToken,
-        user: userFromJwt || {
-          _id: "super_admin",
-          name: "Super Administrator",
-          email: "superadmin@example.com",
-          department: "super_admin",
-        },
-      };
-      saveSessionToStorage(session);
-      window.history.replaceState({}, document.title, window.location.pathname);
-      return session;
+      if (userFromJwt && hasUserManagerPortalAccess(userFromJwt)) {
+        const session: UserSession = {
+          token: urlToken,
+          user: userFromJwt,
+        };
+        saveSessionToStorage(session);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return session;
+      }
     }
 
     purgeLegacyAuthStorage();
@@ -154,7 +168,7 @@ export function readSessionFromStorage(): UserSession | null {
 
     if (accessToken) {
       const userFromJwt = parseJwtUser(accessToken);
-      if (userFromJwt && hasSuperAdminAccess(userFromJwt)) {
+      if (userFromJwt && hasUserManagerPortalAccess(userFromJwt)) {
         return {
           token: accessToken,
           refreshExpiresAt,

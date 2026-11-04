@@ -8,6 +8,7 @@ import { AUTH_API } from "@session-auth/authApiPaths";
 import {
   applySessionAfterAuth,
   hasSuperAdminAccess,
+  hasUserManagerPortalAccess,
   saveSessionToStorage,
 } from "@/utils/authStorage";
 import { useTheme } from "@/hooks/useTheme";
@@ -82,6 +83,16 @@ export function SuperAdminLogin({
     loadCompanyBranding();
   }, [setThemeColor, setCustomPrimary]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      const err = sp.get("error");
+      if (err === "access_denied" || err === "unauthorized") {
+        setError("Access Denied: Only users with User Manager portal access can access this portal.");
+      }
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -108,9 +119,9 @@ export function SuperAdminLogin({
         throw new Error("Authentication failed: Missing session token.");
       }
 
-      if (!hasSuperAdminAccess(user)) {
+      if (!hasUserManagerPortalAccess(user)) {
         throw new Error(
-          "Access Denied: Only Super Admin accounts are authorized to sign into the User Management Dashboard.",
+          "Access Denied: Only users with User Manager portal access are authorized to sign in.",
         );
       }
 
@@ -188,14 +199,14 @@ export function SuperAdminLogin({
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-foreground">
-                Super Admin Email
+                Email Address
               </label>
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="superadmin@company.com"
+                placeholder="admin@company.com"
                 className="w-full rounded-xl border border-border bg-surface-muted px-4 py-2.5 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>

@@ -31,6 +31,9 @@ export type PartyDetailModalProps = {
   create?: boolean;
   open?: boolean;
   initialName?: string;
+  initialPhone?: string;
+  initialEmail?: string;
+  initialGst?: string;
   defaultPartyType?: (typeof PARTY_TYPE_OPTIONS)[number];
   /** When creating, load this party's fields into the form (new record on save). */
   duplicateFromId?: string | null;
@@ -38,6 +41,7 @@ export type PartyDetailModalProps = {
   initialTab?: "details" | "contacts" | "address";
   onSuccess?: (party: Record<string, unknown>) => void;
   onClose: () => void;
+  overlayClassName?: string;
 };
 
 const inputClass =
@@ -248,12 +252,16 @@ export function PartyDetailModal({
   create = false,
   open,
   initialName,
+  initialPhone,
+  initialEmail,
+  initialGst,
   defaultPartyType = "leads",
   duplicateFromId = null,
   portalHome,
   initialTab = "details",
   onSuccess,
   onClose,
+  overlayClassName,
 }: PartyDetailModalProps) {
   const isEditing = !create && partyId != null && partyId !== "";
   const isDuplicating = create && !!duplicateFromId;
@@ -295,12 +303,26 @@ export function PartyDetailModal({
         }),
       );
     } else if (create && !isDuplicating) {
+      const base = defaultPartyState(defaultPartyType);
+      if (initialPhone || initialEmail || initialName) {
+        base.contacts = [
+          {
+            ...emptyPartyContact(),
+            name: initialName || "Primary Contact",
+            email: initialEmail || "",
+            phone: initialPhone || "",
+          },
+        ];
+      }
+      if (initialGst) {
+        base.gst_no = initialGst;
+      }
       setForm({
-        ...defaultPartyState(defaultPartyType),
+        ...base,
         ...(initialName ? { party_name: initialName } : {}),
       });
     }
-  }, [rawParty, create, isDuplicating, sourcePartyId, initialName, defaultPartyType]);
+  }, [rawParty, create, isDuplicating, sourcePartyId, initialName, initialPhone, initialEmail, initialGst, defaultPartyType]);
 
   useEffect(() => {
     if (!show) {
@@ -308,14 +330,28 @@ export function PartyDetailModal({
       setActiveTab("details");
     } else {
       setActiveTab(initialTab);
-      if (create && !isDuplicating && initialName) {
+      if (create && !isDuplicating && (initialName || initialPhone || initialEmail || initialGst)) {
         setForm((prev) => ({
           ...prev,
-          party_name: prev.party_name || initialName,
+          party_name: prev.party_name || initialName || "",
+          ...(initialGst && !prev.gst_no ? { gst_no: initialGst } : {}),
+          ...((initialPhone || initialEmail) && (!prev.contacts?.[0]?.phone && !prev.contacts?.[0]?.email)
+            ? {
+                contacts: [
+                  {
+                    ...emptyPartyContact(),
+                    ...(prev.contacts?.[0] || {}),
+                    name: prev.contacts?.[0]?.name || initialName || "Primary Contact",
+                    phone: prev.contacts?.[0]?.phone || initialPhone || "",
+                    email: prev.contacts?.[0]?.email || initialEmail || "",
+                  },
+                ],
+              }
+            : {}),
         }));
       }
     }
-  }, [show, initialTab, create, isDuplicating, initialName, defaultPartyType]);
+  }, [show, initialTab, create, isDuplicating, initialName, initialPhone, initialEmail, initialGst, defaultPartyType]);
 
   useEffect(() => {
     if (!show) return;
@@ -461,7 +497,10 @@ export function PartyDetailModal({
   return (
     <LargeModalPortal>
       <div
-        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4 backdrop-blur-[1px]"
+        className={
+          overlayClassName ||
+          "fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4 backdrop-blur-[1px]"
+        }
         role="presentation"
         onClick={() => !isSaving && onClose()}
       >

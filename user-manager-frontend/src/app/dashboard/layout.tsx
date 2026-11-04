@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import type { UserSession } from "@/types/userManager";
 import {
+  hasUserManagerPortalAccess,
   readSessionFromStorage,
   logoutAndRedirect,
   saveSessionToStorage,
@@ -88,9 +89,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     const s = readSessionFromStorage();
+    if (!s?.token || !hasUserManagerPortalAccess(s?.user)) {
+      if (typeof window !== "undefined") {
+        window.location.assign("/?error=access_denied");
+      } else {
+        router.push("/?error=access_denied");
+      }
+      return;
+    }
     setSession(s);
     setIsInitializing(false);
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (session) {

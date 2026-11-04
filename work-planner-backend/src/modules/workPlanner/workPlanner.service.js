@@ -2690,7 +2690,7 @@ async function listAllExpenses(query = {}, user) {
       .populate('sales_user', 'name email department')
       .populate({
         path: 'work_plan',
-        select: 'plan_date sales_user location status',
+        select: 'plan_date sales_user location status plan_type remarks',
         populate: { path: 'sales_user', select: 'name email department' },
       })
       .populate({
@@ -2731,13 +2731,93 @@ async function listAllExpenses(query = {}, user) {
     }),
   );
 
+  const enrichedData = await enrichExpensesWithWorkPlans(data);
+
   return {
     total,
     page,
     limit,
     pages: Math.ceil(total / limit) || 0,
-    data,
+    data: enrichedData,
   };
+}
+
+async function enrichExpensesWithWorkPlans(expenses = []) {
+  if (!Array.isArray(expenses) || expenses.length === 0) return expenses;
+  const { WorkPlan, WorkPlanVisit, WorkPlanWork } = getModels();
+
+  const directPlanIdStrings = new Set();
+
+  for (const exp of expenses) {
+    if (exp.work_plan) {
+      const pId = typeof exp.work_plan === 'object' ? exp.work_plan._id || exp.work_plan.id : exp.work_plan;
+      if (pId && mongoose.Types.ObjectId.isValid(pId)) {
+        directPlanIdStrings.add(String(pId));
+      }
+    }
+  }
+
+  // 1. Fetch full details for any directPlanIdStrings
+  const planIdArray = Array.from(directPlanIdStrings).map(asObjectId).filter(Boolean);
+  const planDetailsMap = new Map();
+
+  if (planIdArray.length > 0) {
+    const fetchedPlans = await WorkPlan.find({ _id: { $in: planIdArray }, deletedAt: null })
+      .select('_id plan_date sales_user status plan_type location remarks')
+      .populate('sales_user', '_id name email department phone')
+      .lean();
+
+    for (const fp of fetchedPlans) {
+      planDetailsMap.set(String(fp._id), fp);
+    }
+  }
+
+  // 2. Aggregate visit and work (task) counts for all plan IDs
+  const visitCountMap = new Map();
+  const workCountMap = new Map();
+
+  if (planIdArray.length > 0) {
+    const [visitCounts, workCounts] = await Promise.all([
+      WorkPlanVisit.aggregate([
+        { $match: { work_plan: { $in: planIdArray }, deletedAt: null } },
+        { $group: { _id: '$work_plan', count: { $sum: 1 } } },
+      ]),
+      WorkPlanWork.aggregate([
+        { $match: { work_plan: { $in: planIdArray }, deletedAt: null } },
+        { $group: { _id: '$work_plan', count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    for (const vc of visitCounts) {
+      visitCountMap.set(String(vc._id), vc.count);
+    }
+    for (const wc of workCounts) {
+      workCountMap.set(String(wc._id), wc.count);
+    }
+  }
+
+  // 3. Attach enriched work plan ONLY to expenses linked to a work plan
+  for (const exp of expenses) {
+    if (exp.work_plan) {
+      const planIdStr = String(typeof exp.work_plan === 'object' ? exp.work_plan._id || exp.work_plan.id : exp.work_plan);
+      const basePlan = planDetailsMap.get(planIdStr) || (typeof exp.work_plan === 'object' ? exp.work_plan : null);
+
+      if (basePlan) {
+        const vCount = planIdStr ? (visitCountMap.get(planIdStr) || 0) : 0;
+        const wCount = planIdStr ? (workCountMap.get(planIdStr) || 0) : 0;
+        exp.work_plan = {
+          ...basePlan,
+          plan_type: basePlan.plan_type || 'Visits',
+          location: basePlan.location || '',
+          visit_count: vCount,
+          work_count: wCount,
+          task_count: wCount,
+        };
+      }
+    }
+  }
+
+  return expenses;
 }
 
 async function listExpenses(planId, user) {

@@ -91,11 +91,25 @@ export interface UserSummary {
   wp_roles?: string[];
 }
 
+export interface WorkPlanDaySummary {
+  _id?: string;
+  id?: string;
+  plan_date?: string;
+  status?: string;
+  plan_type?: "Visits" | "Tasks & Visits" | "Leave" | "Work From Home" | "Work From Office" | string;
+  location?: string;
+  visit_count?: number;
+  work_count?: number;
+  task_count?: number;
+  remarks?: string;
+  sales_user?: string | UserSummary;
+}
+
 export interface ExpenseRecord {
   _id?: string;
   id?: string;
   sales_user?: string | UserSummary;
-  work_plan?: any;
+  work_plan?: string | WorkPlanDaySummary | any;
   work_plan_visit?: any;
   expense_date: string;
   category: ExpenseCategory | string;

@@ -31,6 +31,7 @@ export type ProductDetailModalProps = {
   duplicateFromId?: string | null;
   onSuccess?: (product: Record<string, unknown>) => void;
   onClose: () => void;
+  overlayClassName?: string;
 };
 
 const inputClass =
@@ -153,6 +154,7 @@ export function ProductDetailModal({
   duplicateFromId = null,
   onSuccess,
   onClose,
+  overlayClassName,
 }: ProductDetailModalProps) {
   const isEditing = !create && productId != null && productId !== "";
   const isDuplicating = create && !!duplicateFromId;
@@ -425,7 +427,10 @@ export function ProductDetailModal({
   return (
     <LargeModalPortal>
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4 backdrop-blur-[1px]"
+      className={
+        overlayClassName ||
+        "fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4 backdrop-blur-[1px]"
+      }
       role="presentation"
       onClick={() => !isSaving && onClose()}
     >

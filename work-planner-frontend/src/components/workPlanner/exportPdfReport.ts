@@ -448,12 +448,22 @@ export async function downloadPdfReport({
 
     // 2. Full-width User Group Header
     if (isUserHeader) {
-      const headerHeight = 5.8;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+
+      const rightText = (row.summaryRight || row.amount || row.total) ? cleanPdfText(row.summaryRight || row.amount || row.total) : "";
+      const rightTextW = rightText ? doc.getTextWidth(rightText) + 6 : 0;
+      const maxTitleW = usableWidth - rightTextW - 8;
+      const titleLines = doc.splitTextToSize(cleanPdfText(row.title || row.sectionTitle || ""), maxTitleW);
+      const headerHeight = Math.max(5.8, titleLines.length * 3.4 + 2.0);
+
       if (y + headerHeight > pageHeight - marginBottom) {
         doc.addPage();
         y = 9;
         drawLetterheadHeader(false);
         drawTableHeaders();
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7.5);
       }
 
       doc.setFillColor(241, 245, 249);
@@ -463,13 +473,14 @@ export async function downloadPdfReport({
       doc.setFillColor(59, 130, 246);
       doc.rect(marginX, y, 2.5, headerHeight, "F");
 
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.5);
       doc.setTextColor(30, 58, 95);
-      doc.text(cleanPdfText(row.title || row.sectionTitle || ""), marginX + 4.5, y + 4.0);
+      let textLineY = y + 3.8;
+      for (const line of titleLines) {
+        doc.text(line, marginX + 4.5, textLineY);
+        textLineY += 3.4;
+      }
 
-      if (row.summaryRight || row.amount || row.total) {
-        const rightText = cleanPdfText(row.summaryRight || row.amount || row.total);
+      if (rightText) {
         doc.text(rightText, pageWidth - marginX - 3, y + 4.0, { align: "right" });
       }
 
@@ -485,7 +496,8 @@ export async function downloadPdfReport({
     // 3. Subtotal / Date Total / Grand Total Row
     if (isSubtotal) {
       const isDateTotal = row._rowType === "DATE_TOTAL";
-      const subtotalHeight = isDateTotal ? 6.0 : 5.8;
+      const isGrandTotal = row._rowType === "TOTAL" || row._rowType === "GRAND_TOTAL";
+      const subtotalHeight = isGrandTotal ? 6.5 : isDateTotal ? 6.0 : 5.8;
       if (y + subtotalHeight > pageHeight - marginBottom) {
         doc.addPage();
         y = 9;
@@ -493,17 +505,23 @@ export async function downloadPdfReport({
         drawTableHeaders();
       }
 
-      doc.setFillColor(241, 245, 249);
+      doc.setFillColor(isGrandTotal ? 226 : 241, isGrandTotal ? 232 : 245, isGrandTotal ? 240 : 249);
       doc.rect(marginX, y, usableWidth, subtotalHeight, "F");
 
       // Top double-line / highlight border
       doc.setDrawColor(148, 163, 184);
-      doc.setLineWidth(0.35);
+      doc.setLineWidth(isGrandTotal ? 0.5 : 0.35);
       doc.line(marginX, y, pageWidth - marginX, y);
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7.5);
       doc.setTextColor(15, 23, 42);
+
+      // If the row has a title, draw it on the left
+      const titleText = cleanPdfText(row.title || row.sectionTitle || "");
+      if (titleText) {
+        doc.text(titleText, marginX + 3, y + 4.0);
+      }
 
       let x = marginX;
       for (let i = 0; i < columns.length; i++) {
@@ -528,7 +546,7 @@ export async function downloadPdfReport({
 
       // Bottom double border
       doc.setDrawColor(148, 163, 184);
-      doc.setLineWidth(0.35);
+      doc.setLineWidth(isGrandTotal ? 0.5 : 0.35);
       doc.line(marginX, y, pageWidth - marginX, y);
 
       isZebra = false;

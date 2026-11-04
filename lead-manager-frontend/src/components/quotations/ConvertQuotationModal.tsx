@@ -111,11 +111,13 @@ type LineRow = {
 function PartyAutocomplete({
   parties,
   value,
+  fallbackName,
   onChange,
   onQuickAdd,
 }: {
   parties: Record<string, unknown>[];
   value: string;
+  fallbackName?: string;
   onChange: (id: string) => void;
   onQuickAdd?: (searchQuery: string) => void;
 }) {
@@ -182,6 +184,18 @@ function PartyAutocomplete({
                 ]
                   .filter(Boolean)
                   .join(" • ")}
+              </span>
+            </div>
+          </div>
+        ) : fallbackName ? (
+          <div className="flex min-w-0 items-center gap-2">
+            <Building2 className="h-4 w-4 shrink-0 text-amber-500" />
+            <div className="min-w-0">
+              <span className="block truncate font-medium text-slate-900">
+                {fallbackName}
+              </span>
+              <span className="block truncate text-[11px] text-amber-600">
+                Not linked to Party Master • Click to select or Quick Add
               </span>
             </div>
           </div>
@@ -271,7 +285,7 @@ function PartyAutocomplete({
               <button
                 type="button"
                 onClick={() => {
-                  const currentQ = q.trim();
+                  const currentQ = q.trim() || (fallbackName ? fallbackName.trim() : "");
                   setOpen(false);
                   setQ("");
                   onQuickAdd(currentQ);
@@ -279,7 +293,11 @@ function PartyAutocomplete({
                 className="flex w-full items-center justify-center gap-1.5 rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-teal-700"
               >
                 <Plus className="h-3.5 w-3.5" />
-                {q.trim() ? `Quick Add "${q.trim()}"` : "Quick Add New Party"}
+                {q.trim()
+                  ? `Quick Add "${q.trim()}"`
+                  : fallbackName
+                  ? `Quick Add "${fallbackName}"`
+                  : "Quick Add New Party"}
               </button>
             </div>
           )}
@@ -348,7 +366,9 @@ function SalesAutocomplete({
                 {[
                   selected.department
                     ? String(selected.department).toUpperCase()
-                    : "SALES",
+                    : selected.role
+                    ? String(selected.role).toUpperCase()
+                    : null,
                   selected.email ? String(selected.email) : null,
                 ]
                   .filter(Boolean)
@@ -373,7 +393,7 @@ function SalesAutocomplete({
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search sales rep..."
+              placeholder="Search user by name, email or department..."
               className="w-full bg-transparent text-xs text-slate-900 focus:outline-none"
             />
           </div>
@@ -405,7 +425,16 @@ function SalesAutocomplete({
                         {String(u.name || u.username || u.email)}
                       </div>
                       <div className="text-[11px] text-slate-500">
-                        {String(u.email ?? "")}
+                        {[
+                          u.department
+                            ? String(u.department).toUpperCase()
+                            : u.role
+                            ? String(u.role).toUpperCase()
+                            : null,
+                          u.email ? String(u.email) : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" • ")}
                       </div>
                     </div>
                     {isSelected && (
@@ -586,7 +615,7 @@ function ProductAutocomplete({
               <button
                 type="button"
                 onClick={() => {
-                  const currentQ = q.trim();
+                  const currentQ = q.trim() || (fallbackName ? fallbackName.trim() : "");
                   setOpen(false);
                   setQ("");
                   onQuickAdd(currentQ);
@@ -594,7 +623,11 @@ function ProductAutocomplete({
                 className="flex w-full items-center justify-center gap-1.5 rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-teal-700"
               >
                 <Plus className="h-3.5 w-3.5" />
-                {q.trim() ? `Quick Add "${q.trim()}"` : "Quick Add New Product"}
+                {q.trim()
+                  ? `Quick Add "${q.trim()}"`
+                  : fallbackName
+                  ? `Quick Add "${fallbackName}"`
+                  : "Quick Add New Product"}
               </button>
             </div>
           )}
@@ -611,8 +644,8 @@ export function ConvertQuotationModal({
   onSuccess,
 }: ConvertQuotationModalProps) {
   const currentUser = useAppSelector((s) => s.auth.user);
-  const { data: partiesRaw } = useListPartiesQuery({ paginate: "false" });
-  const { data: productsRaw } = useListProductsQuery({ paginate: "false" });
+  const { data: partiesRaw, refetch: refetchParties } = useListPartiesQuery({ paginate: "false" });
+  const { data: productsRaw, refetch: refetchProducts } = useListProductsQuery({ paginate: "false" });
   const { data: usersRaw } = useListUsersQuery();
 
   const [convertQuotation, { isLoading: isConverting }] =
@@ -620,32 +653,31 @@ export function ConvertQuotationModal({
   const [createAttachment] = useCreateAttachmentMutation();
   const [updateOrderPerforma] = useUpdateOrderPerformaMutation();
 
-  const parties = useMemo(() => asRecordArray(partiesRaw), [partiesRaw]);
-  const products = useMemo(() => asRecordArray(productsRaw), [productsRaw]);
+  const [extraParties, setExtraParties] = useState<Record<string, unknown>[]>([]);
+  const [extraProducts, setExtraProducts] = useState<Record<string, unknown>[]>([]);
+
+  const parties = useMemo(() => {
+    const raw = asRecordArray(partiesRaw);
+    if (!extraParties.length) return raw;
+    const existingIds = new Set(raw.map((p) => String(p._id ?? p.id)));
+    const added = extraParties.filter((p) => !existingIds.has(String(p._id ?? p.id)));
+    return [...added, ...raw];
+  }, [partiesRaw, extraParties]);
+
+  const products = useMemo(() => {
+    const raw = asRecordArray(productsRaw);
+    if (!extraProducts.length) return raw;
+    const existingIds = new Set(raw.map((p) => String(p._id ?? p.id)));
+    const added = extraProducts.filter((p) => !existingIds.has(String(p._id ?? p.id)));
+    return [...added, ...raw];
+  }, [productsRaw, extraProducts]);
+
   const salesUsers = useMemo(() => {
     const all = asRecordArray(usersRaw);
-    return all.filter((u) => {
-      if (u.is_active === false) return false;
-      const dept = String(u.department ?? "").toLowerCase();
-      if (dept === "sales" || dept === "admin" || dept === "super_admin")
-        return true;
-      const portals = u.portals as Record<string, any> | undefined;
-      const roles: string[] = [
-        ...(Array.isArray(portals?.opms?.access_roles)
-          ? portals.opms.access_roles
-          : []),
-        ...(Array.isArray(portals?.lead_manager?.access_roles)
-          ? portals.lead_manager.access_roles
-          : []),
-      ].map((r) => String(r).toLowerCase());
-      return (
-        roles.includes("sales") ||
-        roles.includes("admin") ||
-        roles.includes("super_admin") ||
-        roles.includes("manager") ||
-        roles.includes("executive") ||
-        roles.includes("coordinator")
-      );
+    return [...all].sort((a, b) => {
+      const nameA = String(a.name || a.username || a.email || "").toLowerCase();
+      const nameB = String(b.name || b.username || b.email || "").toLowerCase();
+      return nameA.localeCompare(nameB);
     });
   }, [usersRaw]);
 
@@ -1732,7 +1764,7 @@ export function ConvertQuotationModal({
 
   return (
     <LargeModalPortal>
-      <div className="fixed inset-0 z-[120] flex bg-slate-900/50 backdrop-blur-[1px]">
+      <div className="fixed inset-0 z-[60] flex bg-slate-900/50 backdrop-blur-[1px]">
         <div className="flex h-full w-full flex-col overflow-hidden bg-slate-50 shadow-2xl">
           {/* Top Header */}
           <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
@@ -1867,6 +1899,7 @@ export function ConvertQuotationModal({
                         <PartyAutocomplete
                           parties={parties}
                           value={partyId}
+                          fallbackName={quotation.customer_name}
                           onChange={(id) => void handlePartyChange(id)}
                           onQuickAdd={(searchQuery) => {
                             setQuickPartyInitialName(
@@ -2025,7 +2058,9 @@ export function ConvertQuotationModal({
                                       void handleProductChange(i, pid)
                                     }
                                     onQuickAdd={(searchQuery) => {
-                                      setQuickProductInitialName(searchQuery);
+                                      setQuickProductInitialName(
+                                        searchQuery || line.product_name || "",
+                                      );
                                       setQuickAddProductLineIndex(i);
                                     }}
                                   />
@@ -2548,6 +2583,9 @@ export function ConvertQuotationModal({
           create
           open
           initialName={quickPartyInitialName}
+          initialPhone={quotation.phone || quotation.cell}
+          initialEmail={quotation.email}
+          initialGst={quotation.gstin}
           onClose={() => {
             setQuickAddPartyOpen(false);
             setQuickPartyInitialName("");
@@ -2555,7 +2593,9 @@ export function ConvertQuotationModal({
           onSuccess={(createdParty) => {
             const newId = String(createdParty._id ?? createdParty.id ?? "");
             if (newId) {
+              setExtraParties((prev) => [createdParty, ...prev]);
               void handlePartyChange(newId);
+              void refetchParties?.();
             }
           }}
         />
@@ -2581,10 +2621,15 @@ export function ConvertQuotationModal({
             setQuickProductInitialName("");
             if (!newPid || targetIdx === null) return;
 
+            setExtraProducts((prev) => [createdProduct, ...prev]);
+            void refetchProducts?.();
+
             const getLabel = (v: unknown) =>
               typeof v === "object" && v !== null
                 ? String((v as { name?: unknown }).name ?? "")
                 : String(v ?? "");
+
+            const bp = Number(createdProduct.base_price ?? 0);
 
             const newRow: LineRow = {
               productId: newPid,
@@ -2599,16 +2644,16 @@ export function ConvertQuotationModal({
               unit: getLabel(createdProduct.unit) || "pcs",
               quantity: 1,
               free_qty: 0,
-              unit_price: 0,
+              unit_price: bp > 0 ? bp : 0,
               rate_type: "SR",
               discount_percent: 0,
               discount_amount: 0,
               gst_percent: Number(createdProduct.gst_percent ?? 18),
               remarks: "",
-              rate_mapped: false,
-              approval_required: true,
+              rate_mapped: bp > 0,
+              approval_required: bp <= 0,
               approval_reason:
-                "No active rate mapped for this party/product",
+                bp <= 0 ? "No active rate mapped for this party/product" : undefined,
             };
 
             setLines((prev) => {

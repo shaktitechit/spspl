@@ -4,7 +4,11 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import type { UserSession } from "@/types/userManager";
-import { readSessionFromStorage, saveSessionToStorage } from "@/utils/authStorage";
+import {
+  hasUserManagerPortalAccess,
+  readSessionFromStorage,
+  saveSessionToStorage,
+} from "@/utils/authStorage";
 import { SuperAdminLogin } from "@/components/SuperAdminLogin";
 
 export default function RootPage() {
@@ -14,14 +18,17 @@ export default function RootPage() {
 
   useEffect(() => {
     const s = readSessionFromStorage();
-    setSession(s);
-    setIsInitializing(false);
-    if (s?.token) {
+    if (s?.token && hasUserManagerPortalAccess(s.user)) {
+      setSession(s);
+      setIsInitializing(false);
       if (typeof window !== "undefined") {
         window.location.href = "/dashboard";
       } else {
         router.replace("/dashboard");
       }
+    } else {
+      setSession(null);
+      setIsInitializing(false);
     }
   }, [router]);
 

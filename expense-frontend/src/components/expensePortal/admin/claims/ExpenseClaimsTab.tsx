@@ -32,6 +32,7 @@ import {
   formatCurrency,
   formatPlanDate,
   renderExpenseStatusBadge,
+  renderWorkPlanBadge,
   salesUserLabel,
   stripHtml,
 } from "@/components/expensePortal/shared/workPlanUtils";
@@ -192,6 +193,8 @@ interface UserExpenseGroup {
   userId: string;
   userName: string;
   userEmail: string;
+  workPlanId?: string;
+  workPlan?: any;
   expenses: WorkPlanExpenseRecord[];
   totalAmount: number;
   statusCounts: Record<string, number>;
@@ -275,20 +278,22 @@ function formatGroupDateHeader(dateInput: any): {
       });
     }
 
-    // Sort latest to oldest date order
+    // Sort latest to oldest date order (checking Work Plan of the day first)
     return [...list].sort((a, b) => {
-      const dateA = extractRecordYmd(a.expense_date || (a as any).createdAt) || "";
-      const dateB = extractRecordYmd(b.expense_date || (b as any).createdAt) || "";
+      const wpA = a.work_plan && typeof a.work_plan === "object" ? a.work_plan : null;
+      const wpB = b.work_plan && typeof b.work_plan === "object" ? b.work_plan : null;
+      const dateA = extractRecordYmd(wpA?.plan_date || a.expense_date || (a as any).createdAt) || "";
+      const dateB = extractRecordYmd(wpB?.plan_date || b.expense_date || (b as any).createdAt) || "";
       if (dateA !== dateB) {
         return dateB.localeCompare(dateA); // Latest date first
       }
-      const timeA = new Date((a as any).createdAt || 0).getTime();
-      const timeB = new Date((b as any).createdAt || 0).getTime();
+      const timeA = new Date((a as any).createdAt || a.expense_date || 0).getTime();
+      const timeB = new Date((b as any).createdAt || b.expense_date || 0).getTime();
       return timeB - timeA;
     });
   }, [expenses, searchQuery, executiveOptions, isFinance]);
 
-  // Group expenses by date (latest to oldest), and per user under each date
+  // Group expenses by Work Plan of the day first, and list expenses by work plan id
   const groupedDateExpenses = useMemo(() => {
     const dateMap = new Map<
       string,
@@ -305,7 +310,11 @@ function formatGroupDateHeader(dateInput: any): {
     >();
 
     for (const exp of filteredExpenses) {
-      const rawDate = exp.expense_date || (exp as any).createdAt;
+      const wp = exp.work_plan && typeof exp.work_plan === "object" ? exp.work_plan : null;
+      const wpId = wp ? String(wp._id || wp.id || "") : (typeof exp.work_plan === "string" ? exp.work_plan : "");
+
+      // 1. First check work plan of the day: determine date from work plan's plan_date if linked
+      const rawDate = wp?.plan_date || exp.expense_date || (exp as any).createdAt;
       const ymd = extractRecordYmd(rawDate) || "unknown";
 
       if (!dateMap.has(ymd)) {
@@ -329,37 +338,43 @@ function formatGroupDateHeader(dateInput: any): {
 
       const sUserId = resolveExpenseOwnerId(exp);
       const sUserName = salesUserLabel(
-        exp.sales_user || (exp as any).work_plan?.sales_user || (exp as any).work_plan,
+        exp.sales_user || wp?.sales_user,
         executiveOptions
       );
       let sUserEmail = "";
       if (typeof exp.sales_user === "object" && exp.sales_user !== null) {
         sUserEmail = (exp.sales_user as any).email || "";
-      } else if ((exp as any).work_plan && typeof (exp as any).work_plan === "object") {
-        const wpUser = (exp as any).work_plan.sales_user;
+      } else if (wp && typeof wp === "object" && wp.sales_user) {
+        const wpUser = wp.sales_user;
         if (typeof wpUser === "object" && wpUser !== null) {
           sUserEmail = wpUser.email || "";
         }
       }
 
-      const userKey = sUserId || sUserName || "unassigned";
+      // 2. Group within the day by executive AND work plan id (so expenses are strictly listed by work plan id)
+      const planGroupKey = `${sUserId || sUserName || "unassigned"}__${wpId || "direct"}`;
 
-      if (!dateEntry.userMap.has(userKey)) {
-        dateEntry.userMap.set(userKey, {
+      if (!dateEntry.userMap.has(planGroupKey)) {
+        dateEntry.userMap.set(planGroupKey, {
           userId: sUserId,
           userName: sUserName,
           userEmail: sUserEmail,
+          workPlanId: wpId,
+          workPlan: wp,
           expenses: [],
           totalAmount: 0,
           statusCounts: {},
         });
       }
 
-      const userEntry = dateEntry.userMap.get(userKey)!;
+      const userEntry = dateEntry.userMap.get(planGroupKey)!;
       userEntry.expenses.push(exp);
       userEntry.totalAmount += amount;
       const st = exp.status || "submitted";
       userEntry.statusCounts[st] = (userEntry.statusCounts[st] || 0) + 1;
+      if (!userEntry.workPlan && wp) {
+        userEntry.workPlan = wp;
+      }
     }
 
     const result: DateExpenseGroup[] = Array.from(dateMap.values()).map((d) => {
@@ -469,7 +484,12 @@ function formatGroupDateHeader(dateInput: any): {
               {formatPlanDate(exp.expense_date)}
             </td>
             <td className="px-4 py-3 whitespace-nowrap font-semibold text-foreground">
-              {sUserName}
+              <div>{sUserName}</div>
+              {exp.work_plan && typeof exp.work_plan === "object" && (
+                <div className="mt-1">
+                  {renderWorkPlanBadge(exp.work_plan)}
+                </div>
+              )}
             </td>
           </>
         )}
@@ -682,10 +702,15 @@ function formatGroupDateHeader(dateInput: any): {
               )}
             </div>
             {showDateAndUser && (
-              <div className="text-[11px] text-muted flex items-center gap-1 mt-0.5">
+              <div className="text-[11px] text-muted flex items-center gap-1 mt-0.5 flex-wrap">
                 <span>{formatPlanDate(exp.expense_date)}</span>
                 <span>•</span>
                 <span className="font-medium text-foreground">{sUserName}</span>
+                {exp.work_plan && typeof exp.work_plan === "object" && (
+                  <div className="w-full mt-1">
+                    {renderWorkPlanBadge(exp.work_plan)}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1117,7 +1142,7 @@ function formatGroupDateHeader(dateInput: any): {
                     {!isDateCollapsed && (
                       <div className="divide-y divide-border/60">
                         {dateGroup.userGroups.map((userGroup) => {
-                          const userKey = `${dateGroup.dateKey}__${userGroup.userId || userGroup.userName}`;
+                          const userKey = `${dateGroup.dateKey}__${userGroup.userId || userGroup.userName}__${userGroup.workPlanId || "direct"}`;
                           const isUserCollapsed = !!collapsedUsers[userKey];
                           const initials = userGroup.userName
                             .split(" ")
@@ -1133,7 +1158,7 @@ function formatGroupDateHeader(dateInput: any): {
                                 onClick={() => toggleUser(userKey)}
                                 className="w-full flex items-center justify-between gap-3 px-4 py-2.5 bg-card hover:bg-surface-muted/40 transition cursor-pointer text-left"
                               >
-                                <div className="flex items-center gap-2.5">
+                                <div className="flex items-center gap-2.5 flex-wrap">
                                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-extrabold">
                                     {initials}
                                   </div>
@@ -1147,7 +1172,7 @@ function formatGroupDateHeader(dateInput: any): {
                                       </span>
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-2 ml-2">
+                                  <div className="flex items-center gap-2 ml-2 flex-wrap">
                                     <span className="text-[11px] text-muted">
                                       {userGroup.expenses.length} claim{userGroup.expenses.length !== 1 ? "s" : ""}
                                     </span>
@@ -1163,6 +1188,16 @@ function formatGroupDateHeader(dateInput: any): {
                                         </span>
                                       ))}
                                     </div>
+                                    {/* Work Plan Badge */}
+                                    <div className="hidden lg:flex items-center gap-1 ml-1">
+                                      {userGroup.workPlan ? (
+                                        renderWorkPlanBadge(userGroup.workPlan)
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-muted italic bg-surface-muted/50 border border-border/50">
+                                          Direct Claim
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                                 {isUserCollapsed ? (
@@ -1175,6 +1210,26 @@ function formatGroupDateHeader(dateInput: any): {
                               {/* Expenses for this user on this date */}
                               {!isUserCollapsed && (
                                 <>
+                                  {/* Day Work Plan Details Bar */}
+                                  <div className="flex items-center justify-between gap-3 px-4 py-2 bg-surface-muted/30 border-b border-border/60 text-xs flex-wrap">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                                        Day Work Plan:
+                                      </span>
+                                      {userGroup.workPlan ? (
+                                        renderWorkPlanBadge(userGroup.workPlan)
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-muted bg-surface-muted/50 border border-border/50">
+                                          Direct Claims (No Work Plan)
+                                        </span>
+                                      )}
+                                    </div>
+                                    {userGroup.workPlan?.status && (
+                                      <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-card border border-border text-muted">
+                                        Plan: {userGroup.workPlan.status}
+                                      </span>
+                                    )}
+                                  </div>
                                   {/* Mobile cards */}
                                   <div className="md:hidden divide-y divide-border/50 bg-surface-muted/10">
                                     {userGroup.expenses.map((exp, idx) =>
