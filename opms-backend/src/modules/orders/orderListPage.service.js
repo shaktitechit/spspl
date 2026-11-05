@@ -422,6 +422,10 @@ function isDueSheetPending(row) {
   if (status === 'finance_rejected' || status === 'account_rejected') return false;
   if (isFulfillmentComplete(row)) return false;
   if (!isAdminCleared(row)) return false;
+  if (isFinanceCleared(row) || isAccountCleared(row)) return false;
+  if (POST_FINANCE_STATUSES.has(status)) return false;
+  if (row.is_finance_approved === true || row.finance_approval_status === 'approved') return false;
+  if (row.is_account_approved === true || row.account_approval_status === 'approved') return false;
   if (isDueSheetStageCleared(row)) return false;
   return true;
 }
@@ -481,7 +485,6 @@ function isDispatchPending(order, options) {
   if (isInTransitOrder(order, options)) return false;
   if (isTransportPending(order, options)) return false;
   if (!isAdminCleared(order)) return false;
-  if (!isDueSheetStageCleared(order)) return false;
   if (!isFinanceCleared(order)) return false;
   if (!isAccountCleared(order)) return false;
   return true;
@@ -491,8 +494,10 @@ function resolveApprovalPending(row) {
   const status = deriveOrderWorkflowStatus(row);
   if (status === 'draft') return { admin: false, finance: false, account: false, stage: null };
   if (!isAdminCleared(row)) return { admin: true, finance: false, account: false, stage: 'admin' };
-  if (!isDueSheetStageCleared(row)) return { admin: false, finance: false, account: false, stage: null };
-  if (!isFinanceCleared(row)) return { admin: false, finance: true, account: false, stage: 'finance' };
+  if (!isFinanceCleared(row)) {
+    if (!isDueSheetStageCleared(row)) return { admin: false, finance: false, account: false, stage: null };
+    return { admin: false, finance: true, account: false, stage: 'finance' };
+  }
   if (!isAccountCleared(row)) return { admin: false, finance: false, account: true, stage: 'account' };
   return { admin: false, finance: false, account: false, stage: null };
 }

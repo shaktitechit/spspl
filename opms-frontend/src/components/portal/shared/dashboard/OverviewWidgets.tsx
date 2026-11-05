@@ -420,6 +420,7 @@ export default function OverviewWidgets({
       </div>
 
       <OrderQuickAccess
+        orders={filteredOrders}
         counts={queueCounts}
         isOrdersFetching={isOrdersFetching}
         categoryOptions={categoryOptions}

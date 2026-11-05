@@ -247,6 +247,9 @@ export default function ListOrdersPage({
         rowStage.workflow_tab === processStage ||
         rowStage.process_stage === processStage
       ) {
+        if (processStage === "due_sheet_pending") {
+          return isDueSheetPending(o);
+        }
         return true;
       }
       return includeDraftTab
@@ -276,6 +279,9 @@ export default function ListOrdersPage({
         rowStage.workflow_tab === processStage ||
         rowStage.process_stage === processStage
       ) {
+        if (processStage === "due_sheet_pending") {
+          return isDueSheetPending(o);
+        }
         return true;
       }
       return includeDraftTab

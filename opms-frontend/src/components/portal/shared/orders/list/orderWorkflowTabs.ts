@@ -548,7 +548,6 @@ export function isDispatchPending(
   if (isTransportPending(order, options)) return false;
 
   if (!isAdminCleared(row)) return false;
-  if (!isDueSheetStageCleared(row)) return false;
   if (!isFinanceCleared(row)) return false;
   if (!isAccountCleared(row)) return false;
 
@@ -615,10 +614,10 @@ export function resolveApprovalPending(order: unknown): ApprovalPendingSummary {
   if (!isAdminCleared(row)) {
     return { admin: true, finance: false, account: false, stage: "admin" };
   }
-  if (!isDueSheetStageCleared(row)) {
-    return { admin: false, finance: false, account: false, stage: null };
-  }
   if (!isFinanceCleared(row)) {
+    if (!isDueSheetStageCleared(row)) {
+      return { admin: false, finance: false, account: false, stage: null };
+    }
     return { admin: false, finance: true, account: false, stage: "finance" };
   }
   if (!isAccountCleared(row)) {
@@ -736,6 +735,10 @@ export function isDueSheetPending(order: unknown): boolean {
   if (isOrderClosedOrDelivered(row)) return false;
 
   if (!isAdminCleared(row)) return false;
+  if (isFinanceCleared(row) || isAccountCleared(row)) return false;
+  if (POST_FINANCE_STATUSES.has(status)) return false;
+  if (row.is_finance_approved === true || row.finance_approval_status === "approved") return false;
+  if (row.is_account_approved === true || row.account_approval_status === "approved") return false;
   if (isDueSheetStageCleared(row)) return false;
 
   return true;
@@ -807,6 +810,15 @@ export function orderMatchesWorkflowTab(
 
   if (tab === "due_sheet_pending") {
     if (row.workflow_tab === "due_sheet_pending" || row.process_stage === "due_sheet_pending") {
+      if (
+        isFinanceCleared(row) ||
+        isAccountCleared(row) ||
+        POST_FINANCE_STATUSES.has(deriveOrderWorkflowStatus(row)) ||
+        row.finance_approval_status === "approved" ||
+        row.is_finance_approved === true
+      ) {
+        return false;
+      }
       return true;
     }
     return isDueSheetPending(row);
