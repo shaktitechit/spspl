@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./diwali.css";
 
 @variant dark (&:where(.dark, .dark *));
 
