@@ -805,6 +805,13 @@ export function orderMatchesWorkflowTab(
     return deriveOrderWorkflowStatus(row) !== "draft";
   }
 
+  if (tab === "due_sheet_pending") {
+    if (row.workflow_tab === "due_sheet_pending" || row.process_stage === "due_sheet_pending") {
+      return true;
+    }
+    return isDueSheetPending(row);
+  }
+
   return getOrderWorkflowTabCategory(order, options) === tab;
 }
 

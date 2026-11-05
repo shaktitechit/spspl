@@ -1,5 +1,6 @@
 import {
   ORDER_WORKFLOW_TAB_LABELS,
+  isDueSheetPending,
   pendingApprovalStageLabel,
   resolveApprovalPending,
   type OrderWorkflowTabCategory,
@@ -181,7 +182,12 @@ export function renderWorkflowStatusBadge(
 
 export function renderPendingApprovalBadge(order: OrderListRow) {
   const pending = resolveApprovalPending(order);
-  if (!pending.admin && !pending.finance && !pending.account) return null;
+  if (!pending.admin && !pending.finance && !pending.account) {
+    if (isDueSheetPending(order)) {
+      return renderWorkflowStatusBadge("due_sheet_pending");
+    }
+    return null;
+  }
 
   const parts: string[] = [];
   if (pending.admin) parts.push("Admin");

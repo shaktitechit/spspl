@@ -4,10 +4,15 @@ import React from "react";
 
 type OrderDueSheetBadgeProps = {
   uploaded?: boolean;
+  pending?: boolean;
   className?: string;
 };
 
-export function OrderDueSheetBadge({ uploaded, className = "" }: OrderDueSheetBadgeProps) {
+export function OrderDueSheetBadge({
+  uploaded,
+  pending = false,
+  className = "",
+}: OrderDueSheetBadgeProps) {
   if (uploaded) {
     return (
       <span
@@ -18,11 +23,15 @@ export function OrderDueSheetBadge({ uploaded, className = "" }: OrderDueSheetBa
     );
   }
 
-  return (
-    <span
-      className={`inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-2xs font-bold uppercase tracking-wider text-amber-700 ring-1 ring-inset ring-amber-600/10 dark:bg-amber-955/30 dark:text-amber-400 dark:ring-amber-500/25 ${className}`}
-    >
-      Due Sheet Pending
-    </span>
-  );
+  if (pending) {
+    return (
+      <span
+        className={`inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-2xs font-bold uppercase tracking-wider text-amber-700 ring-1 ring-inset ring-amber-600/10 dark:bg-amber-955/30 dark:text-amber-400 dark:ring-amber-500/25 ${className}`}
+      >
+        Due Sheet Pending
+      </span>
+    );
+  }
+
+  return null;
 }

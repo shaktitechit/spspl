@@ -75,6 +75,9 @@ import type {
   ListOrdersTabId,
 } from "./listOrdersPageConfig";
 import {
+  isDueSheetPending,
+  isDueSheetStageCleared,
+  isDueSheetUploaded,
   orderMatchesWorkflowTab,
   type OrderWorkflowTabCategory,
 } from "./orderWorkflowTabs";
@@ -239,6 +242,13 @@ export default function ListOrdersPage({
   const orders = useMemo(() => {
     if (processStage === "all") return rawOrders;
     return rawOrders.filter((o) => {
+      const rowStage = o as { workflow_tab?: string; process_stage?: string };
+      if (
+        rowStage.workflow_tab === processStage ||
+        rowStage.process_stage === processStage
+      ) {
+        return true;
+      }
       return includeDraftTab
         ? orderMatchesSalesTab(
             o,
@@ -261,6 +271,13 @@ export default function ListOrdersPage({
   const bulkOrders = useMemo(() => {
     if (processStage === "all") return rawBulkOrders;
     return rawBulkOrders.filter((o) => {
+      const rowStage = o as { workflow_tab?: string; process_stage?: string };
+      if (
+        rowStage.workflow_tab === processStage ||
+        rowStage.process_stage === processStage
+      ) {
+        return true;
+      }
       return includeDraftTab
         ? orderMatchesSalesTab(
             o,
@@ -329,7 +346,6 @@ export default function ListOrdersPage({
   const stageForUi = processStage;
   const isPendingTab =
     stageForUi === "pending_admin_approval" ||
-    stageForUi === "due_sheet_pending" ||
     stageForUi === "pending_finance_approval" ||
     stageForUi === "pending_account_approval";
 
@@ -654,6 +670,13 @@ export default function ListOrdersPage({
                     );
                     const statusRaw = deriveOrderWorkflowStatus(o) || "draft";
                     const isDraftRow = statusRaw === "draft";
+                    const dueUploaded =
+                      isDueSheetStageCleared(o) ||
+                      isDueSheetUploaded(o) ||
+                      Boolean(o.due_sheet_uploaded);
+                    const duePending = isDueSheetPending(o);
+                    const shouldShowDueSheetBadge =
+                      showDueSheetBadge && (dueUploaded || duePending);
                     const orderDateStr = formatDateTime(
                       o.order_date ?? o.created_at ?? o.createdAt,
                     );
@@ -683,11 +706,12 @@ export default function ListOrdersPage({
                           >
                             {ref}
                           </button>
-                          {(showDueSheetBadge || showFlagBadge) && (
+                          {(shouldShowDueSheetBadge || showFlagBadge) && (
                             <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                              {showDueSheetBadge && (
+                              {shouldShowDueSheetBadge && (
                                 <OrderDueSheetBadge
-                                  uploaded={o.due_sheet_uploaded}
+                                  uploaded={dueUploaded}
+                                  pending={duePending}
                                 />
                               )}
                               {showFlagBadge && (

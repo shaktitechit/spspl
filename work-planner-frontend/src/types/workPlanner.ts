@@ -580,6 +580,10 @@ export type WorkPlanWorkRecord = {
   in_progress_remarks?: string;
   manager_remarks?: string;
   rescheduled_date?: string;
+  is_from_previous_plan?: boolean;
+  previous_work_plan?: string;
+  previous_plan_date?: string;
+  previous_sequence?: number;
   authority_remarks?: AuthorityRemarkItem[];
   outcome?: string;
   work_type?: "default" | "optional" | string;

@@ -135,6 +135,7 @@ router.post('/:id/visits/:visitId/authority-remarks', elevatedRoles, controller.
 router.post('/:id/works', controller.addWork);
 router.patch('/:id/works/:workId', controller.updateWork);
 router.delete('/:id/works/:workId', controller.removeWork);
+router.post('/:id/works/:workId/rollback', controller.rollbackWork);
 router.post('/:id/works/:workId/authority-remarks', elevatedRoles, controller.addWorkAuthorityRemark);
 
 router.post('/:id/visits/:visitId/check-in', controller.checkIn);

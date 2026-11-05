@@ -154,6 +154,13 @@ exports.removeWork = asyncHandler(async (req, res) => {
   });
 });
 
+exports.rollbackWork = asyncHandler(async (req, res) => {
+  res.json({
+    success: true,
+    data: await service.rollbackWork(req.params.id, req.params.workId, req.user),
+  });
+});
+
 exports.checkIn = asyncHandler(async (req, res) => {
   res.json({
     success: true,

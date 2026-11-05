@@ -90,7 +90,12 @@ export function SelectPreviousPendingItemsModal({
               locationOrAddress: p.location || "Office / Remote",
               descriptionOrNotes: w.description || "",
               remarks: w.in_progress_remarks || w.pending_remarks || "",
-              raw: w,
+              raw: {
+                ...w,
+                is_from_previous_plan: true,
+                previous_work_plan: p._id || p.id,
+                previous_plan_date: p.plan_date,
+              },
             });
           }
         }

@@ -28,6 +28,7 @@ import {
   CalendarClock,
   Camera,
   RotateCcw,
+  Undo2,
   Users,
   Sparkles,
   StickyNote,
@@ -44,6 +45,7 @@ import {
   useCheckOutMutation,
   useRemoveVisitMutation,
   useRemoveWorkMutation,
+  useRollbackWorkMutation,
   useAddVisitMutation,
   useUpdateVisitMutation,
   useAddWorkMutation,
@@ -139,6 +141,7 @@ export function WorkPlanDetailPage({ planId }: WorkPlanDetailPageProps) {
   const [completePlanMut] = useCompletePlanMutation();
   const [removeVisitMut] = useRemoveVisitMutation();
   const [removeWorkMut] = useRemoveWorkMutation();
+  const [rollbackWorkMut] = useRollbackWorkMutation();
   const [addVisitMut] = useAddVisitMutation();
   const [updateVisitMut] = useUpdateVisitMutation();
   const [addWorkMut] = useAddWorkMutation();
@@ -185,6 +188,12 @@ export function WorkPlanDetailPage({ planId }: WorkPlanDetailPageProps) {
     title: string;
     item?: any;
   } | null>(null);
+  const [rollbackItemTarget, setRollbackItemTarget] = useState<{
+    id: string;
+    title: string;
+    previousDate?: string;
+  } | null>(null);
+  const [isRollingBack, setIsRollingBack] = useState(false);
 
   const {
     previewDoc,
@@ -391,6 +400,38 @@ export function WorkPlanDetailPage({ planId }: WorkPlanDetailPageProps) {
       toast.error(msg);
     } finally {
       setActionLoading(false);
+    }
+  }
+
+  async function handleRollbackWork(workId: string, workItem?: WorkPlanWorkRecord) {
+    const isDefaultTask = workItem?.work_type === "default" || (workItem as any)?.is_default_task;
+    if (isDefaultTask) {
+      toast.error("Default work tasks cannot be rolled back.");
+      return;
+    }
+    if (!elevatedRole && workItem && isManagerOrAdminCreatedItem(workItem)) {
+      toast.error("Tasks created by a Portal Admin or Portal Manager cannot be rolled back by Executives.");
+      return;
+    }
+    setRollbackItemTarget({
+      id: workId,
+      title: workItem?.title || "Work Task",
+      previousDate: (workItem as any)?.previous_plan_date,
+    });
+  }
+
+  async function handleConfirmRollbackItem() {
+    if (!rollbackItemTarget) return;
+    setIsRollingBack(true);
+    try {
+      await rollbackWorkMut({ planId, workId: rollbackItemTarget.id }).unwrap();
+      toast.success("Task rolled back and restored to previous plan");
+      setRollbackItemTarget(null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : (err as any)?.data?.message || "Failed to roll back task";
+      toast.error(msg);
+    } finally {
+      setIsRollingBack(false);
     }
   }
 
@@ -1427,6 +1468,7 @@ export function WorkPlanDetailPage({ planId }: WorkPlanDetailPageProps) {
               {works.map((w, idx) => {
                 const wId = w._id || w.id || String(idx);
                 const isDefaultTask = w.work_type === "default" || (w as any).is_default_task;
+                const isRolledOver = Boolean(w.is_from_previous_plan || (w as any).previous_work_plan);
                 const canRemoveWork = !isDefaultTask && (elevatedRole || !isManagerOrAdminCreatedItem(w));
                 return (
                   <div
@@ -1442,6 +1484,15 @@ export function WorkPlanDetailPage({ planId }: WorkPlanDetailPageProps) {
                               {w.title}
                             </span>
                             <div className="shrink-0">{renderWorkStatusBadge(w.status)}</div>
+                            {isRolledOver && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25 px-2 py-0.5 text-[10px] font-semibold shrink-0"
+                                title={`Rolled over from previous plan${(w as any).previous_plan_date ? ` (${formatPlanDate((w as any).previous_plan_date)})` : ""}`}
+                              >
+                                <RotateCcw className="h-2.5 w-2.5" />
+                                <span>Rolled Over{(w as any).previous_plan_date ? ` (${formatPlanDate((w as any).previous_plan_date)})` : ""}</span>
+                              </span>
+                            )}
                           </div>
                           {w.description && (
                             <p className="text-xs text-muted mt-0.5 break-words">
@@ -1502,16 +1553,30 @@ export function WorkPlanDetailPage({ planId }: WorkPlanDetailPageProps) {
                               <Edit3 className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          {showStructureActions && canRemoveWork ? (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveWork(wId, w)}
-                              className="rounded p-1 text-muted hover:bg-rose-500/10 hover:text-rose-500 transition cursor-pointer"
-                              title="Remove task"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          ) : null}
+                          {showStructureActions && (
+                            isRolledOver ? (
+                              canRemoveWork ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRollbackWork(wId, w)}
+                                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 transition cursor-pointer"
+                                  title="Roll back task to previous plan"
+                                >
+                                  <Undo2 className="h-3.5 w-3.5 shrink-0" />
+                                  <span className="hidden sm:inline">Roll Back</span>
+                                </button>
+                              ) : null
+                            ) : canRemoveWork ? (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveWork(wId, w)}
+                                className="rounded p-1 text-muted hover:bg-rose-500/10 hover:text-rose-500 transition cursor-pointer"
+                                title="Remove task"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            ) : null
+                          )}
                         </div>
                       )}
                     </div>
@@ -2109,6 +2174,21 @@ export function WorkPlanDetailPage({ planId }: WorkPlanDetailPageProps) {
           isDeleting={actionLoading}
           onClose={() => setDeleteItemTarget(null)}
           onConfirm={handleConfirmDeleteItem}
+        />
+      )}
+
+      {rollbackItemTarget && (
+        <ConfirmDeleteModal
+          open={Boolean(rollbackItemTarget)}
+          title="Roll Back Rolled-Over Task"
+          variant="warning"
+          description={`Are you sure you want to roll back "${rollbackItemTarget.title}"? This task will be removed from this work plan and restored to its previous plan${rollbackItemTarget.previousDate ? ` (${formatPlanDate(rollbackItemTarget.previousDate)})` : ""}.`}
+          confirmLabel="Roll Back"
+          isDeleting={isRollingBack}
+          onClose={() => {
+            if (!isRollingBack) setRollbackItemTarget(null);
+          }}
+          onConfirm={handleConfirmRollbackItem}
         />
       )}
 

@@ -3534,6 +3534,17 @@ async function addWork(planId, body, user) {
   if (existingWorkId) {
     const existingWork = await WorkPlanWork.findOne({ _id: existingWorkId, deletedAt: null });
     if (existingWork) {
+      if (existingWork.work_plan && String(existingWork.work_plan) !== String(planId)) {
+        existingWork.previous_work_plan = existingWork.work_plan;
+        existingWork.previous_plan_date = existingWork.plan_date;
+        existingWork.previous_sequence = existingWork.sequence;
+        existingWork.is_from_previous_plan = true;
+      } else if (body.is_from_previous_plan) {
+        existingWork.is_from_previous_plan = true;
+        if (body.previous_work_plan) existingWork.previous_work_plan = body.previous_work_plan;
+        if (body.previous_plan_date) existingWork.previous_plan_date = toValidDate(body.previous_plan_date, body.previous_plan_date);
+        if (body.previous_sequence) existingWork.previous_sequence = Number(body.previous_sequence);
+      }
       existingWork.work_plan = planId;
       existingWork.sales_user = plan.sales_user;
       existingWork.plan_date = plan.plan_date;
@@ -3572,6 +3583,10 @@ async function addWork(planId, body, user) {
     planned_start_time: toValidDate(body.planned_start_time, plan.plan_date),
     planned_end_time: toValidDate(body.planned_end_time, plan.plan_date),
     status: body.status || 'created',
+    is_from_previous_plan: Boolean(body.is_from_previous_plan),
+    previous_work_plan: body.previous_work_plan || undefined,
+    previous_plan_date: body.previous_plan_date ? toValidDate(body.previous_plan_date, body.previous_plan_date) : undefined,
+    previous_sequence: body.previous_sequence ? Number(body.previous_sequence) : undefined,
     pending_remarks: body.pending_remarks?.trim() || undefined,
     in_progress_remarks: body.in_progress_remarks?.trim() || undefined,
     created_by: userId(user),
@@ -3740,6 +3755,86 @@ async function removeWork(planId, workId, user) {
 
   await renumberWorks(planId);
   await logActivity(user, planId, 'updated', `Work task removed (ID: ${workId})`);
+  return getWithVisits(planId);
+}
+
+async function rollbackWork(planId, workId, user) {
+  if (String(planId).startsWith('standalone_') || planId === 'standalone') {
+    throw new ApiError(400, 'Rollback is not supported for standalone work tasks');
+  }
+
+  const { WorkPlan, WorkPlanWork } = getModels();
+  const plan = await WorkPlan.findOne({ _id: planId, deletedAt: null });
+  if (!plan) throw new ApiError(404, 'Work plan not found');
+  await assertCanEditVisits(plan, user);
+
+  const work = await WorkPlanWork.findOne({ _id: workId, work_plan: planId, deletedAt: null });
+  if (!work) throw new ApiError(404, 'Work task not found');
+
+  const admin = isAdminDept(user);
+  const elevated = isWpElevated(user);
+  const isManagerCreated = ['Manager', 'Admin', 'Super Admin', 'manager', 'admin', 'super_admin'].includes(
+    String(work.created_by_role || '').trim()
+  );
+  if (!admin && !elevated && isManagerCreated) {
+    throw new ApiError(403, 'Tasks created by a Manager cannot be rolled back by an Executive');
+  }
+
+  if (!work.is_from_previous_plan && !work.previous_work_plan) {
+    throw new ApiError(400, 'This task was not rolled over from a previous plan and cannot be rolled back');
+  }
+
+  let prevPlanId = work.previous_work_plan;
+  let previousPlan = null;
+
+  if (prevPlanId) {
+    previousPlan = await WorkPlan.findOne({ _id: prevPlanId, deletedAt: null });
+  }
+
+  // Fallback: If previous_work_plan reference is missing, find earlier plan by sales_user and date
+  if (!previousPlan && (work.previous_plan_date || work.plan_date)) {
+    const targetDate = work.previous_plan_date || work.plan_date;
+    previousPlan = await WorkPlan.findOne({
+      sales_user: work.sales_user || plan.sales_user,
+      plan_date: { $lte: targetDate, $lt: plan.plan_date },
+      _id: { $ne: plan._id },
+      deletedAt: null,
+    }).sort({ plan_date: -1 });
+  }
+
+  if (!previousPlan) {
+    throw new ApiError(404, 'Source work plan was not found or has been deleted');
+  }
+
+  // Compute sequence in previous plan
+  const maxSeq = await WorkPlanWork.findOne({ work_plan: previousPlan._id, deletedAt: null })
+    .sort({ sequence: -1 })
+    .select('sequence')
+    .lean();
+  const newSequence = (maxSeq?.sequence || 0) + 1;
+
+  // Restore task back to source plan
+  work.work_plan = previousPlan._id;
+  work.sales_user = previousPlan.sales_user;
+  work.plan_date = previousPlan.plan_date;
+  work.sequence = newSequence;
+  work.is_from_previous_plan = false;
+  work.previous_work_plan = null;
+  work.previous_plan_date = null;
+  work.previous_sequence = null;
+  work.updated_by = userId(user);
+  work.updated_by_role = getUserRole(user);
+  await work.save();
+
+  // Renumber works on current plan
+  await renumberWorks(planId);
+  // Renumber works on previous plan
+  await renumberWorks(previousPlan._id);
+
+  const prevDateStr = previousPlan.plan_date ? new Date(previousPlan.plan_date).toISOString().slice(0, 10) : 'previous plan';
+  await logActivity(user, planId, 'updated', `Work task "${work.title}" rolled back to plan of ${prevDateStr}`);
+  await logActivity(user, previousPlan._id, 'updated', `Work task "${work.title}" restored from rollover`);
+
   return getWithVisits(planId);
 }
 
@@ -5041,6 +5136,7 @@ module.exports = {
   addWork,
   updateWork,
   removeWork,
+  rollbackWork,
   addStandaloneWork,
   updateStandaloneWork,
   removeStandaloneWork,

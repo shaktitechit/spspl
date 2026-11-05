@@ -539,6 +539,15 @@ function registerModels() {
         in_progress_remarks: { type: String, trim: true },
         manager_remarks: { type: String, trim: true },
         rescheduled_date: Date,
+        is_from_previous_plan: { type: Boolean, default: false, index: true },
+        previous_work_plan: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'WorkPlan',
+          default: null,
+          index: true,
+        },
+        previous_plan_date: Date,
+        previous_sequence: Number,
         authority_remarks: [
           {
             remark: { type: String, required: true, trim: true },

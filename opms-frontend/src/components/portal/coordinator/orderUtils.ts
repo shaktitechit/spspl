@@ -116,6 +116,14 @@ export function orderMatchesSalesTab(
   }
   if (tab === "all") return true;
 
+  const row = order as Record<string, unknown>;
+  if (tab === "due_sheet_pending") {
+    if (row.workflow_tab === "due_sheet_pending" || row.process_stage === "due_sheet_pending") {
+      return true;
+    }
+    return isDueSheetPending(row);
+  }
+
   return getOrderTabCategory(order, options) === tab;
 }
 

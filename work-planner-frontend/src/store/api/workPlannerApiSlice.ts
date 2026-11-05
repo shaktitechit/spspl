@@ -347,6 +347,17 @@ export const workPlannerApiSlice = baseApi.injectEndpoints({
         "WorkPlannerStats",
       ],
     }),
+    rollbackWork: builder.mutation<WorkPlanRecord, { planId: string; workId: string }>({
+      query: ({ planId, workId }) => ({
+        url: `${WORK_PLANNER_SERVICE_URL}/api/work-planner/${planId}/works/${workId}/rollback`,
+        method: "POST",
+      }),
+      invalidatesTags: (_result, _error, { planId }) => [
+        { type: "WorkPlan", id: planId },
+        "WorkPlan",
+        "WorkPlannerStats",
+      ],
+    }),
     // Expenses
     getExpenses: builder.query<
       { data: WorkPlanExpenseRecord[]; total: number; page: number; limit: number; pages: number },
@@ -1172,6 +1183,7 @@ export const {
   useAddWorkMutation,
   useUpdateWorkMutation,
   useRemoveWorkMutation,
+  useRollbackWorkMutation,
   useAddStandaloneWorkMutation,
   useUpdateStandaloneWorkMutation,
   useRemoveStandaloneWorkMutation,
