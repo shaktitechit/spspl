@@ -318,7 +318,7 @@ export function DiwaliCelebration() {
                 Warm Festive Wishes
               </span>
               <span className="text-sm font-semibold text-amber-200 mt-0.5">
-                From SPSPL & OPMS Operations Team
+                From SPSPL & Medica Operations Team
               </span>
             </div>
 

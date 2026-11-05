@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useParams } from "next/navigation";
-import { UserTemplatesConfigPage } from "@/components/workPlanner/UserTemplatesConfigPage";
+import { UserTemplatesConfigPage } from "@/components/workPlanner/settings/UserTemplatesConfigPage";
 
 export default function UserConfigRoutePage() {
   const params = useParams();

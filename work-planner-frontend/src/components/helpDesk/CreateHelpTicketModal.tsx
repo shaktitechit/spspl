@@ -27,7 +27,7 @@ import {
   useUploadHelpDeskAttachmentMutation,
   useGetHelpDeskUsersQuery,
 } from "@/store/api/helpDeskApiSlice";
-import { FilePreviewModal, useFilePreview } from "@/components/workPlanner/FilePreviewModal";
+import { FilePreviewModal, useFilePreview } from "@/components/workPlanner/shared/FilePreviewModal";
 import { readSessionFromStorage } from "@/utils/authStorage";
 import type {
   HelpTicketCategory,

@@ -3,8 +3,8 @@
 import { useState, useCallback } from "react";
 import Link from "next/link";
 import { Plus, CalendarDays, FileText, DollarSign, BookOpen, ArrowRight } from "lucide-react";
-import { WorkPlannerStatsWidgets } from "@/components/workPlanner/WorkPlannerStatsWidgets";
-import { DashboardDateFilter, type DateRange } from "@/components/workPlanner/DashboardDateFilter";
+import { WorkPlannerStatsWidgets } from "@/components/workPlanner/shared/WorkPlannerStatsWidgets";
+import { DashboardDateFilter, type DateRange } from "@/components/workPlanner/shared/DashboardDateFilter";
 import { isWpElevated, readSessionFromStorage } from "@/utils/authStorage";
 
 export default function DashboardPage() {

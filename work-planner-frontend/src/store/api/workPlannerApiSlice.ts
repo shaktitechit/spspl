@@ -1,5 +1,6 @@
 import { baseApi } from "./baseApi";
 import { WORK_PLANNER_SERVICE_URL } from "@/lib/env";
+import type { PortalAdminSettings } from "@/utils/portalAdminSettings";
 import type {
   DayEndDraftResponse,
   DayEndPayload,
@@ -789,6 +790,28 @@ export const workPlannerApiSlice = baseApi.injectEndpoints({
       transformResponse: (res: any) => res.data || res,
       providesTags: [{ type: "WorkPlan" as const, id: "USER_VISIT_TEMPLATES_SUMMARY" }],
     }),
+    getPortalSettings: builder.query<PortalAdminSettings, void>({
+      query: () => `${WORK_PLANNER_SERVICE_URL}/api/work-planner/portal-settings`,
+      transformResponse: (res: any) => (res && res.data ? res.data : res),
+      providesTags: [{ type: "WorkPlan" as const, id: "PORTAL_SETTINGS" }],
+    }),
+    updatePortalSettings: builder.mutation<PortalAdminSettings, Partial<PortalAdminSettings>>({
+      query: (body) => ({
+        url: `${WORK_PLANNER_SERVICE_URL}/api/work-planner/portal-settings`,
+        method: "PUT",
+        body,
+      }),
+      transformResponse: (res: any) => (res && res.data ? res.data : res),
+      invalidatesTags: [{ type: "WorkPlan" as const, id: "PORTAL_SETTINGS" }],
+    }),
+    resetPortalSettings: builder.mutation<PortalAdminSettings, void>({
+      query: () => ({
+        url: `${WORK_PLANNER_SERVICE_URL}/api/work-planner/portal-settings/reset`,
+        method: "POST",
+      }),
+      transformResponse: (res: any) => (res && res.data ? res.data : res),
+      invalidatesTags: [{ type: "WorkPlan" as const, id: "PORTAL_SETTINGS" }],
+    }),
     getTeamTree: builder.query<any, void>({
       query: () => `${WORK_PLANNER_SERVICE_URL}/api/work-planner/team/tree`,
       transformResponse: (res: any) => res.data || res,
@@ -1278,4 +1301,7 @@ export const {
   useLazyGetMyEmailPreferencesQuery,
   useUpdateMyEmailPreferencesMutation,
   useResetMyEmailPreferencesMutation,
+  useGetPortalSettingsQuery,
+  useUpdatePortalSettingsMutation,
+  useResetPortalSettingsMutation,
 } = workPlannerApiSlice;

@@ -35,6 +35,8 @@ export interface PortalAdminSettings {
   planSubmissionCutoffTime: string;
   allowBackdatedPlans: boolean;
   maxAdvancePlanningDays: number;
+  maxAllowedBackdatedDays: number;
+  morningPlanningReminderTime: string;
   requireManagerPreApproval: boolean;
   autoLockApprovedPlans: boolean;
 
@@ -62,10 +64,12 @@ export interface PortalAdminSettings {
   enableAiSummaryAnalysis: boolean;
   directiveEscalationHours: number;
 
+  // Other Restrictions
+  blockPlanningIfSeniorObjectionsUnresolved: boolean;
+
   // Notifications & Alerts
   notifyManagerOnPlanSubmit: boolean;
   notifyUserOnPlanDecision: boolean;
-  morningPlanningReminderTime: string;
   sendMorningReminder: boolean;
   eveningDayEndReminderTime: string;
   sendEveningReminder: boolean;
@@ -147,6 +151,8 @@ export const DEFAULT_PORTAL_ADMIN_SETTINGS: PortalAdminSettings = {
   planSubmissionCutoffTime: "09:00",
   allowBackdatedPlans: false,
   maxAdvancePlanningDays: 14,
+  maxAllowedBackdatedDays: 2,
+  morningPlanningReminderTime: "08:30",
   requireManagerPreApproval: false,
   autoLockApprovedPlans: true,
 
@@ -171,9 +177,10 @@ export const DEFAULT_PORTAL_ADMIN_SETTINGS: PortalAdminSettings = {
   enableAiSummaryAnalysis: true,
   directiveEscalationHours: 48,
 
+  blockPlanningIfSeniorObjectionsUnresolved: true,
+
   notifyManagerOnPlanSubmit: true,
   notifyUserOnPlanDecision: true,
-  morningPlanningReminderTime: "08:30",
   sendMorningReminder: true,
   eveningDayEndReminderTime: "20:00",
   sendEveningReminder: true,
@@ -196,6 +203,12 @@ export function getPortalAdminSettings(): PortalAdminSettings {
         clientTypes: Array.isArray(parsed.clientTypes) && parsed.clientTypes.length > 0 ? parsed.clientTypes : DEFAULT_CLIENT_TYPES,
         workingDays: Array.isArray(parsed.workingDays) ? parsed.workingDays : DEFAULT_PORTAL_ADMIN_SETTINGS.workingDays,
         defaultDayEndCcEmails: Array.isArray(parsed.defaultDayEndCcEmails) ? parsed.defaultDayEndCcEmails : DEFAULT_PORTAL_ADMIN_SETTINGS.defaultDayEndCcEmails,
+        maxAllowedBackdatedDays: typeof parsed.maxAllowedBackdatedDays === "number" ? parsed.maxAllowedBackdatedDays : DEFAULT_PORTAL_ADMIN_SETTINGS.maxAllowedBackdatedDays,
+        morningPlanningReminderTime: typeof parsed.morningPlanningReminderTime === "string" && parsed.morningPlanningReminderTime ? parsed.morningPlanningReminderTime : DEFAULT_PORTAL_ADMIN_SETTINGS.morningPlanningReminderTime,
+        blockPlanningIfSeniorObjectionsUnresolved: typeof parsed.blockPlanningIfSeniorObjectionsUnresolved === "boolean" ? parsed.blockPlanningIfSeniorObjectionsUnresolved : DEFAULT_PORTAL_ADMIN_SETTINGS.blockPlanningIfSeniorObjectionsUnresolved,
+        receiptRequiredThresholdAmount: typeof parsed.receiptRequiredThresholdAmount === "number" ? parsed.receiptRequiredThresholdAmount : DEFAULT_PORTAL_ADMIN_SETTINGS.receiptRequiredThresholdAmount,
+        fuelRateTwoWheelerPerKm: typeof parsed.fuelRateTwoWheelerPerKm === "number" ? parsed.fuelRateTwoWheelerPerKm : DEFAULT_PORTAL_ADMIN_SETTINGS.fuelRateTwoWheelerPerKm,
+        expenseSubmissionWindowDays: typeof parsed.expenseSubmissionWindowDays === "number" ? parsed.expenseSubmissionWindowDays : DEFAULT_PORTAL_ADMIN_SETTINGS.expenseSubmissionWindowDays,
       };
     }
   } catch (err) {

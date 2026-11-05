@@ -1,4 +1,4 @@
-import { AssignedUsersPage } from "@/components/workPlanner/AssignedUsersPage";
+import { AssignedUsersPage } from "@/components/workPlanner/settings/AssignedUsersPage";
 
 export const metadata = {
   description: "Admin view for all Work Planner teams, work plans, and expense activity.",

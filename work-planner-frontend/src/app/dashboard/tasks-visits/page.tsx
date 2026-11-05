@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Suspense } from "react";
-import TasksVisitsPage from "@/components/workPlanner/TasksVisitsPage";
+import TasksVisitsPage from "@/components/workPlanner/tasks-visits/TasksVisitsPage";
 
 export default function DashboardTasksVisitsPage() {
   return (

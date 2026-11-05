@@ -2,7 +2,7 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { WorkPlanFormPage } from "@/components/workPlanner/WorkPlanFormPage";
+import { WorkPlanFormPage } from "@/components/workPlanner/plans/WorkPlanFormPage";
 
 function NewPlanPageContent() {
   const searchParams = useSearchParams();

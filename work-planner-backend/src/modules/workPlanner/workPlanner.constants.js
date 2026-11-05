@@ -98,7 +98,7 @@ const EXPENSE_ADD_WINDOW_DAYS = 3;
 /** Sales / Executive must attach image/PDF receipt when amount is greater than this. */
 const EXPENSE_RECEIPT_REQUIRED_ABOVE = 200;
 
-function isExpenseAddWindowOpen(planDate, now = new Date()) {
+function isExpenseAddWindowOpen(planDate, now = new Date(), windowDays = EXPENSE_ADD_WINDOW_DAYS) {
   if (!planDate) return false;
   const pDate = new Date(planDate);
   if (Number.isNaN(pDate.getTime())) return false;
@@ -112,13 +112,14 @@ function isExpenseAddWindowOpen(planDate, now = new Date()) {
   const nMonth = nowIST.getUTCMonth();
   const nDay = nowIST.getUTCDate();
 
-  const end = new Date(Date.UTC(pYear, pMonth, pDay + (EXPENSE_ADD_WINDOW_DAYS - 1), 23, 59, 59, 999));
+  const daysAllowed = Math.max(1, Number(windowDays) || EXPENSE_ADD_WINDOW_DAYS);
+  const end = new Date(Date.UTC(pYear, pMonth, pDay + (daysAllowed - 1), 23, 59, 59, 999));
   const current = new Date(Date.UTC(nYear, nMonth, nDay, 12, 0, 0, 0));
 
   return current.getTime() <= end.getTime();
 }
 
-function isExpenseAddWindowEnded(planDate, now = new Date()) {
+function isExpenseAddWindowEnded(planDate, now = new Date(), windowDays = EXPENSE_ADD_WINDOW_DAYS) {
   if (!planDate) return false;
   const pDate = new Date(planDate);
   if (Number.isNaN(pDate.getTime())) return false;
@@ -132,16 +133,16 @@ function isExpenseAddWindowEnded(planDate, now = new Date()) {
   const nMonth = nowIST.getUTCMonth();
   const nDay = nowIST.getUTCDate();
 
-  const end = new Date(
-    Date.UTC(pYear, pMonth, pDay + (EXPENSE_ADD_WINDOW_DAYS - 1), 23, 59, 59, 999),
-  );
+  const daysAllowed = Math.max(1, Number(windowDays) || EXPENSE_ADD_WINDOW_DAYS);
+  const end = new Date(Date.UTC(pYear, pMonth, pDay + (daysAllowed - 1), 23, 59, 59, 999));
   const current = new Date(Date.UTC(nYear, nMonth, nDay, 12, 0, 0, 0));
 
   return current.getTime() > end.getTime();
 }
 
-function isExpenseReceiptRequired(amount) {
-  return Number(amount) > EXPENSE_RECEIPT_REQUIRED_ABOVE;
+function isExpenseReceiptRequired(amount, threshold = EXPENSE_RECEIPT_REQUIRED_ABOVE) {
+  const limit = Number(threshold) >= 0 ? Number(threshold) : EXPENSE_RECEIPT_REQUIRED_ABOVE;
+  return Number(amount) > limit;
 }
 
 const WORK_PLANNER_ROLES = Object.freeze(['executive', 'coordinator', 'manager', 'admin']);

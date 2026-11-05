@@ -7,6 +7,7 @@ const { getModels } = require('../../data/mongoRegistry');
 const { toPlain } = require('../../utils/mongoJson');
 const { ApiError } = require('../../utils/ApiError');
 const activityService = require('../activity/activity.service');
+const portalSettingsService = require('./portalSettings.service');
 const notificationService = require('../notifications/notification.service');
 const {
   sendWorkPlanCompletedEmail,
@@ -253,17 +254,94 @@ async function assertCanEditVisits(plan, user) {
   }
 }
 
-function assertValidPlanDateForUser(planDateInput, user) {
+async function assertValidPlanDateForUser(planDateInput, user) {
   if (isWpElevated(user)) return;
+  const settings = await portalSettingsService.getEffectiveSettings();
   const pDate = startOfDay(planDateInput);
-  const minAllowed = startOfDay(new Date());
-  minAllowed.setUTCDate(minAllowed.getUTCDate() - 2);
 
-  if (pDate.getTime() < minAllowed.getTime()) {
+  // 1.b Check advance planning days limit
+  const maxAdvance = Number(settings.maxAdvancePlanningDays || 14);
+  const maxAllowed = startOfDay(new Date());
+  maxAllowed.setUTCDate(maxAllowed.getUTCDate() + maxAdvance);
+
+  if (pDate.getTime() > maxAllowed.getTime()) {
     throw new ApiError(
       400,
-      'Executives cannot create or edit work plans for dates earlier than 2 days before today',
+      `Work plans can only be planned up to ${maxAdvance} days in advance.`,
     );
+  }
+
+  // 1.c Check backdated plans limit
+  const allowBackdated = Boolean(settings.allowBackdatedPlans);
+  const maxBackDays = allowBackdated ? Number(settings.maxAllowedBackdatedDays ?? 2) : 0;
+  const minAllowed = startOfDay(new Date());
+  if (maxBackDays > 0) {
+    minAllowed.setUTCDate(minAllowed.getUTCDate() - maxBackDays);
+  }
+
+  if (pDate.getTime() < minAllowed.getTime()) {
+    if (!allowBackdated) {
+      throw new ApiError(400, 'Backdated work plans are not permitted by portal governance rules.');
+    }
+    throw new ApiError(
+      400,
+      `Executives cannot create or edit work plans for dates earlier than ${maxBackDays} days before today.`,
+    );
+  }
+}
+
+async function assertPlanningRestrictions(salesUserId, planDateInput, user) {
+  if (isWpElevated(user)) return;
+  const settings = await portalSettingsService.getEffectiveSettings();
+  const { WorkPlan } = getModels();
+
+  // 3. Other Restrictions: Block planning if objections by senior are not resolved
+  if (settings.blockPlanningIfSeniorObjectionsUnresolved) {
+    const unresolvedObjectionPlan = await WorkPlan.findOne({
+      sales_user: salesUserId,
+      deletedAt: null,
+      authority_remarks: {
+        $elemMatch: {
+          remark_type: 'objection',
+          status: { $in: ['pending_response', 'responded'] },
+        },
+      },
+    })
+      .select('plan_date authority_remarks')
+      .lean();
+
+    if (unresolvedObjectionPlan) {
+      const objection = (unresolvedObjectionPlan.authority_remarks || []).find(
+        (r) => r.remark_type === 'objection' && r.status !== 'resolved'
+      );
+      const formattedDate = new Date(unresolvedObjectionPlan.plan_date).toISOString().slice(0, 10);
+      throw new ApiError(
+        400,
+        `Cannot create/submit plan: You have an unresolved senior objection on plan for ${formattedDate}: "${objection?.remark || 'Senior objection pending'}". Please resolve it with your senior first.`,
+      );
+    }
+  }
+
+  // 2.c Day End: Block next day plan if Day-End is pending for previous workday
+  if (settings.blockNextDayPlanIfDayEndPending) {
+    const pDate = startOfDay(planDateInput);
+    const priorPlan = await WorkPlan.findOne({
+      sales_user: salesUserId,
+      plan_date: { $lt: pDate },
+      deletedAt: null,
+      plan_type: { $ne: 'Leave' },
+    })
+      .sort({ plan_date: -1 })
+      .select('plan_date status plan_type')
+      .lean();
+
+    if (priorPlan && priorPlan.status !== 'completed') {
+      const priorDateStr = new Date(priorPlan.plan_date).toISOString().slice(0, 10);
+      throw new ApiError(
+        400,
+        `Cannot create/submit plan: Day-End debrief report for previous workday (${priorDateStr}) has not been submitted yet.`,
+      );
+    }
   }
 }
 
@@ -906,7 +984,7 @@ async function get(id, user) {
 
 async function create(body, user) {
   const { WorkPlan, WorkPlanVisit, WorkPlanWork } = getModels();
-  assertValidPlanDateForUser(body.plan_date, user);
+  await assertValidPlanDateForUser(body.plan_date, user);
   let salesUserId = userId(user);
   if (body.sales_user && String(body.sales_user) !== String(userId(user))) {
     if (!isWpElevated(user)) {
@@ -917,6 +995,7 @@ async function create(body, user) {
     }
     salesUserId = body.sales_user;
   }
+  await assertPlanningRestrictions(salesUserId, body.plan_date, user);
   const planDate = startOfDay(body.plan_date);
 
   try {
@@ -992,7 +1071,7 @@ async function update(id, body, user) {
   await assertCanEditStructure(plan, user);
 
   if (body.plan_date !== undefined) {
-    assertValidPlanDateForUser(body.plan_date, user);
+    await assertValidPlanDateForUser(body.plan_date, user);
     plan.plan_date = startOfDay(body.plan_date);
   }
   if (body.remarks !== undefined) {
@@ -1169,6 +1248,29 @@ async function submit(id, user, body = {}) {
   }
   if (!EDITABLE_PLAN_STATUSES.includes(plan.status) && !(plan.plan_type === 'Leave' && (plan.status === 'completed' || plan.status === 'planned'))) {
     throw new ApiError(400, `Cannot submit a work plan in status "${plan.status}"`);
+  }
+
+  await assertPlanningRestrictions(plan.sales_user, plan.plan_date, user);
+
+  // 1.a Check morning plan cutoff time
+  const portalSettings = await portalSettingsService.getEffectiveSettings();
+  if (portalSettings.planSubmissionCutoffTime) {
+    const [cutoffH, cutoffM] = portalSettings.planSubmissionCutoffTime.split(':').map(Number);
+    if (!isNaN(cutoffH)) {
+      const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+      const planIST = new Date(new Date(plan.plan_date).getTime() + 5.5 * 60 * 60 * 1000);
+      if (
+        nowIST.getUTCFullYear() === planIST.getUTCFullYear() &&
+        nowIST.getUTCMonth() === planIST.getUTCMonth() &&
+        nowIST.getUTCDate() === planIST.getUTCDate()
+      ) {
+        const nowMinutes = nowIST.getUTCHours() * 60 + nowIST.getUTCMinutes();
+        const cutoffMinutes = cutoffH * 60 + (cutoffM || 0);
+        if (nowMinutes > cutoffMinutes) {
+          plan.is_late_submission = true;
+        }
+      }
+    }
   }
 
   const planType = plan.plan_type || 'Visits';
@@ -2464,7 +2566,7 @@ async function resolveExpenseVisit(planId, visitId) {
   return visit._id;
 }
 
-function applyExpenseFields(expense, body, { isCreate = false } = {}) {
+function applyExpenseFields(expense, body, { isCreate = false, fuelRateTwoWheelerPerKm } = {}) {
   if (isCreate || body.expense_date !== undefined) {
     expense.expense_date = startOfDay(body.expense_date);
   }
@@ -2542,9 +2644,10 @@ function applyExpenseFields(expense, body, { isCreate = false } = {}) {
     const closing = Number(expense.closing_reading);
     if (Number.isFinite(start) && Number.isFinite(closing) && closing >= start) {
       expense.total_km = Math.round((closing - start) * 100) / 100;
-      expense.rate_per_km = 3.5;
-      // Auto-calculate amount at 3.5 rupees per km
-      expense.amount = Math.round(expense.total_km * 3.5 * 100) / 100;
+      const bikeRate = Number(fuelRateTwoWheelerPerKm || 4.5);
+      expense.rate_per_km = bikeRate;
+      // Auto-calculate amount at configured rupees per km
+      expense.amount = Math.round(expense.total_km * bikeRate * 100) / 100;
     }
     if (body.start_reading_image !== undefined) {
       expense.start_reading_image =
@@ -2828,12 +2931,13 @@ async function listExpenses(planId, user) {
   return { expenses, ...totals };
 }
 
-function assertSalesExpenseReceipt(expense, user) {
+function assertSalesExpenseReceipt(expense, user, threshold = EXPENSE_RECEIPT_REQUIRED_ABOVE) {
   const hasAttachment =
     Boolean(expense.receipt_attachment) ||
     (Array.isArray(expense.attachments) && expense.attachments.length > 0);
-  if (isExpenseReceiptRequired(expense.amount) && !hasAttachment) {
-    throw new ApiError(400, 'Attachments/receipt is required for expenses exceeding ₹200');
+  const limit = Math.max(0, Number(threshold) >= 0 ? Number(threshold) : EXPENSE_RECEIPT_REQUIRED_ABOVE);
+  if (isExpenseReceiptRequired(expense.amount, limit) && !hasAttachment) {
+    throw new ApiError(400, `Attachments/receipt (image or docx/pdf) is required for expenses exceeding ₹${limit}`);
   }
 }
 
@@ -2843,10 +2947,22 @@ async function addExpense(planId, body, user) {
   if (!plan) throw new ApiError(404, 'Work plan not found');
   await assertCanManageExpense(plan, user);
 
-  if (!isWpElevated(user) && !isExpenseAddWindowOpen(plan.plan_date)) {
+  const settings = await portalSettingsService.getEffectiveSettings();
+
+  // 4. Block expense without approved plan
+  if (settings.blockExpenseWithoutApprovedPlan && !['approved', 'completed'].includes(plan.status)) {
     throw new ApiError(
       400,
-      'Expenses can only be added from the work plan day through the next 2 days (3 days total). Earlier or later entries are not allowed.',
+      'Expenses can only be logged for days associated with an approved work plan',
+    );
+  }
+
+  // 4. Expense submission allowed back days window
+  const windowDays = Number(settings.expenseSubmissionWindowDays || 7);
+  if (!isWpElevated(user) && !isExpenseAddWindowOpen(plan.plan_date, new Date(), windowDays)) {
+    throw new ApiError(
+      400,
+      `Expenses can only be added within ${windowDays} days from the work plan date. Earlier or later entries are not allowed.`,
     );
   }
 
@@ -2860,9 +2976,9 @@ async function addExpense(planId, body, user) {
     created_by: userId(user),
     updated_by: userId(user),
   });
-  applyExpenseFields(expense, body, { isCreate: true });
+  applyExpenseFields(expense, body, { isCreate: true, fuelRateTwoWheelerPerKm: settings.fuelRateTwoWheelerPerKm });
   assertPrivateBikeExpense(expense);
-  assertSalesExpenseReceipt(expense, user);
+  assertSalesExpenseReceipt(expense, user, settings.receiptRequiredThresholdAmount);
   await expense.save();
 
   await logActivity(
@@ -2887,13 +3003,15 @@ async function updateExpense(planId, expenseId, body, user) {
   if (!expense) throw new ApiError(404, 'Expense not found');
   await assertCanEditExpense(expense, plan, user);
 
+  const settings = await portalSettingsService.getEffectiveSettings();
+
   if (body.work_plan_visit !== undefined) {
     expense.work_plan_visit = await resolveExpenseVisit(
       planId,
       body.work_plan_visit || null,
     );
   }
-  applyExpenseFields(expense, body, { isCreate: false });
+  applyExpenseFields(expense, body, { isCreate: false, fuelRateTwoWheelerPerKm: settings.fuelRateTwoWheelerPerKm });
 
   if (expense.status === 'rejected') {
     expense.status = 'draft';
@@ -2903,7 +3021,7 @@ async function updateExpense(planId, expenseId, body, user) {
   }
 
   assertPrivateBikeExpense(expense);
-  assertSalesExpenseReceipt(expense, user);
+  assertSalesExpenseReceipt(expense, user, settings.receiptRequiredThresholdAmount);
   expense.updated_by = userId(user);
   await expense.save();
 

@@ -38,7 +38,7 @@ import type { UserNoteRecord } from "@/types/workPlanner";
 import { NoteCard } from "./NoteCard";
 import { NoteEditorModal } from "./NoteEditorModal";
 import { BatchConvertToWorkPlanModal } from "./BatchConvertToWorkPlanModal";
-import { ConfirmDeleteModal } from "../ConfirmDeleteModal";
+import { ConfirmDeleteModal } from "../shared/ConfirmDeleteModal";
 
 type NoteFilterTab =
   | "all"

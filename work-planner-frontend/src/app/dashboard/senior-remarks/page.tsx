@@ -1,6 +1,6 @@
 "use client";
 
-import { SeniorRemarksPage } from "@/components/workPlanner/SeniorRemarksPage";
+import { SeniorRemarksPage } from "@/components/workPlanner/senior-remarks/SeniorRemarksPage";
 
 export default function SeniorRemarksPageRoute() {
   return <SeniorRemarksPage />;

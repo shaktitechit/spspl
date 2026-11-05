@@ -1,4 +1,4 @@
-import { UserSettingsPage } from "@/components/workPlanner/UserSettingsPage";
+import { UserSettingsPage } from "@/components/workPlanner/settings/UserSettingsPage";
 
 export const metadata = {
   description: "Configure user manager, CC emails, and custom work task templates.",

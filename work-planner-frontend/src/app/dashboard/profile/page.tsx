@@ -19,7 +19,7 @@ import {
 import { resolveRoleLabels } from "@/utils/resolveRoleLabels";
 import { PasswordChangePanel } from "@/components/profile/PasswordChangePanel";
 import { EmailPreferencesPanel } from "@/components/profile/EmailPreferencesPanel";
-import { UserSettingsPage } from "@/components/workPlanner/UserSettingsPage";
+import { UserSettingsPage } from "@/components/workPlanner/settings/UserSettingsPage";
 import type { AuthUser, UserSession } from "@/types/workPlanner";
 
 function formatLabel(code: string): string {

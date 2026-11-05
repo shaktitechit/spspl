@@ -27,7 +27,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { UserNoteRecord } from "@/types/workPlanner";
-import { formatPlanDate } from "../workPlanUtils";
+import { formatPlanDate } from "../shared/workPlanUtils";
 
 interface NoteCardProps {
   note: UserNoteRecord;

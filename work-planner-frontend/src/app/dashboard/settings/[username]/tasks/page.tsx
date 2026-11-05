@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useParams } from "next/navigation";
-import { UserTasksConfigPage } from "@/components/workPlanner/UserTasksConfigPage";
+import { UserTasksConfigPage } from "@/components/workPlanner/settings/UserTasksConfigPage";
 
 export default function UserTasksRoutePage() {
   const params = useParams();

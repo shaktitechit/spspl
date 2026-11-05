@@ -1,5 +1,5 @@
 import React from "react";
-import { WorkPlanAnalyticsPage } from "@/components/workPlanner/WorkPlanAnalyticsPage";
+import { WorkPlanAnalyticsPage } from "@/components/workPlanner/plans/WorkPlanAnalyticsPage";
 
 export const metadata = {
   description: "Comprehensive 360° AI-powered work plan analysis, dedicated visits and tasks reports, and manager coaching directives.",

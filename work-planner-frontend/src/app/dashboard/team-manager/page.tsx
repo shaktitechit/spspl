@@ -1,4 +1,4 @@
-import { TeamManagerPage } from "@/components/workPlanner/TeamManagerPage";
+import { TeamManagerPage } from "@/components/workPlanner/settings/TeamManagerPage";
 
 export const metadata = {
   description: "Admin tool to map who reports to whom in Work Planner.",

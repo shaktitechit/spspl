@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { WorkPlanDetailPage } from "@/components/workPlanner/WorkPlanDetailPage";
+import { WorkPlanDetailPage } from "@/components/workPlanner/plans/WorkPlanDetailPage";
 
 export default function PlanDetailRoutePage() {
   const params = useParams();

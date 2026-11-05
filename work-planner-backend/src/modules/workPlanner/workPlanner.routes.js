@@ -15,6 +15,7 @@ const teamController = require('./team.controller');
 const emailPreferenceController = require('./emailPreference.controller');
 const analyticsController = require('./workPlanAnalytics.controller');
 const userTemplateController = require('./userTemplate.controller');
+const portalSettingsController = require('./portalSettings.controller');
 const expenseRoutes = require('./expense/expense.routes');
 const multer = require('multer');
 
@@ -56,6 +57,11 @@ router.post('/attachments/upload', upload.single('file'), controller.uploadAttac
 router.get('/user-settings/:userId', controller.getUserSettings);
 router.put('/user-settings/:userId', elevatedRoles, controller.updateUserSettings);
 router.get('/eligible-managers', controller.getEligibleManagers);
+
+// Global Portal Settings & Governance Policies
+router.get('/portal-settings', portalSettingsController.getPortalSettings);
+router.put('/portal-settings', adminRole, portalSettingsController.updatePortalSettings);
+router.post('/portal-settings/reset', adminRole, portalSettingsController.resetPortalSettings);
 
 // User Tasks & Dynamic Templates
 router.get('/user-tasks/summary', elevatedRoles, userTemplateController.getUserTasksSummary);

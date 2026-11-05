@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useParams } from "next/navigation";
-import { UserVisitsConfigPage } from "@/components/workPlanner/UserVisitsConfigPage";
+import { UserVisitsConfigPage } from "@/components/workPlanner/settings/UserVisitsConfigPage";
 
 export default function UserVisitsRoutePage() {
   const params = useParams();

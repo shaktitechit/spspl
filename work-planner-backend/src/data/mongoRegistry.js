@@ -1179,6 +1179,12 @@ function registerModels() {
     mongoose.model('UserVisitTemplate', userVisitTemplateSchema);
   }
 
+  // WorkPlannerPortalSettings schema (global policies, rules, cutoff times, allowances)
+  if (!mongoose.models.WorkPlannerPortalSettings) {
+    const workPlannerPortalSettingsSchema = require('../models/WorkPlannerPortalSettings');
+    mongoose.model('WorkPlannerPortalSettings', workPlannerPortalSettingsSchema);
+  }
+
   // WorkPlannerReportingEdge — who reports to whom (executive→manager, manager→admin)
   if (!mongoose.models.WorkPlannerReportingEdge) {
     const reportingEdgeSchema = new mongoose.Schema(
@@ -1328,6 +1334,7 @@ function registerModels() {
     UserWorkPlannerSettings: mongoose.model('UserWorkPlannerSettings'),
     UserTaskCatalog: mongoose.model('UserTaskCatalog'),
     UserVisitTemplate: mongoose.model('UserVisitTemplate'),
+    WorkPlannerPortalSettings: mongoose.model('WorkPlannerPortalSettings'),
     UserEmailPreference: mongoose.model('UserEmailPreference'),
     WorkPlannerReportingEdge: mongoose.model('WorkPlannerReportingEdge'),
     WorkPlanAnalyticsCache: mongoose.model('WorkPlanAnalyticsCache'),
