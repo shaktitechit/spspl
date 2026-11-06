@@ -193,14 +193,15 @@ export default function UserPassbookLedgerPage({
         { key: "rowNum", label: "#", width: 0.35, align: "center" },
         { key: "date", label: "Date", width: 0.85, align: "center" },
         { key: "ref", label: "Reference", width: 1.1, align: "left" },
-        { key: "type", label: "Type / Category", width: 1.4, align: "left" },
-        { key: "particulars", label: "Particulars & Description", width: 2.3, align: "left" },
+        { key: "type", label: "Type / Category", width: 1.3, align: "left" },
+        { key: "particulars", label: "Particulars & Description", width: 2.1, align: "left" },
+        { key: "approvedBy", label: "Approved By", width: 1.1, align: "left" },
         { key: "paymentInfo", label: "Payment Mode / UTR", width: 1.1, align: "left" },
         { key: "status", label: "Status", width: 0.8, align: "center" },
         { key: "amount", label: "Amount (INR)", width: 1.0, align: "right" },
         { key: "advBal", label: "Adv Bal (INR)", width: 1.0, align: "right" },
         { key: "claimsRec", label: "Claims Rec (INR)", width: 1.0, align: "right" },
-        { key: "runningNet", label: "Running Net (INR)", width: 1.35, align: "right" },
+        { key: "runningNet", label: "Running Net (INR)", width: 1.3, align: "right" },
       ];
 
       const rows: PdfReportRow[] = entries.map((e: any, idx: number) => {
@@ -248,6 +249,33 @@ export default function UserPassbookLedgerPage({
           .filter(Boolean)
           .join(" / ");
 
+        // Extract Approved By
+        const approver =
+          e.approved_by ||
+          e.settled_by ||
+          e.disbursed_by ||
+          e.refunded_by ||
+          (e.actor_name && !["Self", "Executive", "—", "-"].includes(e.actor_name) ? e.actor_name : null);
+
+        let approvedByName = "—";
+        if (approver) {
+          if (typeof approver === "object") {
+            approvedByName = approver.name || approver.email || "—";
+          } else if (typeof approver === "string") {
+            if (/^[0-9a-fA-F]{24}$/.test(approver)) {
+              approvedByName = e.actor_name && !["Self", "Executive", "—", "-"].includes(e.actor_name) ? e.actor_name : "—";
+            } else {
+              approvedByName = approver;
+            }
+          }
+        }
+        if (
+          approvedByName === "—" &&
+          (e.entry_type === "expense_approved" || e.type === "EXPENSE_APPROVED" || e.entry_type === "advance_approved")
+        ) {
+          approvedByName = e.actor_name || "Manager";
+        }
+
         const netPos = Number(e.running_net_position || 0);
         let netPosStr = "0.00";
         if (netPos < 0) {
@@ -264,6 +292,7 @@ export default function UserPassbookLedgerPage({
           ref: e.reference || e.reference_number || "—",
           type: typeLabel,
           particulars: particulars || "—",
+          approvedBy: approvedByName,
           paymentInfo: paymentInfo || "—",
           status: statusLabel,
           amount: formatAmountForPdf(rawAmt),
@@ -292,6 +321,7 @@ export default function UserPassbookLedgerPage({
         ref: "",
         type: "CLOSING TOTALS",
         particulars: `Total entries: ${entries.length}`,
+        approvedBy: "",
         paymentInfo: "",
         status: "",
         amount: formatAmountForPdf(totalAmount),

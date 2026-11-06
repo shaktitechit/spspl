@@ -223,14 +223,15 @@ export function ExecutiveLedgerDrawer({
         { key: "rowNum", label: "#", width: 0.35, align: "center" },
         { key: "date", label: "Date", width: 0.85, align: "center" },
         { key: "ref", label: "Reference", width: 1.1, align: "left" },
-        { key: "type", label: "Type / Category", width: 1.4, align: "left" },
-        { key: "particulars", label: "Particulars & Description", width: 2.3, align: "left" },
+        { key: "type", label: "Type / Category", width: 1.3, align: "left" },
+        { key: "particulars", label: "Particulars & Description", width: 2.1, align: "left" },
+        { key: "approvedBy", label: "Approved By", width: 1.1, align: "left" },
         { key: "paymentInfo", label: "Payment Mode / UTR", width: 1.1, align: "left" },
         { key: "status", label: "Status", width: 0.8, align: "center" },
         { key: "amount", label: "Amount (INR)", width: 1.0, align: "right" },
         { key: "advBal", label: "Adv Bal (INR)", width: 1.0, align: "right" },
         { key: "claimsRec", label: "Claims Rec (INR)", width: 1.0, align: "right" },
-        { key: "runningNet", label: "Running Net (INR)", width: 1.35, align: "right" },
+        { key: "runningNet", label: "Running Net (INR)", width: 1.3, align: "right" },
       ];
 
       const rows: PdfReportRow[] = entries.map((e, idx) => {
@@ -279,6 +280,34 @@ export function ExecutiveLedgerDrawer({
           .filter(Boolean)
           .join(" / ");
 
+        // Extract Approved By
+        const approver =
+          e.approved_by ||
+          eAny.approved_by ||
+          eAny.settled_by ||
+          eAny.disbursed_by ||
+          eAny.refunded_by ||
+          (e.actor_name && !["Self", "Executive", "—", "-"].includes(e.actor_name) ? e.actor_name : null);
+
+        let approvedByName = "—";
+        if (approver) {
+          if (typeof approver === "object") {
+            approvedByName = approver.name || approver.email || "—";
+          } else if (typeof approver === "string") {
+            if (/^[0-9a-fA-F]{24}$/.test(approver)) {
+              approvedByName = e.actor_name && !["Self", "Executive", "—", "-"].includes(e.actor_name) ? e.actor_name : "—";
+            } else {
+              approvedByName = approver;
+            }
+          }
+        }
+        if (
+          approvedByName === "—" &&
+          (e.entry_type === "expense_approved" || eAny.type === "EXPENSE_APPROVED" || e.entry_type === "advance_approved")
+        ) {
+          approvedByName = e.actor_name || "Manager";
+        }
+
         const netPos = Number(e.running_net_position || 0);
         let netPosStr = "0.00";
         if (netPos < 0) {
@@ -295,6 +324,7 @@ export function ExecutiveLedgerDrawer({
           ref: e.reference || eAny.reference_number || "—",
           type: typeLabel,
           particulars: particulars || "—",
+          approvedBy: approvedByName,
           paymentInfo: paymentInfo || "—",
           status: statusLabel,
           amount: formatAmountForPdf(rawAmt),
@@ -323,6 +353,7 @@ export function ExecutiveLedgerDrawer({
         ref: "",
         type: "CLOSING TOTALS",
         particulars: `Total entries: ${entries.length}`,
+        approvedBy: "",
         paymentInfo: "",
         status: "",
         amount: formatAmountForPdf(totalAmount),
@@ -627,7 +658,7 @@ export function ExecutiveLedgerDrawer({
                 const itemTitle = entry.title || eAny.description || eAny.category || (isAdvanceRefund ? "Tour Advance Refund" : isAdvanceDisburse ? "Tour Advance Disbursed" : isExpenseDraft ? "Draft Claim" : isExpenseSubmitted ? "Submitted Claim" : isExpenseRejected ? "Rejected Claim" : "Ledger Entry");
                 const itemRef = entry.reference || eAny.reference_number || "—";
                 const itemAmount = entry.amount ?? (eAny.debit > 0 ? eAny.debit : eAny.credit) ?? 0;
-                const itemActor = entry.actor_name || (typeof eAny.refunded_by === "object" ? eAny.refunded_by?.name : undefined) || (typeof eAny.disbursed_by === "object" ? eAny.disbursed_by?.name : undefined);
+                const itemActor = entry.actor_name || (typeof eAny.approved_by === "object" ? eAny.approved_by?.name : undefined) || (typeof eAny.refunded_by === "object" ? eAny.refunded_by?.name : undefined) || (typeof eAny.disbursed_by === "object" ? eAny.disbursed_by?.name : undefined) || (typeof eAny.settled_by === "object" ? eAny.settled_by?.name : undefined);
 
                 return (
                   <div

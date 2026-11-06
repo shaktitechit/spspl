@@ -402,6 +402,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
         impact_claim_receivable: 0,
         payment_method: 'Approved (Pending Payout)',
         actor_name: adv.approved_by?.name || 'Manager',
+        approved_by: adv.approved_by,
         details: 'Tour advance approved — awaiting disbursement by treasury / finance',
         attachments: adv.attachments || [],
         attachment_details: adv.attachment_details || (Array.isArray(adv.attachments) ? adv.attachments : []),
@@ -428,6 +429,8 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
           payment_method: adv.payment_method || 'Bank Transfer',
           transaction_reference: adv.transaction_reference,
           actor_name: adv.disbursed_by?.name || 'Finance Authority',
+          approved_by: adv.approved_by,
+          disbursed_by: adv.disbursed_by,
           details: adv.disbursement_notes || adv.purpose || 'Tour advance funds disbursed',
           attachments: adv.disbursement_attachments || adv.attachments || [],
           attachment_details: adv.disbursement_attachments || adv.attachment_details || [],
@@ -455,6 +458,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
             payment_method: ref.payment_method || 'Bank Transfer',
             transaction_reference: ref.transaction_reference,
             actor_name: ref.accepted_by ? (ref.accepted_by?.name || 'Manager / Finance') : 'Company',
+            refunded_by: adv.refunded_by || (typeof ref.accepted_by === 'object' ? ref.accepted_by : undefined),
             details: ref.notes || 'Unspent advance refunded back to company',
             attachments: ref.attachments || [],
             attachment_details: ref.attachment_details || [],
@@ -478,6 +482,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
         payment_method: adv.refund_reference ? 'Bank / UPI' : 'Refund',
         transaction_reference: adv.refund_reference,
         actor_name: adv.refunded_by?.name || 'Finance Authority',
+        refunded_by: adv.refunded_by,
         details: adv.refund_notes || 'Unspent advance refunded back to company',
       });
     }
@@ -500,6 +505,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
         impact_claim_receivable: 0,
         payment_method: 'Advance Request',
         actor_name: adv.approved_by?.name || 'Manager / Authority',
+        approved_by: adv.approved_by,
         details: adv.rejection_reason ? `Rejected: ${adv.rejection_reason}` : (adv.purpose || 'Tour advance request rejected'),
         rejection_reason: adv.rejection_reason || 'Advance request rejected',
         remarks: adv.rejection_reason || 'Advance request rejected',
@@ -603,6 +609,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
         impact_payment_entry: 0,
         impact_claim_receivable: +exp.amount,
         actor_name: exp.approved_by?.name || 'Manager',
+        approved_by: exp.approved_by,
         details: exp.description || exp.category || 'Verified field expense claim',
         category: exp.category,
         sub_category: exp.sub_category,
@@ -626,6 +633,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
         impact_payment_entry: 0,
         impact_claim_receivable: 0,
         actor_name: exp.approved_by?.name || 'Manager',
+        approved_by: exp.approved_by,
         details: exp.rejection_reason ? `Rejected: ${exp.rejection_reason}` : (exp.description || 'Expense claim rejected'),
         category: exp.category,
         sub_category: exp.sub_category,
@@ -659,6 +667,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
         payment_method: set.payment_method || 'Bank Transfer',
         transaction_reference: set.transaction_reference,
         actor_name: set.settled_by?.name || 'Finance Authority',
+        settled_by: set.settled_by,
         details: set.settlement_notes || `Direct Treasury payment of ₹${Number(payAmount).toLocaleString('en-IN')}`,
       });
       continue;
@@ -681,6 +690,7 @@ async function getExecutivePassbook(targetUserId, query = {}, actor) {
       payment_method: set.payment_method,
       transaction_reference: set.transaction_reference,
       actor_name: set.settled_by?.name || 'Finance Authority',
+      settled_by: set.settled_by,
       details: set.settlement_notes || `Settled ${set.claims?.length || 0} claims (Adv Ded: ₹${set.advance_deduction_amount || 0}, Pay Offset: ₹${set.payment_entry_deduction_amount || 0}, Paid: ₹${set.direct_payment_amount || 0})`,
     });
   }
