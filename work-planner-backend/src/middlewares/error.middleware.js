@@ -8,6 +8,8 @@ function errorMiddleware(err, req, res, next) {
 
   if (statusCode >= 500) {
     console.error('[ERROR]', err);
+  } else if (statusCode >= 400) {
+    console.warn(`[WARN ${statusCode}] ${req.method} ${req.originalUrl}: ${message}`);
   }
 
   res.status(statusCode).json({

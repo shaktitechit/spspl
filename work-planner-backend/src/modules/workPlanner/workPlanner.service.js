@@ -2949,14 +2949,6 @@ async function addExpense(planId, body, user) {
 
   const settings = await portalSettingsService.getEffectiveSettings();
 
-  // 4. Block expense without approved plan
-  if (settings.blockExpenseWithoutApprovedPlan && !['approved', 'completed'].includes(plan.status)) {
-    throw new ApiError(
-      400,
-      'Expenses can only be logged for days associated with an approved work plan',
-    );
-  }
-
   // 4. Expense submission allowed back days window
   const windowDays = Number(settings.expenseSubmissionWindowDays || 7);
   if (!isWpElevated(user) && !isExpenseAddWindowOpen(plan.plan_date, new Date(), windowDays)) {

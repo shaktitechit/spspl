@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, Paperclip, FileText, Upload, Trash2, Bike, Calculator } from "lucide-react";
+import { X, Paperclip, FileText, Upload, Trash2, Bike, Calculator, AlertCircle } from "lucide-react";
 import {
   WORK_PLAN_EXPENSE_CATEGORIES,
   WORK_PLAN_EXPENSE_PAYMENT_MODES,
@@ -44,6 +44,7 @@ export type ExpenseFormModalProps = {
   initial?: WorkPlanExpenseRecord | null;
   defaultVisitId?: string | null;
   defaultDate?: string | null;
+  planStatus?: string;
   onClose: () => void;
   onConfirm: (payload: ExpenseFormPayload) => void | Promise<void>;
 };
@@ -62,6 +63,7 @@ export function ExpenseFormModal({
   initial,
   defaultVisitId,
   defaultDate,
+  planStatus,
   onClose,
   onConfirm,
 }: ExpenseFormModalProps) {
@@ -84,6 +86,7 @@ export function ExpenseFormModal({
   const [existingAttachments, setExistingAttachments] = useState<(WorkPlanExpenseAttachment | string)[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const { data: portalSettingsData } = useGetPortalSettingsQuery(undefined);
   const portalPolicy = portalSettingsData || getPortalAdminSettings();
@@ -135,6 +138,7 @@ export function ExpenseFormModal({
       }
       setSelectedFiles([]);
       setErrors({});
+      setSubmitError(null);
     }
   }, [open, initial, defaultVisitId, defaultDate]);
 
@@ -227,6 +231,7 @@ export function ExpenseFormModal({
       return;
     }
 
+    setSubmitError(null);
     setIsUploading(true);
     try {
       const allAttachmentIds: string[] = [];
@@ -246,34 +251,46 @@ export function ExpenseFormModal({
         for (const file of selectedFiles) {
           const formData = new FormData();
           formData.append("file", file);
-          const uploaded = await uploadExpenseReceipt(formData).unwrap();
-          if (uploaded && (uploaded._id || uploaded.id)) {
-            allAttachmentIds.push(uploaded._id || uploaded.id);
+          try {
+            const uploaded = await uploadExpenseReceipt(formData).unwrap();
+            if (uploaded && (uploaded._id || uploaded.id)) {
+              allAttachmentIds.push(uploaded._id || uploaded.id);
+            }
+          } catch (uploadErr: any) {
+            const uploadMsg = uploadErr?.data?.message || uploadErr?.message || "Failed to upload document";
+            setErrors((prev) => ({ ...prev, receiptAttachment: uploadMsg }));
+            setIsUploading(false);
+            return;
           }
         }
       }
 
       const primaryReceiptId = allAttachmentIds.length > 0 ? allAttachmentIds[0] : null;
 
-      await onConfirm({
-        expense_date: expenseDate,
-        category,
-        sub_category: category === "Travel" ? subCategory : undefined,
-        amount: numAmt,
-        payment_mode: paymentMode,
-        vendor_name: vendorName.trim() || undefined,
-        bill_number: billNumber.trim() || undefined,
-        bill_date: billDate || undefined,
-        description: description.trim() || undefined,
-        work_plan_visit: visitId || null,
-        start_reading: isPrivateBike ? Number(startReading) : null,
-        closing_reading: isPrivateBike ? Number(closingReading) : null,
-        receipt_attachment: primaryReceiptId,
-        attachments: allAttachmentIds,
-      });
+      try {
+        await onConfirm({
+          expense_date: expenseDate,
+          category,
+          sub_category: category === "Travel" ? subCategory : undefined,
+          amount: numAmt,
+          payment_mode: paymentMode,
+          vendor_name: vendorName.trim() || undefined,
+          bill_number: billNumber.trim() || undefined,
+          bill_date: billDate || undefined,
+          description: description.trim() || undefined,
+          work_plan_visit: visitId || null,
+          start_reading: isPrivateBike ? Number(startReading) : null,
+          closing_reading: isPrivateBike ? Number(closingReading) : null,
+          receipt_attachment: primaryReceiptId,
+          attachments: allAttachmentIds,
+        });
+      } catch (submitErr: any) {
+        const submitMsg = submitErr?.data?.message || submitErr?.data?.error || submitErr?.message || "Failed to save expense claim";
+        setSubmitError(submitMsg);
+      }
     } catch (err: any) {
-      const msg = err?.data?.message || err?.message || "Failed to upload document";
-      setErrors((prev) => ({ ...prev, receiptAttachment: msg }));
+      const msg = err?.data?.message || err?.message || "An unexpected error occurred";
+      setSubmitError(msg);
     } finally {
       setIsUploading(false);
     }
@@ -314,6 +331,16 @@ export function ExpenseFormModal({
             <X className="h-5 w-5" />
           </button>
         </div>
+
+        {submitError ? (
+          <div className="mx-4 sm:mx-5 mt-3.5 flex items-start gap-2.5 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-500">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-semibold">Unable to Save Expense Claim</p>
+              <p className="mt-0.5 text-rose-600 dark:text-rose-400">{submitError}</p>
+            </div>
+          </div>
+        ) : null}
 
         <div className="flex-1 overflow-y-auto space-y-4 px-4 sm:px-5 py-3.5 sm:py-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

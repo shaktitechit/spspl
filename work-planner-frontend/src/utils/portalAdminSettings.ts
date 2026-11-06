@@ -169,7 +169,7 @@ export const DEFAULT_PORTAL_ADMIN_SETTINGS: PortalAdminSettings = {
   receiptRequiredThresholdAmount: 200,
   expenseSubmissionWindowDays: 7,
   twoLevelApprovalRequired: true,
-  blockExpenseWithoutApprovedPlan: true,
+  blockExpenseWithoutApprovedPlan: false,
 
   dayEndCutoffTime: "22:00",
   blockNextDayPlanIfDayEndPending: true,

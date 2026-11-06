@@ -67,7 +67,7 @@ async function getEffectiveSettings() {
       fuelRateTwoWheelerPerKm: 4.5,
       expenseSubmissionWindowDays: 7,
       receiptRequiredThresholdAmount: 200,
-      blockExpenseWithoutApprovedPlan: true,
+      blockExpenseWithoutApprovedPlan: false,
     };
   }
 }

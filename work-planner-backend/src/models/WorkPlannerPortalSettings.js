@@ -100,7 +100,7 @@ const workPlannerPortalSettingsSchema = new mongoose.Schema(
     receiptRequiredThresholdAmount: { type: Number, default: 200 },
     expenseSubmissionWindowDays: { type: Number, default: 7 },
     twoLevelApprovalRequired: { type: Boolean, default: true },
-    blockExpenseWithoutApprovedPlan: { type: Boolean, default: true },
+    blockExpenseWithoutApprovedPlan: { type: Boolean, default: false },
 
     // 5. Field Visits & GPS Geofencing Policies
     mandatoryGpsCheckIn: { type: Boolean, default: true },

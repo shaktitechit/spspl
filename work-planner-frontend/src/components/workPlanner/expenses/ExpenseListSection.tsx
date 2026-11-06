@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Plus, Trash2, CheckCircle, XCircle, Paperclip, Eye } from "lucide-react";
+import { Pencil, Plus, Trash2, CheckCircle, XCircle, Paperclip, Eye, AlertCircle } from "lucide-react";
 import { resolvePublicAssetUrl, withFileAccessToken } from "@/lib/env";
 import { toast } from "sonner";
 import {
@@ -54,6 +54,12 @@ function statusBadge(status?: string) {
   );
 }
 
+function extractErrorMsg(err: unknown, fallback: string): string {
+  if (!err) return fallback;
+  const anyErr = err as any;
+  return anyErr?.data?.message || anyErr?.data?.error || anyErr?.message || (err instanceof Error ? err.message : fallback);
+}
+
 export function ExpenseListSection({
   plan,
   isManager: isManagerProp,
@@ -92,6 +98,9 @@ export function ExpenseListSection({
     ? "Elevated Authority: You can add and edit expense claims anytime for yourself and subordinates without date restrictions."
     : expenseAddWindowHint(plan.plan_date);
 
+  const canAddExpense = windowOpen;
+  const disabledReason = !windowOpen ? windowHint : "";
+
   const draftCount = expenses.filter((e) => e.status === "draft" || e.status === "rejected").length;
   const submittedCount = expenses.filter((e) => e.status === "submitted").length;
 
@@ -113,8 +122,9 @@ export function ExpenseListSection({
       setEditingExpense(null);
       await onRefresh?.();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to save expense";
+      const msg = extractErrorMsg(err, "Failed to save expense");
       toast.error(msg);
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -138,7 +148,7 @@ export function ExpenseListSection({
       setDeleteTargetExpense(null);
       await onRefresh?.();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to delete expense";
+      const msg = extractErrorMsg(err, "Failed to delete expense");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -155,7 +165,7 @@ export function ExpenseListSection({
       toast.success("Expense submitted for manager approval");
       await onRefresh?.();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to submit expense";
+      const msg = extractErrorMsg(err, "Failed to submit expense");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -169,7 +179,7 @@ export function ExpenseListSection({
       toast.success("All draft expenses submitted for approval");
       await onRefresh?.();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to submit all expenses";
+      const msg = extractErrorMsg(err, "Failed to submit all expenses");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -186,7 +196,7 @@ export function ExpenseListSection({
       toast.success("Expense approved");
       await onRefresh?.();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to approve expense";
+      const msg = extractErrorMsg(err, "Failed to approve expense");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -205,7 +215,7 @@ export function ExpenseListSection({
       setRejectingExpense(null);
       await onRefresh?.();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to reject expense";
+      const msg = extractErrorMsg(err, "Failed to reject expense");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -219,7 +229,7 @@ export function ExpenseListSection({
       toast.success("All submitted expenses approved");
       await onRefresh?.();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to approve expenses";
+      const msg = extractErrorMsg(err, "Failed to approve expenses");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -234,7 +244,7 @@ export function ExpenseListSection({
       setRejectAllOpen(false);
       await onRefresh?.();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to reject expenses";
+      const msg = extractErrorMsg(err, "Failed to reject expenses");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -293,17 +303,17 @@ export function ExpenseListSection({
 
           <button
             type="button"
-            disabled={!windowOpen}
-            title={!windowOpen ? windowHint : "Add expense claim"}
+            disabled={!canAddExpense}
+            title={disabledReason || "Add expense claim"}
             onClick={() => {
-              if (!windowOpen) return;
+              if (!canAddExpense) return;
               setEditingExpense(null);
               setFormOpen(true);
             }}
             className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-              windowOpen
-                ? "bg-primary text-primary-foreground hover:bg-primary-hover"
-                : "bg-surface-muted border border-border text-muted cursor-not-allowed"
+              canAddExpense
+                ? "bg-primary text-primary-foreground hover:bg-primary-hover cursor-pointer"
+                : "bg-surface-muted border border-border text-muted cursor-not-allowed opacity-60"
             }`}
           >
             <Plus className="h-4 w-4" />
@@ -317,7 +327,7 @@ export function ExpenseListSection({
           <p className="text-sm font-medium text-muted">
             No expenses logged for this work plan.
           </p>
-          {windowOpen && (
+          {canAddExpense ? (
             <button
               type="button"
               onClick={() => {
@@ -328,7 +338,7 @@ export function ExpenseListSection({
             >
               + Add first expense claim
             </button>
-          )}
+          ) : null}
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -708,6 +718,7 @@ export function ExpenseListSection({
           visits={visits}
           initial={editingExpense}
           defaultDate={plan.plan_date}
+          planStatus={plan.status}
           onClose={() => {
             setFormOpen(false);
             setEditingExpense(null);
