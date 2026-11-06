@@ -3,8 +3,8 @@
  * Handles fetching, updating, resetting policies, and provides cached access for validation routines.
  * @module modules/workPlanner/portalSettings.service
  */
-const { getModels } = require('../../data/mongoModels');
-const logger = require('../../utils/logger');
+const { getModels } = require('../../data/mongoRegistry');
+const { logger } = require('../../utils/logger');
 
 let _cachedSettings = null;
 let _cacheExpiresAt = 0;

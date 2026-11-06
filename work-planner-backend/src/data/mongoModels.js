@@ -4,4 +4,7 @@
  */
 const { getModels } = require('./mongoRegistry');
 
-module.exports = getModels();
+module.exports = {
+  ...getModels(),
+  getModels,
+};

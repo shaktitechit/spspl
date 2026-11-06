@@ -8,4 +8,7 @@ const logger = {
   error: (...args) => console.error('[ERROR]', ...args),
 };
 
-module.exports = { logger };
+logger.logger = logger;
+
+module.exports = logger;
+module.exports.logger = logger;

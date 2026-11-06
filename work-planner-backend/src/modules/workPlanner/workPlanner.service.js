@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 const { getModels } = require('../../data/mongoRegistry');
 const { toPlain } = require('../../utils/mongoJson');
 const { ApiError } = require('../../utils/ApiError');
+const { logger } = require('../../utils/logger');
 const activityService = require('../activity/activity.service');
 const portalSettingsService = require('./portalSettings.service');
 const notificationService = require('../notifications/notification.service');
@@ -1332,7 +1333,6 @@ async function submit(id, user, body = {}) {
 
   // In-app notice only after visits and tasks are saved. Mail is sent only when the client includes a recipient.
   notifyWorkPlanCreated({ planId: plan._id, actorUser: user, creationMailData: body }).catch((err) => {
-    const { logger } = require('../../utils/logger');
     logger.error(`[WorkPlanService] Failed to send creation notification for plan ${id}: ${err.message}`);
   });
 
