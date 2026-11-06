@@ -27,20 +27,76 @@
 # "protocol options redefined" warnings with other sites on :443.
 # =============================================================================
 
-upstream medica_opms_backend          { server 127.0.0.1:5001; keepalive 32; }
-upstream medica_opms_frontend         { server 127.0.0.1:5002; keepalive 16; }
-upstream medica_auth_service          { server 127.0.0.1:5003; keepalive 32; }
-upstream medica_user_manager_frontend { server 127.0.0.1:5004; keepalive 16; }
-upstream medica_product_service       { server 127.0.0.1:5005; keepalive 32; }
-upstream medica_party_service         { server 127.0.0.1:5006; keepalive 32; }
-upstream medica_work_planner_backend  { server 127.0.0.1:5007; keepalive 32; }
-upstream medica_work_planner_frontend { server 127.0.0.1:5008; keepalive 16; }
-upstream medica_lead_manager_backend  { server 127.0.0.1:5009; keepalive 32; }
-upstream medica_lead_manager_frontend { server 127.0.0.1:5010; keepalive 16; }
-upstream medica_notification_service  { server 127.0.0.1:5012; keepalive 32; }
-upstream medica_app_frontend          { server 127.0.0.1:5013; keepalive 16; }
-upstream medica_expense_backend       { server 127.0.0.1:5015; keepalive 32; }
-upstream medica_expense_frontend      { server 127.0.0.1:5016; keepalive 16; }
+upstream medica_opms_backend {
+    server 127.0.0.1:5001 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:5001 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream medica_opms_frontend {
+    server 127.0.0.1:5002 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:5002 max_fails=3 fail_timeout=10s;
+    keepalive 16;
+}
+upstream medica_auth_service {
+    server 127.0.0.1:5003 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:5003 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream medica_user_manager_frontend {
+    server 127.0.0.1:5004 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:5004 max_fails=3 fail_timeout=10s;
+    keepalive 16;
+}
+upstream medica_product_service {
+    server 127.0.0.1:5005 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:5005 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream medica_party_service {
+    server 127.0.0.1:5006 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:5006 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream medica_work_planner_backend {
+    server 127.0.0.1:5007 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:5007 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream medica_work_planner_frontend {
+    server 127.0.0.1:5008 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:5008 max_fails=3 fail_timeout=10s;
+    keepalive 16;
+}
+upstream medica_lead_manager_backend {
+    server 127.0.0.1:5009 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:5009 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream medica_lead_manager_frontend {
+    server 127.0.0.1:5010 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:5010 max_fails=3 fail_timeout=10s;
+    keepalive 16;
+}
+upstream medica_notification_service {
+    server 127.0.0.1:5012 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:5012 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream medica_app_frontend {
+    server 127.0.0.1:5013 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:5013 max_fails=3 fail_timeout=10s;
+    keepalive 16;
+}
+upstream medica_expense_backend {
+    server 127.0.0.1:5015 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:5015 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream medica_expense_frontend {
+    server 127.0.0.1:5016 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:5016 max_fails=3 fail_timeout=10s;
+    keepalive 16;
+}
 
 # -----------------------------------------------------------------------------
 # HTTP → HTTPS (+ ACME challenge)

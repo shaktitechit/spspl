@@ -26,21 +26,81 @@
 # "protocol options redefined" warnings with other sites on :443.
 # =============================================================================
 
-upstream opms_backend          { server 127.0.0.1:7001; keepalive 32; }
-upstream opms_frontend         { server 127.0.0.1:7002; keepalive 16; }
-upstream auth_service          { server 127.0.0.1:7003; keepalive 32; }
-upstream user_manager_frontend { server 127.0.0.1:7004; keepalive 16; }
-upstream product_service       { server 127.0.0.1:7005; keepalive 32; }
-upstream party_service         { server 127.0.0.1:7006; keepalive 32; }
-upstream work_planner_backend  { server 127.0.0.1:7007; keepalive 32; }
-upstream work_planner_frontend { server 127.0.0.1:7008; keepalive 16; }
-upstream lead_manager_backend  { server 127.0.0.1:7009; keepalive 32; }
-upstream lead_manager_frontend { server 127.0.0.1:7010; keepalive 16; }
-upstream message_service       { server 127.0.0.1:7011; keepalive 32; }
-upstream notification_service  { server 127.0.0.1:7012; keepalive 32; }
-upstream app_frontend          { server 127.0.0.1:7013; keepalive 16; }
-upstream expense_backend       { server 127.0.0.1:7015; keepalive 32; }
-upstream expense_frontend      { server 127.0.0.1:7016; keepalive 16; }
+upstream opms_backend {
+    server 127.0.0.1:7001 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:7001 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream opms_frontend {
+    server 127.0.0.1:7002 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:7002 max_fails=3 fail_timeout=10s;
+    keepalive 16;
+}
+upstream auth_service {
+    server 127.0.0.1:7003 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:7003 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream user_manager_frontend {
+    server 127.0.0.1:7004 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:7004 max_fails=3 fail_timeout=10s;
+    keepalive 16;
+}
+upstream product_service {
+    server 127.0.0.1:7005 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:7005 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream party_service {
+    server 127.0.0.1:7006 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:7006 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream work_planner_backend {
+    server 127.0.0.1:7007 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:7007 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream work_planner_frontend {
+    server 127.0.0.1:7008 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:7008 max_fails=3 fail_timeout=10s;
+    keepalive 16;
+}
+upstream lead_manager_backend {
+    server 127.0.0.1:7009 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:7009 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream lead_manager_frontend {
+    server 127.0.0.1:7010 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:7010 max_fails=3 fail_timeout=10s;
+    keepalive 16;
+}
+upstream message_service {
+    server 127.0.0.1:7011 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:7011 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream notification_service {
+    server 127.0.0.1:7012 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:7012 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream app_frontend {
+    server 127.0.0.1:7013 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:7013 max_fails=3 fail_timeout=10s;
+    keepalive 16;
+}
+upstream expense_backend {
+    server 127.0.0.1:7015 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:7015 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+upstream expense_frontend {
+    server 127.0.0.1:7016 max_fails=3 fail_timeout=10s;
+    server 100.75.219.4:7016 max_fails=3 fail_timeout=10s;
+    keepalive 16;
+}
 
 # -----------------------------------------------------------------------------
 # HTTP → HTTPS (+ ACME challenge)
