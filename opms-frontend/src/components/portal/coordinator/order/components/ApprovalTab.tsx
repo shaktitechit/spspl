@@ -1,10 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { Clock } from "lucide-react";
-import { useListOrderApprovalsQuery, useListUsersQuery } from "@/store/api";
+import {
+  useListOrderApprovalsQuery,
+  useListUsersQuery,
+  useListDispatchesQuery,
+} from "@/store/api";
+import { useAppSelector } from "@/store";
+import { hasOpmsRole } from "@/lib/opmsAuth";
 import { DashboardCard } from "@/components/widgets";
 import { ApprovalRecordCard } from "@/components/portal/shared/orders/detail/approvals/ApprovalRecordCard";
+import { ApprovalModal } from "@/components/portal/shared/orders/detail/modals/ApprovalModal";
 import { buildUserRoleById } from "@/components/portal/shared/lib/userDisplay";
 
 type ApprovalTabProps = {
@@ -13,6 +20,7 @@ type ApprovalTabProps = {
   partyLabel?: string;
   isDraft?: boolean;
   onSubmitOrder?: () => void;
+  onRefetch?: () => void;
 };
 
 function pickList(raw: unknown): Record<string, unknown>[] {
@@ -31,9 +39,24 @@ export function ApprovalTab({
   partyLabel = "—",
   isDraft = false,
   onSubmitOrder,
+  onRefetch,
 }: ApprovalTabProps) {
+  const currentUser = useAppSelector((state) => state.auth.user);
+  const isSuperAdmin = hasOpmsRole(currentUser, "super_admin");
+
   const approvalsQ = useListOrderApprovalsQuery({ order: orderId }, { skip: !orderId });
   const usersQ = useListUsersQuery({});
+  const dispatchesQ = useListDispatchesQuery({ order: orderId }, { skip: !orderId });
+
+  const [amendApprovalId, setAmendApprovalId] = useState<string | null>(null);
+  const [isAmendModalOpen, setIsAmendModalOpen] = useState(false);
+
+  const hasActiveDispatch = useMemo(() => {
+    const list = pickList(dispatchesQ?.data);
+    return list.some(
+      (d) => String(d.dispatch_status).toLowerCase() !== "cancelled"
+    );
+  }, [dispatchesQ.data]);
 
   const approvals = useMemo(() => {
     const rows = pickList(approvalsQ.data);
@@ -41,6 +64,33 @@ export function ApprovalTab({
       (a, b) => Number(b.revision_number ?? 0) - Number(a.revision_number ?? 0)
     );
   }, [approvalsQ.data]);
+
+  const selectedApproval = useMemo(
+    () =>
+      amendApprovalId
+        ? (approvals.find(
+            (app) => String(app._id ?? app.id) === amendApprovalId
+          ) ?? null)
+        : null,
+    [approvals, amendApprovalId]
+  );
+
+  const openAmendModal = useCallback((approvalId: string) => {
+    setAmendApprovalId(approvalId);
+    setIsAmendModalOpen(true);
+  }, []);
+
+  const handleAmended = useCallback(async () => {
+    const tasks: Promise<unknown>[] = [];
+    if (onRefetch) {
+      const res = onRefetch() as unknown;
+      if (res instanceof Promise) tasks.push(res);
+    }
+    if (!approvalsQ.isUninitialized) {
+      tasks.push(approvalsQ.refetch() as Promise<unknown>);
+    }
+    if (tasks.length > 0) await Promise.all(tasks);
+  }, [onRefetch, approvalsQ]);
 
   const userNameById = useMemo(() => {
     const map: Record<string, string> = {};
@@ -54,13 +104,24 @@ export function ApprovalTab({
   const userRoleById = useMemo(() => buildUserRoleById(usersQ.data), [usersQ.data]);
 
   const orderNo = String(detail?.order_no ?? orderId);
+  const readOnlyItems = useMemo(() => {
+    return Array.isArray(detail?.order_items)
+      ? (detail.order_items as Record<string, unknown>[])
+      : [];
+  }, [detail?.order_items]);
 
   return (
     <div className="space-y-4">
       <DashboardCard
         title="Order Approval History"
-        description="View administrative, financial, and account sign-offs for this order with pricing, item rates, and financial totals."
+        description="View administrative, financial, account sign-offs, and coordinator amendments for this order with pricing, item rates, and financial totals."
       >
+        {hasActiveDispatch && !isSuperAdmin && (
+          <div className="mb-4 rounded-lg bg-amber-500/10 p-3 text-xs text-amber-700 ring-1 ring-amber-600/20 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-500/30">
+            Amendment is locked because a dispatch execution has already been initiated for this order.
+          </div>
+        )}
+
         {approvalsQ.isLoading ? (
           <div className="flex items-center gap-2 text-xs font-sans text-slate-500 py-6">
             <svg className="animate-spin h-4 w-4 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24">
@@ -122,11 +183,31 @@ export function ApprovalTab({
                 expectedDeliveryDate={detail?.expected_delivery_date}
                 userNameById={userNameById}
                 userRoleById={userRoleById}
+                onAmend={openAmendModal}
+                amendingApprovalId={amendApprovalId}
+                isAmendBlocked={hasActiveDispatch && !isSuperAdmin}
               />
             ))}
           </div>
         )}
       </DashboardCard>
+
+      <ApprovalModal
+        key={amendApprovalId || (isAmendModalOpen ? "coordinator-open" : "closed")}
+        open={isAmendModalOpen}
+        onClose={() => {
+          setIsAmendModalOpen(false);
+          setAmendApprovalId(null);
+        }}
+        mode="coordinator"
+        approval={selectedApproval}
+        orderId={orderId}
+        orderStatus={String(detail?.status ?? "")}
+        readOnlyItems={readOnlyItems}
+        refetchOrder={onRefetch}
+        detail={detail}
+        onSuccess={() => void handleAmended()}
+      />
     </div>
   );
 }

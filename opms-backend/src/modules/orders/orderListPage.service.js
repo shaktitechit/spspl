@@ -1079,7 +1079,7 @@ async function loadPageDocuments(ids) {
     .Order.find({ _id: { $in: ids } })
     .select(PAGE_SELECT)
     .populate('party', 'name code sra sra_from_date legal_name trade_name party_name')
-    .populate('assigned_sales_user', 'name username email department')
+    .populate('assigned_sales_user', 'name username email phone mobile department')
     .populate('order_items.product', 'name product_name sku')
     .lean();
   const byId = new Map(rows.map((row) => [String(row._id), row]));

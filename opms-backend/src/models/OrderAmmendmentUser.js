@@ -9,7 +9,7 @@ const orderAmmendmentUserSchema = new mongoose.Schema(
     order_approval: { type: mongoose.Schema.Types.ObjectId, ref: "OrderApproval", required: true, index: true },
     department: {
       type: String,
-      enum: ["admin", "finance", "account"],
+      enum: ["admin", "finance", "account", "coordinator", "sales"],
       required: true,
       index: true,
     },

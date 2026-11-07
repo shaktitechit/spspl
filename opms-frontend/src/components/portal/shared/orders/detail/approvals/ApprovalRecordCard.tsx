@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useMemo, useState, Fragment } from "react";
-import { CheckCircle2, Download, Pencil, Send } from "lucide-react";
+import { CheckCircle2, Download, History, Pencil, Send } from "lucide-react";
 import { useAppSelector } from "@/store";
 import { hasOpmsRole, isOpmsAdmin, primaryOpmsRole } from "@/lib/opmsAuth";
+import { ApprovalChangesHistoryModal } from "./ApprovalChangesHistoryModal";
 
 import { type OrderItemsPdfLine } from "@/components/portal/shared/pdf/templates/OrderItemsPdfTemplate";
 import { buildOrderItemsPdf } from "@/components/portal/shared/pdf/builders/buildOrderItemsPdf";
@@ -30,7 +31,7 @@ type ApprovalRecordCardProps = {
   portal?: "admin" | "finance" | "account" | "coordinator" | "sales";
   onSendToFinance?: (approvalId: string) => void;
   onSendToAccount?: (approvalId: string) => void;
-  onAmend?: (approvalId: string, mode: "admin" | "finance" | "account") => void;
+  onAmend?: (approvalId: string, mode: "admin" | "finance" | "account" | "coordinator") => void;
   onApprove?: () => void;
   amendBusy?: boolean;
   amendingApprovalId?: string | null;
@@ -172,6 +173,7 @@ export function ApprovalRecordCard({
   }, [approval]);
   const approvalNo = String(approval.approval_no ?? "—");
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const letterhead = usePdfCompanyLetterhead();
 
   const items = useMemo(() => approvalItemsList(approval), [approval]);
@@ -240,6 +242,12 @@ export function ApprovalRecordCard({
   );
   const adminAmendedAtLabel = formatDate(approval.admin_amended_at);
   const adminAmendNotes = adminAmendmentNotes(approval);
+  const coordinatorAmended = Boolean(approval.coordinator_amended);
+  const coordinatorAmendedByLabel = resolveUserDisplay(
+    approval.coordinator_amended_by,
+    userNameById,
+  );
+  const coordinatorAmendedAtLabel = formatDate(approval.coordinator_amended_at);
   const financeAssigneeLabel = resolveUserDisplay(
     approval.assigned_finance_user,
     userNameById,
@@ -304,6 +312,11 @@ export function ApprovalRecordCard({
   const isUserAdmin = isOpmsAdmin(currentUser);
   const isUserFinance = hasOpmsRole(currentUser, "finance") || isSuperAdmin;
   const isUserAccount = hasOpmsRole(currentUser, "account") || isSuperAdmin;
+  const isUserCoordinator =
+    hasOpmsRole(currentUser, "coordinator") ||
+    primaryOpmsRole(currentUser) === "coordinator" ||
+    isSuperAdmin;
+  const isCoordinatorPortal = portal === "coordinator";
 
   const canDownloadPdf =
     approvalStatus === "approved" ||
@@ -327,6 +340,9 @@ export function ApprovalRecordCard({
 
   const showAccountApprove = isFinanceApproved && !isAccountApproved && isUserAccount && !amendLocked;
   const showAccountAmend = isAccountApproved && isUserAccount && !amendLocked;
+
+  const showCoordinatorAmend =
+    (isCoordinatorPortal || isUserCoordinator) && !amendLocked;
 
   const canSendToFinance = isAdminApproved && !approval.assigned_finance_user && !isFinanceApproved && isUserAdmin;
   const canSendToAccount = isFinanceApproved && !approval.assigned_account_user && !isAccountApproved && isUserFinance;
@@ -506,6 +522,20 @@ export function ApprovalRecordCard({
           </span>
         </div>
 
+        <button
+          type="button"
+          onClick={() => setHistoryModalOpen(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition cursor-pointer"
+          title="View change and amendment history for this approval"
+        >
+          <History className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+          <span>Changes History</span>
+          {Number(approval.revision_number ?? 1) > 1 && (
+            <span className="ml-0.5 rounded-full bg-violet-100 px-1.5 py-0.2 font-mono text-2xs font-bold text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">
+              Rev {String(approval.revision_number)}
+            </span>
+          )}
+        </button>
       </div>
 
       {(approvalStatus === "approved" ||
@@ -570,6 +600,12 @@ export function ApprovalRecordCard({
               {adminAmended && (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/10 px-2.5 py-1 text-xs font-semibold text-violet-700 ring-1 ring-violet-600/20 dark:bg-violet-950/30 dark:text-violet-300">
                   Admin Amended
+                </span>
+              )}
+
+              {coordinatorAmended && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/10 px-2.5 py-1 text-xs font-semibold text-sky-700 ring-1 ring-sky-600/20 dark:bg-sky-950/30 dark:text-sky-300">
+                  Coordinator Amended
                 </span>
               )}
             </div>
@@ -676,6 +712,20 @@ export function ApprovalRecordCard({
                   ) : null}
                 </p>
               )}
+              {coordinatorAmended && (
+                <p className="text-slate-500 dark:text-slate-400">
+                  <b>Coordinator Amendment:</b> Amended by{" "}
+                  <span className="font-medium text-slate-700 dark:text-slate-200">
+                    {coordinatorAmendedByLabel}
+                  </span>
+                  {coordinatorAmendedAtLabel !== "—" ? (
+                    <>
+                      {" "}
+                      · <span className="tabular-nums">{coordinatorAmendedAtLabel}</span>
+                    </>
+                  ) : null}
+                </p>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -754,6 +804,18 @@ export function ApprovalRecordCard({
               >
                 <Pencil className="h-3.5 w-3.5" />
                 {isAmendingThis ? "Opening…" : "Account Amend"}
+              </button>
+            )}
+
+            {showCoordinatorAmend && onAmend && (
+              <button
+                type="button"
+                onClick={() => onAmend(approvalId, "coordinator")}
+                disabled={isAmendingThis}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-300 cursor-pointer"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                {isAmendingThis ? "Opening…" : "Coordinator Amend"}
               </button>
             )}
             {canSendToFinance && onSendToFinance ? (
@@ -1098,6 +1160,15 @@ export function ApprovalRecordCard({
           <span>Sent to finance {formatDate(approval.sent_to_finance_at)}</span>
         ) : null}
       </div>
+
+      <ApprovalChangesHistoryModal
+        open={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+        approvalId={approvalId}
+        approvalNo={approvalNo}
+        orderNo={orderNo}
+        partyLabel={partyLabel}
+      />
     </div>
   );
 }

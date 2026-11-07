@@ -34,6 +34,7 @@ import {
   useCreateAttachmentMutation,
   useDeleteAttachmentMutation,
   useGetPartyQuery,
+  useListUsersQuery,
 } from "@/store/api";
 import { usePdfCompanyLetterhead } from "@/components/portal/shared/pdf/templates/pdfCompanyLetterhead";
 import {
@@ -93,7 +94,19 @@ export default function PerformaTab({
   const orderQ = useGetOrderQuery(orderId, { skip: !orderId });
   const companyQ = useGetCompanyInfoQuery();
   const letterhead = usePdfCompanyLetterhead();
-  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const usersQ = useListUsersQuery({});
+  const [downloadingType, setDownloadingType] = useState<"customer" | "office" | null>(null);
+
+  const usersList = useMemo(() => {
+    const raw = usersQ.data;
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === "object") {
+      const o = raw as Record<string, unknown>;
+      if (Array.isArray(o.items)) return o.items;
+      if (Array.isArray(o.data)) return o.data;
+    }
+    return [];
+  }, [usersQ.data]);
 
   const effectivePartyId = useMemo(() => {
     return detailPartyId(detail, orderQ.data as Record<string, unknown>);
@@ -201,203 +214,319 @@ export default function PerformaTab({
     performa?.lock_reason ||
     "Performa invoice cannot be edited once dispatch has been created and submitted.";
 
-  const handleDownloadPerformaPdf = useCallback(async () => {
-    setIsDownloadingPdf(true);
-    try {
-      const order = (orderQ.data as Record<string, unknown>) || detail || {};
-      const orderNo = String(order.order_no || orderId);
-      const billingAddr = (order.billing_address || resolvedParty.billing_address || resolvedParty.address || {}) as Record<string, unknown>;
-      const shippingAddr = (order.shipping_address || resolvedParty.shipping_address || {}) as Record<string, unknown>;
+  const handleDownloadPdf = useCallback(
+    async (copyType: "customer" | "office" = "customer") => {
+      setDownloadingType(copyType);
+      try {
+        const order = (orderQ.data as Record<string, unknown>) || detail || {};
+        const orderNo = String(order.order_no || orderId);
+        const billingAddr = (order.billing_address || resolvedParty.billing_address || resolvedParty.address || {}) as Record<string, unknown>;
+        const shippingAddr = (order.shipping_address || resolvedParty.shipping_address || {}) as Record<string, unknown>;
 
-      const formatAddr = (addr: Record<string, unknown>): string => {
-        return [
-          addr.address_line_1,
-          addr.address_line_2,
-          addr.city,
-          addr.state && addr.pincode ? `${addr.state} - ${addr.pincode}` : addr.state || addr.pincode,
-          addr.country,
-        ]
-          .filter(Boolean)
-          .map(String)
-          .join(", ");
-      };
-
-      const billAddressStr = formatAddr(billingAddr);
-      const shipAddressStr = performa?.ship_to_address
-        ? String(performa.ship_to_address)
-        : formatAddr(shippingAddr) || billAddressStr;
-
-      const rawItems = (Array.isArray(order.order_items)
-        ? order.order_items
-        : Array.isArray(order.items)
-          ? order.items
-          : []) as Record<string, unknown>[];
-
-      let calcSubtotal = 0;
-      let calcDiscTotal = 0;
-      let calcTaxable = 0;
-      let calcGst = 0;
-      let calcGrandTotal = 0;
-
-      const pdfItems: PerformaPdfItem[] = rawItems.map((it) => {
-        const prod = (typeof it.product === "object" && it.product !== null ? it.product : {}) as Record<string, unknown>;
-        const productName = String(it.product_name || prod.product_name || it.name || "Product");
-        const sku = String(it.sku || prod.sku || "");
-        const hsnCode = String(it.hsn_code || prod.hsn_code || "");
-        const brand = String(it.brand || prod.brand || "");
-        const unit = String(it.unit || prod.unit || "PCS");
-        const quantity = Math.max(1, Number(it.ordered_quantity ?? it.quantity ?? 1) || 1);
-        const freeQty = Number(it.free_quantity ?? it.free_qty ?? 0) || 0;
-        const unitPrice = Number(it.unit_price ?? it.rate ?? 0) || 0;
-        const discountPercent = Number(it.discount_percent ?? 0) || 0;
-        let discountAmount = Number(it.discount_amount ?? 0) || 0;
-
-        const gross = quantity * unitPrice;
-        if (discountPercent > 0 && discountAmount === 0) {
-          discountAmount = Math.round(((gross * discountPercent) / 100) * 100) / 100;
-        }
-
-        let taxableAmount = Number(it.taxable_amount ?? 0);
-        if (!taxableAmount) {
-          taxableAmount = Math.max(0, gross - discountAmount);
-        }
-
-        const gstPercent = Number(it.gst_percent ?? it.gst_rate ?? 18) || 0;
-        let gstAmount = Number(it.gst_amount ?? 0);
-        if (!gstAmount && gstPercent > 0) {
-          gstAmount = Math.round(((taxableAmount * gstPercent) / 100) * 100) / 100;
-        }
-
-        let lineTotal = Number(it.total_amount ?? it.line_total ?? 0);
-        if (!lineTotal) {
-          lineTotal = taxableAmount + gstAmount;
-        }
-
-        calcSubtotal += gross;
-        calcDiscTotal += discountAmount;
-        calcTaxable += taxableAmount;
-        calcGst += gstAmount;
-        calcGrandTotal += lineTotal;
-
-        return {
-          productName,
-          sku: sku || undefined,
-          hsnCode: hsnCode || undefined,
-          brand: brand || undefined,
-          quantity,
-          freeQty,
-          unit,
-          unitPrice,
-          appliedRateType: String(it.applied_rate_type || "SR"),
-          discountPercent,
-          discountAmount,
-          taxableAmount,
-          gstPercent,
-          gstAmount,
-          lineTotal,
+        const formatAddr = (addr: Record<string, unknown>): string => {
+          return [
+            addr.address_line_1,
+            addr.address_line_2,
+            addr.city,
+            addr.state && addr.pincode ? `${addr.state} - ${addr.pincode}` : addr.state || addr.pincode,
+            addr.country,
+          ]
+            .filter(Boolean)
+            .map(String)
+            .join(", ");
         };
-      });
 
-      const subtotal = Number(order.subtotal) || calcSubtotal;
-      const discountTotal = Number(order.discount_amount) || calcDiscTotal;
-      const taxableAmount = Number(order.taxable_amount) || calcTaxable || subtotal;
-      const gstAmount = Number(order.gst_amount) || calcGst;
-      const grandTotal = Number(order.grand_total) || calcGrandTotal || (taxableAmount + gstAmount);
+        const billAddressStr = formatAddr(billingAddr);
+        const shipAddressStr = performa?.ship_to_address
+          ? String(performa.ship_to_address)
+          : formatAddr(shippingAddr) || billAddressStr;
 
-      const orderDateStr = order.order_date
-        ? new Date(String(order.order_date)).toLocaleDateString("en-IN", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          })
-        : new Date().toLocaleDateString("en-IN", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          });
+        const rawItems = (Array.isArray(order.order_items)
+          ? order.order_items
+          : Array.isArray(order.items)
+            ? order.items
+            : []) as Record<string, unknown>[];
 
-      const dispatchDateStr = performa?.dispatch_date
-        ? new Date(String(performa.dispatch_date)).toLocaleDateString("en-IN", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          })
-        : order.expected_delivery_date
-          ? new Date(String(order.expected_delivery_date)).toLocaleDateString("en-IN", {
+        let calcSubtotal = 0;
+        let calcDiscTotal = 0;
+        let calcTaxable = 0;
+        let calcGst = 0;
+        let calcGrandTotal = 0;
+
+        const pdfItems: PerformaPdfItem[] = rawItems.map((it) => {
+          const prod = (typeof it.product === "object" && it.product !== null ? it.product : {}) as Record<string, unknown>;
+          const productName = String(it.product_name || prod.product_name || it.name || "Product");
+          const sku = String(it.sku || prod.sku || "");
+          const hsnCode = String(it.hsn_code || prod.hsn_code || "");
+          const brand = String(it.brand || prod.brand || "");
+          const unit = String(it.unit || prod.unit || "PCS");
+          const quantity = Math.max(1, Number(it.ordered_quantity ?? it.quantity ?? 1) || 1);
+          const freeQty = Number(it.free_quantity ?? it.free_qty ?? 0) || 0;
+          const unitPrice = Number(it.unit_price ?? it.rate ?? 0) || 0;
+          const discountPercent = Number(it.discount_percent ?? 0) || 0;
+          let discountAmount = Number(it.discount_amount ?? 0) || 0;
+
+          const gross = quantity * unitPrice;
+          if (discountPercent > 0 && discountAmount === 0) {
+            discountAmount = Math.round(((gross * discountPercent) / 100) * 100) / 100;
+          }
+
+          let taxableAmount = Number(it.taxable_amount ?? 0);
+          if (!taxableAmount) {
+            taxableAmount = Math.max(0, gross - discountAmount);
+          }
+
+          const gstPercent = Number(it.gst_percent ?? it.gst_rate ?? 18) || 0;
+          let gstAmount = Number(it.gst_amount ?? 0);
+          if (!gstAmount && gstPercent > 0) {
+            gstAmount = Math.round(((taxableAmount * gstPercent) / 100) * 100) / 100;
+          }
+
+          let lineTotal = Number(it.total_amount ?? it.line_total ?? 0);
+          if (!lineTotal) {
+            lineTotal = taxableAmount + gstAmount;
+          }
+
+          calcSubtotal += gross;
+          calcDiscTotal += discountAmount;
+          calcTaxable += taxableAmount;
+          calcGst += gstAmount;
+          calcGrandTotal += lineTotal;
+
+          return {
+            productName,
+            sku: sku || undefined,
+            hsnCode: hsnCode || undefined,
+            brand: brand || undefined,
+            quantity,
+            freeQty,
+            unit,
+            unitPrice,
+            appliedRateType: String(it.applied_rate_type || "SR"),
+            discountPercent,
+            discountAmount,
+            taxableAmount,
+            gstPercent,
+            gstAmount,
+            lineTotal,
+          };
+        });
+
+        const subtotal = Number(order.subtotal) || calcSubtotal;
+        const discountTotal = Number(order.discount_amount) || calcDiscTotal;
+        const taxableAmount = Number(order.taxable_amount) || calcTaxable || subtotal;
+        const gstAmount = Number(order.gst_amount) || calcGst;
+        const grandTotal = Number(order.grand_total) || calcGrandTotal || (taxableAmount + gstAmount);
+
+        const orderDateStr = order.order_date
+          ? new Date(String(order.order_date)).toLocaleDateString("en-IN", {
               day: "2-digit",
               month: "short",
               year: "numeric",
             })
-          : undefined;
+          : new Date().toLocaleDateString("en-IN", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            });
 
-      const pdf = await buildPerformaInvoicePdf({
-        letterhead,
-        company: companyQ.data,
-        orderNo,
-        orderDate: orderDateStr,
-        poNumber: String(order.customer_po_number || (performa?.po_document ? "Attached" : "Verbal")),
-        poDate: order.customer_po_date ? String(order.customer_po_date) : orderDateStr,
-        approvedBy: String(
-          (order.approved_by && typeof order.approved_by === "object"
-            ? (order.approved_by as any).name
-            : null) ||
-            order.approved_by_name ||
-            creatorName ||
-            "Kritika Thakur",
-        ),
-        approvedDate: order.approved_at
-          ? String(order.approved_at)
-          : orderDateStr,
-        partyName: resolvedPartyName || "—",
-        partyCode: resolvedParty.party_code || resolvedParty.code ? String(resolvedParty.party_code || resolvedParty.code) : undefined,
-        partyGstin: String(resolvedParty.gst_no || resolvedParty.gstin || billingAddr.gst_no || order.gst_no || ""),
-        partyPhone: String(resolvedParty.mobile || resolvedParty.phone || billingAddr.phone || order.party_phone || ""),
-        partyEmail: String(resolvedParty.email || billingAddr.email || order.party_email || ""),
-        contactPerson: String(resolvedParty.contact_person || billingAddr.recipient_name || order.contact_person || ""),
-        billingAddress: billAddressStr,
-        shippingAddress: shipAddressStr,
-        salesPerson: String(performa?.sales_person || order.sales_person || creatorName || "Manish"),
-        orc: String(performa?.orc || "na"),
-        dispatchDate: dispatchDateStr,
-        paymentTerms: String(performa?.payment_terms || "30 days"),
-        installationRequired: String(performa?.installation_required || "Yes"),
-        marginSheetAttached: String(performa?.margin_sheet_attached || (performa?.cost_sheet_document ? "Attached" : "Attached")),
-        freightCharges: String(performa?.freight_charges || "Included"),
-        transport: String(performa?.transport || "To be arranged / SafeXpress"),
-        customerType: String(performa?.customer_type || "Dealer"),
-        gstConcession: String(performa?.gst_concession || "na"),
-        kycStatus: String(performa?.kyc_status || "na"),
-        remarks: performa?.remarks ? String(performa.remarks) : undefined,
-        items: pdfItems,
-        subtotal,
-        discountTotal,
-        taxableAmount,
-        gstAmount,
-        grandTotal,
-        downloadedBy: user ? String(user.name || user.username || "") : undefined,
-      });
+        const dispatchDateStr = performa?.dispatch_date
+          ? new Date(String(performa.dispatch_date)).toLocaleDateString("en-IN", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })
+          : order.expected_delivery_date
+            ? new Date(String(order.expected_delivery_date)).toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              })
+            : undefined;
 
-      const safeOrder = orderNo.replace(/[^a-zA-Z0-9-_]/g, "-");
-      pdf.save(`Performa-Invoice-${safeOrder}.pdf`);
-      toast.success("Performa Invoice downloaded successfully.");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to generate Performa Invoice PDF.";
-      toast.error(message);
-    } finally {
-      setIsDownloadingPdf(false);
-    }
-  }, [
-    orderQ.data,
-    detail,
-    orderId,
-    performa,
-    companyQ.data,
-    letterhead,
-    creatorName,
-    user,
-    resolvedParty,
-    resolvedPartyName,
-  ]);
+        // Dynamic Sales Person Resolution
+        const targetSalesName = String(performa?.sales_person || order.sales_person || creatorName || "").trim();
+        const assignedUserId = typeof order.assigned_sales_user === "object" && order.assigned_sales_user
+          ? String((order.assigned_sales_user as any)._id || (order.assigned_sales_user as any).id || "")
+          : String(order.assigned_sales_user || "");
+
+        const matchedSalesUser = (() => {
+          if (!usersList.length) return null;
+          if (assignedUserId) {
+            const byId = usersList.find((u: any) => String(u._id || u.id) === assignedUserId);
+            if (byId) return byId;
+          }
+          if (targetSalesName) {
+            const targetLower = targetSalesName.toLowerCase();
+            const byName = usersList.find((u: any) => {
+              const name = String(u.name || "").toLowerCase();
+              const uname = String(u.username || "").toLowerCase();
+              return name === targetLower || uname === targetLower;
+            });
+            if (byName) return byName;
+          }
+          return null;
+        })();
+
+        const assignedUserObj = typeof order.assigned_sales_user === "object" && order.assigned_sales_user
+          ? (order.assigned_sales_user as Record<string, unknown>)
+          : null;
+        const createdByObj = typeof order.created_by === "object" && order.created_by
+          ? (order.created_by as Record<string, unknown>)
+          : null;
+
+        const resolvedSalesPersonName =
+          targetSalesName ||
+          String(matchedSalesUser?.name || matchedSalesUser?.username || assignedUserObj?.name || user?.name || "Sales Manager");
+
+        const rawDept = String(
+          matchedSalesUser?.designation ||
+          matchedSalesUser?.department ||
+          assignedUserObj?.department ||
+          createdByObj?.department ||
+          ""
+        ).trim();
+        const resolvedSalesPersonDesignation = rawDept
+          ? rawDept.charAt(0).toUpperCase() + rawDept.slice(1).replace(/_/g, " ") + (rawDept.toLowerCase().includes("manager") || rawDept.toLowerCase().includes("executive") ? "" : " Manager")
+          : "Support Manager";
+
+        const resolvedSalesPersonPhone = String(
+          matchedSalesUser?.phone ||
+          matchedSalesUser?.mobile ||
+          assignedUserObj?.phone ||
+          assignedUserObj?.mobile ||
+          createdByObj?.phone ||
+          createdByObj?.mobile ||
+          companyQ.data?.phone ||
+          letterhead.phone ||
+          ""
+        ).trim();
+
+        const resolvedSalesPersonEmail = String(
+          matchedSalesUser?.email ||
+          assignedUserObj?.email ||
+          createdByObj?.email ||
+          companyQ.data?.email ||
+          letterhead.email ||
+          ""
+        ).trim();
+
+        const resolvedCompanyWebsite = String(
+          companyQ.data?.website ||
+          letterhead.website ||
+          ""
+        ).trim();
+
+        // Dynamic Terms and Conditions
+        const rawPaymentTerm = String(
+          performa?.payment_terms ||
+          (resolvedParty as any)?.payment_terms ||
+          "Advance against Supplies"
+        ).trim();
+        const paymentTermLine = rawPaymentTerm.toLowerCase().startsWith("payment")
+          ? rawPaymentTerm
+          : `Payment ${rawPaymentTerm.toLowerCase().includes("against") || rawPaymentTerm.toLowerCase().includes("advance") || rawPaymentTerm.toLowerCase().includes("immediate") ? rawPaymentTerm : `${rawPaymentTerm} against Supplies`}`;
+
+        const poRefLine = order.customer_po_number
+          ? "Delivery Terms as per Customer PO"
+          : "Delivery Terms as per Customer PO";
+        const warrantyTermLine = companyQ.data?.invoice_footer_note
+          ? String(companyQ.data.invoice_footer_note).trim()
+          : "Warranty Terms as agreed on Purchase";
+
+        const termsAndConditions: string[] = [
+          paymentTermLine,
+          poRefLine,
+          warrantyTermLine,
+        ];
+
+        const pdf = await buildPerformaInvoicePdf({
+          copyType,
+          letterhead,
+          company: companyQ.data,
+          orderNo,
+          orderDate: orderDateStr,
+          poNumber: String(order.customer_po_number || (performa?.po_document ? "Attached" : "Verbal")),
+          poDate: order.customer_po_date ? String(order.customer_po_date) : orderDateStr,
+          approvedBy: String(
+            (order.approved_by && typeof order.approved_by === "object"
+              ? (order.approved_by as any).name
+              : null) ||
+              order.approved_by_name ||
+              creatorName ||
+              "Kritika Thakur",
+          ),
+          approvedDate: order.approved_at
+            ? String(order.approved_at)
+            : orderDateStr,
+          partyName: resolvedPartyName || "—",
+          partyCode: resolvedParty.party_code || resolvedParty.code ? String(resolvedParty.party_code || resolvedParty.code) : undefined,
+          partyGstin: String(resolvedParty.gst_no || resolvedParty.gstin || billingAddr.gst_no || order.gst_no || ""),
+          partyPhone: String(resolvedParty.phone || billingAddr.phone || order.party_phone || ""),
+          partyMobile: String(resolvedParty.mobile || billingAddr.phone || order.party_phone || ""),
+          partyEmail: String(resolvedParty.email || billingAddr.email || order.party_email || ""),
+          contactPerson: String(resolvedParty.contact_person || billingAddr.recipient_name || order.contact_person || ""),
+          billingAddress: billAddressStr,
+          shippingAddress: shipAddressStr,
+          salesPerson: resolvedSalesPersonName,
+          salesPersonDesignation: resolvedSalesPersonDesignation,
+          salesPersonPhone: resolvedSalesPersonPhone,
+          salesPersonEmail: resolvedSalesPersonEmail,
+          companyWebsite: resolvedCompanyWebsite,
+          termsAndConditions,
+          orc: String(performa?.orc || "na"),
+          dispatchDate: dispatchDateStr,
+          paymentTerms: String(performa?.payment_terms || "30 days"),
+          installationRequired: String(performa?.installation_required || "Yes"),
+          marginSheetAttached: String(performa?.margin_sheet_attached || (performa?.cost_sheet_document ? "Attached" : "Attached")),
+          freightCharges: String(performa?.freight_charges || "Included"),
+          transport: String(performa?.transport || "To be arranged / SafeXpress"),
+          customerType: String(performa?.customer_type || "Dealer"),
+          gstConcession: String(performa?.gst_concession || "na"),
+          kycStatus: String(performa?.kyc_status || "na"),
+          remarks: performa?.remarks ? String(performa.remarks) : undefined,
+          items: pdfItems,
+          subtotal,
+          discountTotal,
+          taxableAmount,
+          gstAmount,
+          grandTotal,
+          downloadedBy: user ? String(user.name || user.username || "") : undefined,
+        });
+
+        const safeOrder = orderNo.replace(/[^a-zA-Z0-9-_]/g, "-");
+        const filename =
+          copyType === "customer"
+            ? `Performa-Invoice-Customer-Copy-${safeOrder}.pdf`
+            : `Performa-Invoice-Office-Copy-${safeOrder}.pdf`;
+
+        pdf.save(filename);
+        toast.success(
+          copyType === "customer"
+            ? "Customer Copy downloaded successfully."
+            : "Office Copy downloaded successfully."
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to generate Performa Invoice PDF.";
+        toast.error(message);
+      } finally {
+        setDownloadingType(null);
+      }
+    },
+    [
+      orderQ.data,
+      detail,
+      orderId,
+      performa,
+      companyQ.data,
+      letterhead,
+      creatorName,
+      user,
+      resolvedParty,
+      resolvedPartyName,
+      usersList,
+    ],
+  );
 
   const handleFieldChange = (field: keyof PerformaFormValues, value: string) => {
     setFormValues((prev) => ({ ...prev, [field]: value }));
@@ -874,20 +1003,46 @@ export default function PerformaTab({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Download Customer Copy */}
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={() => handleDownloadPdf("customer")}
+            disabled={Boolean(downloadingType)}
+            className="gap-1.5 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+          >
+            {downloadingType === "customer" ? (
+              <Loader2 className="h-4 w-4 animate-spin text-white" />
+            ) : (
+              <Download className="h-4 w-4 text-white" />
+            )}
+            <span>
+              {downloadingType === "customer"
+                ? "Generating Customer Copy..."
+                : "Download Customer Copy"}
+            </span>
+          </Button>
+
+          {/* Download Office Copy */}
           <Button
             type="button"
             variant="secondary"
             size="sm"
-            onClick={handleDownloadPerformaPdf}
-            disabled={isDownloadingPdf}
+            onClick={() => handleDownloadPdf("office")}
+            disabled={Boolean(downloadingType)}
             className="gap-1.5 cursor-pointer bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200"
           >
-            {isDownloadingPdf ? (
+            {downloadingType === "office" ? (
               <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
             ) : (
-              <Download className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             )}
-            <span>{isDownloadingPdf ? "Generating PDF..." : "Download Performa Invoice"}</span>
+            <span>
+              {downloadingType === "office"
+                ? "Generating Office Copy..."
+                : "Download Office Copy"}
+            </span>
           </Button>
 
           {!isLocked ? (

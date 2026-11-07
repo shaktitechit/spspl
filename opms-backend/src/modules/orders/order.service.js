@@ -963,7 +963,7 @@ async function list(query = {}, user) {
     findQuery = findQuery
       .select(LIST_VIEW_SELECT)
       .populate('party', 'name code sra sra_from_date legal_name trade_name party_name contact_person mobile email gst_no')
-      .populate('assigned_sales_user', 'name username email department');
+      .populate('assigned_sales_user', 'name username email phone mobile department');
   }
 
   const rows = await findQuery.lean();
@@ -1026,8 +1026,9 @@ async function getById(id, user) {
   const q = { _id: id };
   applyAccessFilter(q, user);
   const row = await getModels().Order.findOne(q)
-    .populate('created_by', 'name username email department')
-    .populate('assigned_sales_user', 'name username email department')
+    .populate('created_by', 'name username email phone mobile department')
+    .populate('updated_by', 'name username email phone mobile department')
+    .populate('assigned_sales_user', 'name username email phone mobile department')
     .populate('party', 'name code sra sra_from_date legal_name trade_name party_name contact_person mobile email gst_no billing_address shipping_address')
     .lean();
   if (!row) throw new ApiError(404, 'Order not found');
@@ -1352,6 +1353,19 @@ async function update(id, patch, user) {
     !hasAnyOpmsRole(user, [ROLES.ADMIN, ROLES.SUPER_ADMIN, ROLES.FINANCE, ROLES.ACCOUNT, ROLES.COORDINATOR])
   ) {
     policy.assertMayEditOrderPricing(user, order);
+  }
+
+  if (
+    p.assigned_sales_user !== undefined &&
+    String(p.assigned_sales_user || '') !== String(order.assigned_sales_user || '')
+  ) {
+    if (
+      hasOpmsRole(user, ROLES.SALES) &&
+      !isOpmsAdmin(user) &&
+      !hasAnyOpmsRole(user, [ROLES.COORDINATOR, ROLES.ADMIN, ROLES.SUPER_ADMIN])
+    ) {
+      throw new ApiError(403, 'Assigned sales user cannot be edited by sales users');
+    }
   }
 
   const lockedWorkflow = {

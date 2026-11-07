@@ -15,6 +15,7 @@ router.get('/deleted', controller.listDeleted);
 router.get('/', controller.list);
 router.post('/', controller.create);
 router.get('/:id', controller.get);
+router.get('/:id/history', controller.history);
 router.patch(
   '/:id/super-sheet',
   controller.superSheetUpdate,

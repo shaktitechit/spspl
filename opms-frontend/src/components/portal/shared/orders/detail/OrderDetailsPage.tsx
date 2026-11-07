@@ -1330,6 +1330,7 @@ export default function OrderDetailsPage({
         resolveUser={resolveUser}
         activeTransportInfo={activeTransportInfo}
         onEditAddress={() => setIsUpdateAddressModalOpen(true)}
+        onRefetch={handleRefetch}
       />
 
       <PartyDetailsModal

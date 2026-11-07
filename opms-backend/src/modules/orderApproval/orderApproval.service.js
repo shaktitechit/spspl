@@ -12,6 +12,7 @@ const workflowService = require('../workflow/workflow.service');
 const rateService = require('../../services/opms/partyOrderProductsRateService');
 const fulfillmentService = require('../orders/orderFulfillment.service');
 const orderQueue = require('../../queues/order.queue');
+const { recordApprovalHistory } = require('./orderApprovalDiff.util');
 const {
   aggregateReleaseReturnsByOrderLine,
   getReleaseDispatchIds,
@@ -653,6 +654,7 @@ async function list(query = {}) {
     .populate('finance_amended_by', 'name username email')
     .populate('account_amended_by', 'name username email')
     .populate('admin_amended_by', 'name username email')
+    .populate('coordinator_amended_by', 'name username email')
     .populate('account_approved_by', 'name username email')
     .populate('assigned_account_user', 'name username email')
     .populate('sales_submitted_by', 'name username email')
@@ -675,6 +677,7 @@ async function get(id) {
     .populate('finance_amended_by', 'name username email')
     .populate('account_amended_by', 'name username email')
     .populate('admin_amended_by', 'name username email')
+    .populate('coordinator_amended_by', 'name username email')
     .populate('account_approved_by', 'name username email')
     .populate('assigned_account_user', 'name username email')
     .populate('sales_submitted_by', 'name username email')
@@ -2575,6 +2578,14 @@ async function amendByAccount(id, body, user) {
 
   const wasAccountApproved = Boolean(doc.is_account_approved);
 
+  const previousItems = (doc.approval_items || []).map((x) =>
+    typeof x.toObject === 'function' ? x.toObject() : { ...x }
+  );
+  const previousFinancials = {
+    approved_total_amount: doc.approved_total_amount,
+    ordered_total_amount: doc.ordered_total_amount,
+  };
+
   let adminApproval = null;
   if (order.last_admin_approval) {
     adminApproval = await OrderApproval.findOne({ _id: order.last_admin_approval, deletedAt: null });
@@ -2626,6 +2637,7 @@ async function amendByAccount(id, body, user) {
   doc.reviewed_by = user._id;
   doc.reviewed_at = new Date();
   if (wasAccountApproved) {
+    doc.revision_number = (doc.revision_number || 1) + 1;
     doc.account_amended = true;
     doc.account_amended_by = user._id;
     doc.account_amended_at = new Date();
@@ -2633,6 +2645,9 @@ async function amendByAccount(id, body, user) {
   await doc.save();
 
   if (adminApproval && String(adminApproval._id) !== String(doc._id)) {
+    if (wasAccountApproved) {
+      adminApproval.revision_number = doc.revision_number;
+    }
     syncAdminApprovalItemsFromBatch(adminApproval, doc);
     await adminApproval.save();
   }
@@ -2646,6 +2661,18 @@ async function amendByAccount(id, body, user) {
       ammended_at: doc.account_amended_at,
     });
   }
+
+  await recordApprovalHistory({
+    orderApprovalDoc: doc,
+    previousItems,
+    previousFinancials,
+    stage: wasAccountApproved ? 'account_amendment' : 'account_approval',
+    department: 'account',
+    action: wasAccountApproved ? 'amended' : 'approved',
+    user,
+    notes: note || '',
+    models: getModels(),
+  });
 
   await activityService.create({
     actor: user._id,
@@ -2684,6 +2711,14 @@ async function amendByFinance(id, body, user) {
   if (!order) throw new ApiError(404, 'Order not found');
 
   const wasFinanceApproved = Boolean(doc.is_finance_approved);
+
+  const previousItems = (doc.approval_items || []).map((x) =>
+    typeof x.toObject === 'function' ? x.toObject() : { ...x }
+  );
+  const previousFinancials = {
+    approved_total_amount: doc.approved_total_amount,
+    ordered_total_amount: doc.ordered_total_amount,
+  };
 
   const rateCheck = await rateService.checkOrderRates(doc.order);
   const rateByLine = new Map();
@@ -2727,21 +2762,34 @@ async function amendByFinance(id, body, user) {
   doc.reviewed_by = user._id;
   doc.reviewed_at = new Date();
   if (wasFinanceApproved) {
-  doc.finance_amended = true;
-  doc.finance_amended_by = user._id;
-  doc.finance_amended_at = new Date();
+    doc.revision_number = (doc.revision_number || 1) + 1;
+    doc.finance_amended = true;
+    doc.finance_amended_by = user._id;
+    doc.finance_amended_at = new Date();
   }
   await doc.save();
 
   if (wasFinanceApproved) {
-  const { OrderAmmendmentUser } = getModels();
-  await OrderAmmendmentUser.create({
-    order_approval: doc._id,
-    department: 'finance',
-    ammended_by: user._id,
-    ammended_at: new Date(),
-  });
+    const { OrderAmmendmentUser } = getModels();
+    await OrderAmmendmentUser.create({
+      order_approval: doc._id,
+      department: 'finance',
+      ammended_by: user._id,
+      ammended_at: new Date(),
+    });
   }
+
+  await recordApprovalHistory({
+    orderApprovalDoc: doc,
+    previousItems,
+    previousFinancials,
+    stage: wasFinanceApproved ? 'finance_amendment' : 'finance_approval',
+    department: 'finance',
+    action: wasFinanceApproved ? 'amended' : 'approved',
+    user,
+    notes: note || '',
+    models: getModels(),
+  });
 
   await activityService.create({
     actor: user._id,
@@ -3012,6 +3060,14 @@ async function resolvePartialDispatchByAccount(id, body, user, options = {}) {
     });
   }
 
+  const previousItems = (doc.approval_items || []).map((x) =>
+    typeof x.toObject === 'function' ? x.toObject() : { ...x }
+  );
+  const previousFinancials = {
+    approved_total_amount: doc.approved_total_amount,
+    ordered_total_amount: doc.ordered_total_amount,
+  };
+
   // Prefer client-provided settled approval items when present (modal builds them).
   const clientOverrides = Array.isArray(body?.approval_items) ? body.approval_items : [];
   const overridesToApply = clientOverrides.length > 0 ? clientOverrides : approvalItemOverrides;
@@ -3155,6 +3211,7 @@ async function resolvePartialDispatchByAccount(id, body, user, options = {}) {
   }
   doc.reviewed_by = user._id;
   doc.reviewed_at = new Date();
+  doc.revision_number = (doc.revision_number || 1) + 1;
   doc.account_amended = true;
   doc.account_amended_by = user._id;
   doc.account_amended_at = new Date();
@@ -3164,6 +3221,7 @@ async function resolvePartialDispatchByAccount(id, body, user, options = {}) {
   await doc.save();
 
   if (adminApproval && String(adminApproval._id) !== String(doc._id)) {
+    adminApproval.revision_number = doc.revision_number;
     syncAdminApprovalItemsFromBatch(adminApproval, doc);
     await adminApproval.save();
   }
@@ -3256,6 +3314,18 @@ async function resolvePartialDispatchByAccount(id, body, user, options = {}) {
     message: `Account approval ${doc.approval_no} settled to net dispatched quantities (approval + order amended; rest → unbilled)`,
   });
 
+  await recordApprovalHistory({
+    orderApprovalDoc: doc,
+    previousItems,
+    previousFinancials,
+    stage: 'partial_dispatch_settlement',
+    department: 'account',
+    action: 'settled',
+    user,
+    notes: note || 'Settled to net dispatched quantities',
+    models: getModels(),
+  });
+
   // bypassSequence: do not copy stale order line qtys back onto the settled approval items.
   // skipAsyncJobs: fulfillment already recalculated; avoid racing queued recalculate_fulfillment.
   return decideAccount(id, 'approved', {
@@ -3297,6 +3367,14 @@ async function amend(id, body, user) {
   if (isSameDoc) {
     adminApproval = finApproval;
   }
+
+  const previousItems = (finApproval.approval_items || []).map((x) =>
+    typeof x.toObject === 'function' ? x.toObject() : { ...x }
+  );
+  const previousFinancials = {
+    approved_total_amount: finApproval.approved_total_amount,
+    ordered_total_amount: finApproval.ordered_total_amount,
+  };
 
   const existingItems = body.approval_items || [];
   const newItems = body.new_items || [];
@@ -3557,18 +3635,38 @@ async function amend(id, body, user) {
   );
   finApproval.rejected_total_amount = finApproval.ordered_total_amount - finApproval.approved_total_amount;
 
-  const note = body.amendment_notes;
+  const isCoordinator =
+    mode === 'coordinator' ||
+    hasOpmsRole(user, ROLES.COORDINATOR) ||
+    hasOpmsRole(user, 'sales');
+
+  const note = body.amendment_notes || body.approval_notes;
   const wasAdminApproved = Boolean(finApproval.is_admin_approved);
   if (note) {
-    const stampPrefix = wasAdminApproved ? 'Admin amend' : 'Admin approval';
+    const stampPrefix = isCoordinator
+      ? 'Coordinator amend'
+      : wasAdminApproved
+        ? 'Admin amend'
+        : 'Admin approval';
     const stamp = `[${stampPrefix} ${new Date().toISOString().slice(0, 10)}] ${note}`;
     finApproval.approval_notes = finApproval.approval_notes ? `${finApproval.approval_notes}\n${stamp}` : stamp;
   }
   finApproval.reviewed_by = user._id;
   finApproval.reviewed_at = new Date();
 
-  // First admin sign-off should approve, not mark as amended (mirrors finance amend).
-  if (!wasAdminApproved) {
+  if (isCoordinator) {
+    finApproval.revision_number = (finApproval.revision_number || 1) + 1;
+    finApproval.coordinator_amended = true;
+    finApproval.coordinator_amended_by = user._id;
+    finApproval.coordinator_amended_at = new Date();
+
+    if (!isSameDoc && adminApproval) {
+      adminApproval.revision_number = finApproval.revision_number;
+      adminApproval.coordinator_amended = true;
+      adminApproval.coordinator_amended_by = user._id;
+      adminApproval.coordinator_amended_at = new Date();
+    }
+  } else if (!wasAdminApproved) {
     finApproval.is_admin_approved = true;
     finApproval.admin_approved_by = user._id;
     finApproval.admin_approved_at = new Date();
@@ -3582,11 +3680,13 @@ async function amend(id, body, user) {
       if (!adminApproval.approved_at) adminApproval.approved_at = new Date();
     }
   } else {
+    finApproval.revision_number = (finApproval.revision_number || 1) + 1;
     finApproval.admin_amended = true;
     finApproval.admin_amended_by = user._id;
     finApproval.admin_amended_at = new Date();
 
     if (!isSameDoc) {
+      adminApproval.revision_number = finApproval.revision_number;
       adminApproval.admin_amended = true;
       adminApproval.admin_amended_by = user._id;
       adminApproval.admin_amended_at = new Date();
@@ -3600,14 +3700,14 @@ async function amend(id, body, user) {
     await adminApproval.save();
   }
 
-  if (!wasAdminApproved) {
+  if (!wasAdminApproved && !isCoordinator) {
     order.admin_approval_status = APPROVAL_STATUS.APPROVED;
     order.last_admin_approval = finApproval._id;
     order.markModified('order_items');
     await order.save();
   }
 
-  // Admin amend already wrote line qtys onto the order. Recompute from the correct
+  // Admin / Coordinator amend already wrote line qtys onto the order. Recompute from the correct
   // approval stage — never run finance recompute before finance has signed off
   // (that path previously zeroed approved_quantity).
   if (finApproval.is_finance_approved) {
@@ -3616,11 +3716,11 @@ async function amend(id, body, user) {
     await recomputeApprovedQuantitiesFromAdmin(order._id);
   }
 
-  if (wasAdminApproved) {
+  if (wasAdminApproved || isCoordinator) {
     const { OrderAmmendmentUser: AmendmentModel } = getModels();
     await AmendmentModel.create({
       order_approval: finApproval._id,
-      department: 'admin',
+      department: isCoordinator ? 'coordinator' : 'admin',
       ammended_by: user._id,
       ammended_at: new Date(),
     });
@@ -3630,10 +3730,28 @@ async function amend(id, body, user) {
     actor: user._id,
     entity_type: 'approval',
     entity_id: finApproval._id,
-    action: wasAdminApproved ? 'updated' : 'approved',
-    message: wasAdminApproved
-      ? `Admin approval ${finApproval.approval_no} amended`
-      : `Order admin approval ${finApproval.approval_no} approved`,
+    action: wasAdminApproved || isCoordinator ? 'updated' : 'approved',
+    message: isCoordinator
+      ? `Coordinator approval ${finApproval.approval_no} amended`
+      : wasAdminApproved
+        ? `Admin approval ${finApproval.approval_no} amended`
+        : `Order admin approval ${finApproval.approval_no} approved`,
+  });
+
+  await recordApprovalHistory({
+    orderApprovalDoc: finApproval,
+    previousItems,
+    previousFinancials,
+    stage: isCoordinator
+      ? 'coordinator_amendment'
+      : wasAdminApproved
+        ? 'admin_amendment'
+        : 'admin_approval',
+    department: isCoordinator ? 'coordinator' : 'admin',
+    action: wasAdminApproved || isCoordinator ? 'amended' : 'approved',
+    user,
+    notes: note || '',
+    models: getModels(),
   });
 
   return get(id);
@@ -3788,6 +3906,7 @@ async function superSheetUpdate(id, body, user) {
     'finance_amended_at',
     'account_amended_at',
     'admin_amended_at',
+    'coordinator_amended_at',
     'sales_submitted_at',
     'coordinator_submitted_at',
     'approved_at',
@@ -3807,6 +3926,7 @@ async function superSheetUpdate(id, body, user) {
     'finance_amended',
     'account_amended',
     'admin_amended',
+    'coordinator_amended',
   ]);
   const NUMBER_KEYS = new Set([
     'revision_number',
@@ -3828,6 +3948,7 @@ async function superSheetUpdate(id, body, user) {
     'finance_amended_by',
     'account_amended_by',
     'admin_amended_by',
+    'coordinator_amended_by',
     'approved_by',
     'rejected_by',
   ]);
@@ -4231,9 +4352,101 @@ async function syncApprovalsFromOrderSuperSheet(orderId) {
   }
 }
 
+async function getHistory(id, user) {
+  const { OrderApproval, OrderApprovalHistory, OrderAmmendmentUser } = getModels();
+  const approval = await OrderApproval.findOne({ _id: id, deletedAt: null })
+    .populate('admin_approved_by', 'name username email')
+    .populate('finance_approved_by', 'name username email')
+    .populate('account_approved_by', 'name username email')
+    .populate('sales_submitted_by', 'name username email')
+    .populate('coordinator_submitted_by', 'name username email')
+    .populate('created_by', 'name username email')
+    .lean();
+  if (!approval) throw new ApiError(404, APPROVAL_NF);
+
+  const historyDocs = await OrderApprovalHistory.find({ order_approval: id })
+    .populate('changed_by', 'name username email role')
+    .sort({ revision_number: -1, changed_at: -1 })
+    .lean();
+
+  if (historyDocs && historyDocs.length > 0) {
+    return historyDocs.map((r) => toPlain(r));
+  }
+
+  // Fallback synthesis for legacy approvals that were amended before history tracking was added
+  const fallbackList = [];
+  const amendments = await OrderAmmendmentUser.find({ order_approval: id })
+    .populate('ammended_by', 'name username email role')
+    .sort({ ammended_at: -1 })
+    .lean();
+
+  let rev = (amendments.length || 0) + 1;
+
+  for (const amend of amendments) {
+    fallbackList.push({
+      _id: String(amend._id),
+      order_approval: id,
+      order: approval.order,
+      revision_number: rev,
+      stage: `${amend.department}_amendment`,
+      department: amend.department,
+      action: 'amended',
+      changed_by: amend.ammended_by,
+      changed_at: amend.ammended_at,
+      notes: approval.approval_notes || '',
+      financials: {
+        previous_approved_total: approval.approved_total_amount || 0,
+        new_approved_total: approval.approved_total_amount || 0,
+        previous_ordered_total: approval.ordered_total_amount || 0,
+        new_ordered_total: approval.ordered_total_amount || 0,
+        difference_approved_total: 0,
+      },
+      changes: [],
+      snapshot: (approval.approval_items || []).map((it) => ({
+        ...it,
+        product_name: it.product?.product_name || it.product_name,
+        sku: it.product?.sku || it.sku,
+      })),
+      is_legacy_fallback: true,
+    });
+    rev--;
+  }
+
+  // Add initial approval snapshot entry
+  fallbackList.push({
+    _id: `initial-${String(approval._id)}`,
+    order_approval: id,
+    order: approval.order,
+    revision_number: 1,
+    stage: approval.is_sales_submited ? 'sales_submission' : 'admin_approval',
+    department: approval.is_sales_submited ? 'sales' : 'admin',
+    action: 'created',
+    changed_by: approval.admin_approved_by || approval.sales_submitted_by || approval.created_by,
+    changed_at: approval.admin_approved_at || approval.sales_submitted_at || approval.createdAt,
+    notes: approval.approval_notes || '',
+    financials: {
+      previous_approved_total: 0,
+      new_approved_total: approval.approved_total_amount || 0,
+      previous_ordered_total: 0,
+      new_ordered_total: approval.ordered_total_amount || 0,
+      difference_approved_total: approval.approved_total_amount || 0,
+    },
+    changes: [],
+    snapshot: (approval.approval_items || []).map((it) => ({
+      ...it,
+      product_name: it.product?.product_name || it.product_name,
+      sku: it.product?.sku || it.sku,
+    })),
+    is_legacy_fallback: true,
+  });
+
+  return fallbackList.map((r) => toPlain(r));
+}
+
 module.exports = {
   list,
   get,
+  getHistory,
   create,
   patch,
   superSheetUpdate,

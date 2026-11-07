@@ -13,6 +13,10 @@ exports.get = asyncHandler(async (req, res) => {
   res.json({ success: true, data: await service.get(req.params.id) });
 });
 
+exports.history = asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await service.getHistory(req.params.id, req.user) });
+});
+
 exports.create = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, data: await service.create(req.body, req.user) });
 });

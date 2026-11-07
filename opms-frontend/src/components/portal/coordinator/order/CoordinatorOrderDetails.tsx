@@ -1032,6 +1032,7 @@ export default function CoordinatorOrderDetails({ orderId }: { orderId: string }
         resolveUser={resolveUser}
         activeTransportInfo={activeTransportInfo}
         onEditAddress={() => setIsUpdateAddressModalOpen(true)}
+        onRefetch={handleRefetch}
       />
 
       <PartyDetailsModal
@@ -1318,6 +1319,7 @@ export default function CoordinatorOrderDetails({ orderId }: { orderId: string }
                   setSubmitRemarks("");
                   setIsSubmitPreviewOpen(true);
                 }}
+                onRefetch={handleRefetch}
               />
             )}
             {activeTab === "po" && (
@@ -1433,6 +1435,7 @@ export default function CoordinatorOrderDetails({ orderId }: { orderId: string }
                       setSubmitRemarks("");
                       setIsSubmitPreviewOpen(true);
                     }}
+                    onRefetch={handleRefetch}
                   />
                 )}
                 {activeTab === "po" && (

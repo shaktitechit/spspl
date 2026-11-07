@@ -6,7 +6,7 @@ import { useAppSelector } from "@/store";
 import { hasOpmsRole, isOpmsAdmin, primaryOpmsRole } from "@/lib/opmsAuth";
 import { DashboardCard } from "@/components/widgets";
 import { ApprovalRecordCard } from "../approvals/ApprovalRecordCard";
-import { ApprovalModal } from "../modals/ApprovalModal";
+import { ApprovalModal, type ApprovalMode } from "../modals/ApprovalModal";
 import {
   adminApprovalActionLabel,
   canOpenAdminApprovalModal,
@@ -110,7 +110,7 @@ export function ApprovalsTab({
   const [approvalModalOpen, setApprovalModalOpen] = useState(false);
   const [amendApprovalId, setAmendApprovalId] = useState<string | null>(null);
   const [isAmendModalOpen, setIsAmendModalOpen] = useState(false);
-  const [amendMode, setAmendMode] = useState<ApprovalsTabPortal>("admin");
+  const [amendMode, setAmendMode] = useState<ApprovalMode>("admin");
 
   const hasActiveDispatch = useMemo(() => {
     const list = pickList(dispatchesQ?.data);
@@ -176,7 +176,7 @@ export function ApprovalsTab({
     [approvals, amendApprovalId],
   );
 
-  const openAmendModal = useCallback((approvalId: string, mode: ApprovalsTabPortal) => {
+  const openAmendModal = useCallback((approvalId: string, mode: ApprovalMode) => {
     setAmendApprovalId(approvalId);
     setAmendMode(mode);
     setIsAmendModalOpen(true);

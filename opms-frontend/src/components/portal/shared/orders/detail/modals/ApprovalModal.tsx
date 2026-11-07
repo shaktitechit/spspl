@@ -71,7 +71,7 @@ type EditableLine = {
   isNew?: boolean;
 };
 
-export type ApprovalMode = "admin" | "finance" | "account";
+export type ApprovalMode = "admin" | "finance" | "account" | "coordinator";
 
 type ApprovalModalProps = {
   open: boolean;
@@ -1070,7 +1070,14 @@ export function ApprovalModal({
             ? Boolean(approval.is_admin_approved)
             : mode === "finance"
               ? Boolean(approval.is_finance_approved)
-              : Boolean(approval.is_account_approved);
+              : mode === "account"
+                ? Boolean(approval.is_account_approved)
+                : Boolean(
+                    approval.coordinator_amended ||
+                      approval.is_coordinator_submitted ||
+                      approval.is_sales_submited ||
+                      approval.is_admin_approved,
+                  );
 
         const existingLines = activeLines.filter((line) => !line.isNew);
         const newLines = activeLines.filter((line) => line.isNew);
@@ -1293,15 +1300,17 @@ export function ApprovalModal({
           }
 
           toast.success(
-            mode === "admin"
-              ? "Admin approval amended successfully."
-              : mode === "finance"
-                ? stageAlreadyCleared
-                  ? "Finance clearance amended successfully."
-                  : "Order finance-approved successfully."
-                : stageAlreadyCleared
-                  ? "Account clearance amended successfully."
-                  : "Order account-approved successfully.",
+            mode === "coordinator"
+              ? "Coordinator approval amended successfully."
+              : mode === "admin"
+                ? "Admin approval amended successfully."
+                : mode === "finance"
+                  ? stageAlreadyCleared
+                    ? "Finance clearance amended successfully."
+                    : "Order finance-approved successfully."
+                  : stageAlreadyCleared
+                    ? "Account clearance amended successfully."
+                    : "Order account-approved successfully.",
           );
         }
       }
@@ -1350,7 +1359,9 @@ export function ApprovalModal({
         ? Boolean(approval.is_admin_approved)
         : mode === "finance"
           ? Boolean(approval.is_finance_approved)
-          : Boolean(approval.is_account_approved)
+          : mode === "account"
+            ? Boolean(approval.is_account_approved)
+            : true
       : false;
 
   const approvalNo = approval ? String(approval.approval_no ?? "—") : "";
@@ -1364,29 +1375,35 @@ export function ApprovalModal({
         ? isAlreadyApproved
           ? "Amend finance clearance"
           : "Approve order"
-        : isAlreadyApproved
-          ? "Amend account clearance"
-          : "Approve order"
+        : mode === "account"
+          ? isAlreadyApproved
+            ? "Amend account clearance"
+            : "Approve order"
+          : "Coordinator Amend Approval"
     : "Create and Modify Approval";
 
   const modalDescription = approval
-    ? isAlreadyApproved
-      ? `${approvalNo} — update quantities, rates, or items. Changes sync to the approval batch and order.`
-      : mode === "admin"
-        ? `${approvalNo} — review sales-submitted items, map rates, then approve. Order and workflow update after submission.`
-        : mode === "finance"
-          ? `${approvalNo} — review admin-cleared items, then approve. Order and workflow update after submission.`
-          : `${approvalNo} — review finance-cleared items, then approve. Order and workflow update after submission.`
+    ? mode === "coordinator"
+      ? `${approvalNo} — update quantities, rates, or items as coordinator. Changes will sync to the approval batch and backing order.`
+      : isAlreadyApproved
+        ? `${approvalNo} — update quantities, rates, or items. Changes sync to the approval batch and order.`
+        : mode === "admin"
+          ? `${approvalNo} — review sales-submitted items, map rates, then approve. Order and workflow update after submission.`
+          : mode === "finance"
+            ? `${approvalNo} — review admin-cleared items, then approve. Order and workflow update after submission.`
+            : `${approvalNo} — review finance-cleared items, then approve. Order and workflow update after submission.`
     : "Edit the full order line list, verify negotiated rates, then save order and approval together.";
 
   const notesLabel = isAlreadyApproved ? "Amendment notes" : "Approval notes";
   const notesPlaceholder = approval
     ? isAlreadyApproved
-      ? mode === "admin"
-        ? "Reason for admin amendment…"
-        : mode === "finance"
-          ? "Reason for finance amendment…"
-          : "Reason for account amendment…"
+      ? mode === "coordinator"
+        ? "Reason for coordinator amendment…"
+        : mode === "admin"
+          ? "Reason for admin amendment…"
+          : mode === "finance"
+            ? "Reason for finance amendment…"
+            : "Reason for account amendment…"
       : mode === "admin"
         ? "Optional notes for this admin approval…"
         : mode === "finance"

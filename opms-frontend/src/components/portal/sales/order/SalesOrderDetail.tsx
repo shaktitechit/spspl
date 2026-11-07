@@ -977,6 +977,7 @@ export default function SalesOrderDetail({ orderId }: { orderId: string }) {
         resolveUser={resolveUser}
         activeTransportInfo={activeTransportInfo}
         onEditAddress={() => setIsUpdateAddressModalOpen(true)}
+        onRefetch={handleRefetch}
       />
 
       <PartyDetailsModal

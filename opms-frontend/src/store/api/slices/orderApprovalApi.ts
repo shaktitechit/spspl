@@ -31,10 +31,64 @@ export type CreateOrderApprovalPayload = {
   [key: string]: any;
 };
 
+export type OrderApprovalHistoryFieldChange = {
+  field: string;
+  from: any;
+  to: any;
+  difference?: number;
+};
+
+export type OrderApprovalHistoryLineChange = {
+  order_item_id?: string;
+  product?: string;
+  product_name: string;
+  sku?: string;
+  kit_parent_product?: string | null;
+  change_type: "added" | "removed" | "modified";
+  field_changes?: OrderApprovalHistoryFieldChange[];
+  before?: Record<string, any>;
+  after?: Record<string, any>;
+};
+
+export type OrderApprovalHistoryItem = {
+  _id: string;
+  order_approval: string;
+  order: string;
+  revision_number: number;
+  stage: string;
+  department: "sales" | "coordinator" | "admin" | "finance" | "account" | "system";
+  action: string;
+  changed_by?: {
+    _id?: string;
+    id?: string;
+    name?: string;
+    username?: string;
+    email?: string;
+    role?: string;
+  } | string;
+  changed_at: string;
+  notes?: string;
+  financials?: {
+    previous_approved_total: number;
+    new_approved_total: number;
+    previous_ordered_total: number;
+    new_ordered_total: number;
+    difference_approved_total: number;
+  };
+  changes?: OrderApprovalHistoryLineChange[];
+  snapshot?: Record<string, any>[];
+  is_legacy_fallback?: boolean;
+};
+
 
 const orderApprovalTags = (id?: string, orderId?: string) => [
   { type: "OrderApprovals" as const, id: "LIST" },
-  ...(id ? [{ type: "OrderApprovals" as const, id }] : []),
+  ...(id
+    ? [
+        { type: "OrderApprovals" as const, id },
+        { type: "OrderApprovals" as const, id: `${id}_HISTORY` },
+      ]
+    : []),
   ...(orderId ? [{ type: "Order" as const, id: orderId }] : []),
   "Order" as const,
   "Orders" as const,
@@ -85,6 +139,14 @@ export const orderApprovalApi = medicaApi.injectEndpoints({
       query: (id) => `order-approvals/${id}`,
       transformResponse: (raw: ApiEnvelope<unknown>) => unwrapEnvelope(raw),
       providesTags: (_r, _e, id) => [{ type: "OrderApprovals", id }],
+    }),
+    getOrderApprovalHistory: build.query<OrderApprovalHistoryItem[], string>({
+      query: (id) => `order-approvals/${id}/history`,
+      transformResponse: (raw: ApiEnvelope<OrderApprovalHistoryItem[]>) =>
+        unwrapEnvelope(raw),
+      providesTags: (_r, _e, id) => [
+        { type: "OrderApprovals", id: `${id}_HISTORY` },
+      ],
     }),
     createOrderApproval: build.mutation<unknown, CreateOrderApprovalPayload>({
       query: (body) => ({
@@ -210,6 +272,8 @@ export const {
   useLazyListOrderApprovalsDeletedQuery,
   useGetOrderApprovalQuery,
   useLazyGetOrderApprovalQuery,
+  useGetOrderApprovalHistoryQuery,
+  useLazyGetOrderApprovalHistoryQuery,
   useCreateOrderApprovalMutation,
   usePatchOrderApprovalMutation,
   useSuperSheetPatchOrderApprovalMutation,

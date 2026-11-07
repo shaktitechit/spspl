@@ -41,6 +41,7 @@ export type PerformaPdfItem = {
 };
 
 export type BuildPerformaInvoicePdfInput = {
+  copyType?: "customer" | "office";
   letterhead: PdfCompanyLetterhead;
   company?: CompanyInfoRecord | null;
   orderNo: string;
@@ -54,11 +55,17 @@ export type BuildPerformaInvoicePdfInput = {
   partyCode?: string;
   partyGstin?: string;
   partyPhone?: string;
+  partyMobile?: string;
   partyEmail?: string;
   contactPerson?: string;
   billingAddress: string;
   shippingAddress?: string;
   salesPerson?: string;
+  salesPersonDesignation?: string;
+  salesPersonPhone?: string;
+  salesPersonEmail?: string;
+  companyWebsite?: string;
+  termsAndConditions?: string[];
   orc?: string;
   dispatchDate?: string;
   paymentTerms?: string;
@@ -408,8 +415,14 @@ export async function buildPerformaInvoicePdf(
       { val: customerName, bold: true },
     ];
     if (input.billingAddress) leftLines.push({ val: input.billingAddress });
+    if (input.partyGstin) leftLines.push({ label: "GSTIN : ", val: input.partyGstin });
     if (input.contactPerson) leftLines.push({ label: "Contact Person : ", val: input.contactPerson, bold: true });
     if (input.partyPhone) leftLines.push({ label: "Tel. : ", val: input.partyPhone });
+    if (input.partyMobile && input.partyMobile !== input.partyPhone) {
+      leftLines.push({ label: "Cell : ", val: input.partyMobile });
+    } else if (input.partyMobile && !input.partyPhone) {
+      leftLines.push({ label: "Cell : ", val: input.partyMobile });
+    }
     if (input.partyEmail) leftLines.push({ label: "E-mail : ", val: input.partyEmail });
 
     // Right Column items
@@ -831,20 +844,201 @@ export async function buildPerformaInvoicePdf(
     currentY += boxH + 4;
   };
 
+  // -------------------------------------------------------------
+  // 5b. Customer Copy: Terms and Conditions, Bank Details & Signatories
+  // Replaces internal Order Details grid in Customer Copy.
+  // -------------------------------------------------------------
+  const drawCustomerTermsAndSignOff = () => {
+    // Check if remaining space is sufficient on page
+    if (currentY + 75 > PAGE_H - 10) {
+      pdf.addPage();
+      currentY = M;
+      drawHeader();
+    }
+
+    const boxX = M;
+    const boxW = CONTENT_W;
+    const colW = boxW / 2;
+
+    // 1. Terms and Condition:
+    const termsList =
+      input.termsAndConditions && input.termsAndConditions.length > 0
+        ? input.termsAndConditions
+        : [
+            `Payment ${input.paymentTerms || "Advance against Supplies"}`,
+            "Delivery Terms as per Customer PO",
+            "Warranty Terms as agreed on Purchase",
+          ];
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(...DARK);
+    pdf.text("Terms and Condition:", boxX, currentY);
+    const tcWidth = pdf.getTextWidth("Terms and Condition:");
+    pdf.setDrawColor(...DARK);
+    pdf.setLineWidth(0.2);
+    pdf.line(boxX, currentY + 0.8, boxX + tcWidth, currentY + 0.8);
+    currentY += 4.5;
+
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7);
+    pdf.setTextColor(...DARK);
+
+    termsList.forEach((term, idx) => {
+      const termLine = `${idx + 1}. ${term}`;
+      const splitLines = pdf.splitTextToSize(termLine, boxW - 8) as string[];
+      splitLines.forEach((line) => {
+        pdf.text(line, boxX + 4, currentY);
+        currentY += 3.6;
+      });
+    });
+
+    currentY += 3.5;
+
+    // 2. BANK DETAILS
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(...DARK);
+    pdf.text("BANK DETAILS", boxX, currentY);
+    currentY += 4.2;
+
+    const fullBankBranch = [bankName, branchName, company?.city]
+      .filter(Boolean)
+      .join(", ");
+
+    const bankDetailsList = [
+      { label: "Beneficiary Name - ", val: accountName },
+      { label: "Beneficiary Account No. - ", val: accountNumber },
+      { label: "Beneficiary Bank Name - ", val: fullBankBranch || bankName },
+      { label: "IFSC Code: ", val: ifscCode },
+    ];
+
+    pdf.setFontSize(6.8);
+    bankDetailsList.forEach((b) => {
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(...DARK);
+      pdf.text(b.label, boxX, currentY);
+
+      const lw = pdf.getTextWidth(b.label);
+      pdf.setFont("helvetica", "normal");
+      pdf.setTextColor(...DARK);
+      pdf.text(b.val, boxX + lw, currentY);
+      currentY += 3.6;
+    });
+
+    currentY += 5;
+
+    // 3. Two-Column Signatories
+    // Left: For {Company Name}, sales person name as signatory & contact details, company contacts
+    // Right: Order Acceptance, {Customer Name}, Authorised Signatory
+    const signTopY = currentY;
+
+    // Left Column
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(7.8);
+    pdf.setTextColor(...DARK);
+    pdf.text(`For ${companyName.toUpperCase()}`, boxX, currentY);
+    currentY += 5.5;
+
+    // Sales Person Name (uppercase bold)
+    const spName = (input.salesPerson || "").toUpperCase();
+    if (spName) {
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8);
+      pdf.setTextColor(...DARK);
+      pdf.text(spName, boxX, currentY);
+      currentY += 4.5;
+    }
+
+    // Sales Person Designation
+    if (input.salesPersonDesignation) {
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(7);
+      pdf.setTextColor(...DARK);
+      pdf.text(input.salesPersonDesignation, boxX, currentY);
+      currentY += 3.6;
+    }
+
+    // Sales Person Phone
+    if (input.salesPersonPhone) {
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(7);
+      pdf.setTextColor(...DARK);
+      pdf.text(input.salesPersonPhone, boxX, currentY);
+      currentY += 3.6;
+    }
+
+    // Sales Person Email
+    if (input.salesPersonEmail) {
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(7);
+      pdf.setTextColor(...DARK);
+      pdf.text(input.salesPersonEmail, boxX, currentY);
+      currentY += 3.6;
+    }
+
+    // Company Contacts (website / email / phone) below
+    const compWeb = input.companyWebsite || company?.website || letterhead.website;
+    if (compWeb) {
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(7);
+      pdf.setTextColor(...BLUE);
+      pdf.text(compWeb, boxX, currentY);
+      currentY += 3.6;
+    }
+
+    const leftFinalY = currentY;
+
+    // Right Column: Order Acceptance
+    let rightY = signTopY;
+    const rightX = boxX + colW + 20;
+    const rightMaxW = boxW - (colW + 20);
+
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(...DARK);
+    pdf.text("Order Acceptance,", rightX, rightY);
+    rightY += 4.5;
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(...DARK);
+    const splitCust = pdf.splitTextToSize(customerName, rightMaxW) as string[];
+    splitCust.forEach((l) => {
+      pdf.text(l, rightX, rightY);
+      rightY += 4;
+    });
+
+    rightY += 9; // Space for physical stamp / signature
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(...DARK);
+    pdf.text("Authorised Signatory", rightX, rightY);
+    rightY += 4;
+
+    currentY = Math.max(leftFinalY, rightY) + 4;
+  };
+
   // Render complete document
   drawHeader();
   drawMetaBox();
   drawItemsTable();
 
-  // Check if remaining space is sufficient for Order Details + Sign Off
-  if (currentY + 65 > PAGE_H - 10) {
-    pdf.addPage();
-    currentY = M;
-    drawHeader();
-  }
+  const isCustomerCopy = input.copyType === "customer" || !input.copyType;
 
-  drawOrderDetails();
-  drawSignOff();
+  if (isCustomerCopy) {
+    drawCustomerTermsAndSignOff();
+  } else {
+    // Office Copy
+    if (currentY + 65 > PAGE_H - 10) {
+      pdf.addPage();
+      currentY = M;
+      drawHeader();
+    }
+    drawOrderDetails();
+    drawSignOff();
+  }
 
   return pdf;
 }
