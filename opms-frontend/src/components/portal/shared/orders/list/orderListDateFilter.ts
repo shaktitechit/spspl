@@ -31,6 +31,10 @@ export function orderMatchesDateFilter(
   customDateTo: string,
 ): boolean {
   if (dateFilter === "all") return true;
+  if (dateFilter === "all_time") {
+    const raw = order.order_date ?? order.created_at ?? order.createdAt;
+    return Boolean(toDay(raw));
+  }
 
   const now = new Date();
   let dateFrom: Date | null = null;
@@ -75,7 +79,7 @@ export function dateFilterToRange(
   customDateFrom: string,
   customDateTo: string,
 ): { dateFrom?: string; dateTo?: string } {
-  if (dateFilter === "all") return {};
+  if (dateFilter === "all" || dateFilter === "all_time") return {};
 
   const now = new Date();
   let dateFrom: Date | null = null;

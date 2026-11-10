@@ -138,7 +138,9 @@ export function dashboardPeriodToStatsQuery(
     let from: Date | null = null;
     let to: Date | null = null;
 
-    if (dateFilter === "today") {
+    if (dateFilter === "all_time") {
+      return {};
+    } else if (dateFilter === "today") {
       from = startOfLocalDay(now);
       to = startOfLocalDay(now);
     } else if (dateFilter === "yesterday") {

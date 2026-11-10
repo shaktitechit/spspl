@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  ALL_MONTHS,
   collectAvailableYears,
   type DashboardDataType,
 } from "./periodFilterUtils";
@@ -53,12 +54,21 @@ export function usePeriodFilter<T = unknown>(
       const current = getCurrentPeriodDefaults();
       setSelectedYears([current.year]);
       setSelectedMonths([current.month]);
+    } else if (value === "all_time") {
+      if (availableYears.length > 0) {
+        setSelectedYears(availableYears);
+      }
+      setSelectedMonths(ALL_MONTHS);
     }
   };
 
   useEffect(() => {
     if (availableYears.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedYears((prev) => {
+      if (dateFilter === "all_time") {
+        return sameNumbers(prev, availableYears) ? prev : availableYears;
+      }
       const fallback = availableYears.includes(defaults.year)
         ? [defaults.year]
         : [availableYears[0]];
@@ -67,7 +77,7 @@ export function usePeriodFilter<T = unknown>(
       const resolved = next.length > 0 ? next : fallback;
       return sameNumbers(prev, resolved) ? prev : resolved;
     });
-  }, [availableYears, defaults.year]);
+  }, [availableYears, defaults.year, dateFilter]);
 
   const filteredOrders = useMemo(() => {
     return (orders as any[]).filter((o) => {

@@ -10,6 +10,7 @@ import type { DashboardDataType } from "./periodFilterUtils";
 
 export const PERIOD_DATE_FILTER_OPTIONS = [
   { id: "all", label: "Current Month" },
+  { id: "all_time", label: "All Time" },
   { id: "today", label: "Today" },
   { id: "yesterday", label: "Yesterday" },
   { id: "last_week", label: "Last 7 Days" },
