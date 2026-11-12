@@ -75,6 +75,18 @@ export { default as SuperAdminSettingsPage } from "./super_admin/settings/SuperA
 
 export { default as ProfilePage } from "./shared/profile/ProfilePage";
 export { default as UnbilledOrdersPage } from "./shared/orders/list/UnbilledOrdersPage";
+export { default as SalesAnalyticsPage } from "./shared/dashboard/SalesAnalyticsPage";
+export { default as SalesAnalyticsDropdown } from "./shared/dashboard/SalesAnalyticsDropdown";
+export { default as ZoneOrderAnalytics } from "./shared/dashboard/ZoneOrderAnalytics";
+export { default as ZoneAnalyticsDetailPage } from "./shared/dashboard/ZoneAnalyticsDetailPage";
+export { default as CityOrderAnalytics } from "./shared/dashboard/CityOrderAnalytics";
+export { default as CityAnalyticsDetailPage } from "./shared/dashboard/CityAnalyticsDetailPage";
+export { default as RateTypeOrderAnalytics } from "./shared/dashboard/RateTypeOrderAnalytics";
+export { default as RateTypeAnalyticsDetailPage } from "./shared/dashboard/RateTypeAnalyticsDetailPage";
+export { default as SalesPersonOrderAnalytics } from "./shared/dashboard/SalesPersonOrderAnalytics";
+export { default as SalesPersonAnalyticsDetailPage } from "./shared/dashboard/SalesPersonAnalyticsDetailPage";
+export { default as ProductGroupOrderAnalytics } from "./shared/dashboard/ProductGroupOrderAnalytics";
+export { default as ProductGroupAnalyticsDetailPage } from "./shared/dashboard/ProductGroupAnalyticsDetailPage";
 export { default as PortalOverviewShell } from "./shared/shell/PortalOverviewShell";
 export { usePortalDashboardKpi } from "./shared/hooks/usePortalDashboardKpi";
 export { pickOrders } from "./shared/lib/pickOrders";

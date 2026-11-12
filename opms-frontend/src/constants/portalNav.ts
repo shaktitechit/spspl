@@ -40,9 +40,22 @@ export type PortalNavLeaf = {
   children?: readonly PortalNavChild[];
 };
 
+export const SALES_ANALYTICS_NAV_CHILDREN: readonly PortalNavChild[] = [
+  { label: "Order Analytics", segment: "orders", icon: "ClipboardList" },
+  { label: "Product Analytics", segment: "products", icon: "Package" },
+  { label: "Party Analytics", segment: "parties", icon: "Building2" },
+  { label: "Sales Person Analytics", segment: "sales-persons", icon: "UserRound" },
+];
+
 export const PORTAL_NAV: Record<PortalKey, readonly PortalNavLeaf[]> = {
   admin: [
     { segments: [], label: "Overview", icon: "LayoutDashboard" },
+    {
+      segments: ["sales-analytics"],
+      label: "Sales Analytics",
+      icon: "BarChart3",
+      children: SALES_ANALYTICS_NAV_CHILDREN,
+    },
     {
       segments: ["orders"],
       label: "Order Master",
@@ -94,6 +107,12 @@ export const PORTAL_NAV: Record<PortalKey, readonly PortalNavLeaf[]> = {
   finance: [
     { segments: [], label: "Overview", icon: "LayoutDashboard" },
     {
+      segments: ["sales-analytics"],
+      label: "Sales Analytics",
+      icon: "BarChart3",
+      children: SALES_ANALYTICS_NAV_CHILDREN,
+    },
+    {
       segments: ["orders"],
       label: "Order Master",
       icon: "ClipboardCheck",
@@ -132,6 +151,12 @@ export const PORTAL_NAV: Record<PortalKey, readonly PortalNavLeaf[]> = {
   ],
   account: [
     { segments: [], label: "Overview", icon: "LayoutDashboard" },
+    {
+      segments: ["sales-analytics"],
+      label: "Sales Analytics",
+      icon: "BarChart3",
+      children: SALES_ANALYTICS_NAV_CHILDREN,
+    },
     {
       segments: ["orders"],
       label: "Order Master",
@@ -182,6 +207,12 @@ export const PORTAL_NAV: Record<PortalKey, readonly PortalNavLeaf[]> = {
   super_admin: [
     { segments: [], label: "Overview", icon: "LayoutDashboard" },
     {
+      segments: ["sales-analytics"],
+      label: "Sales Analytics",
+      icon: "BarChart3",
+      children: SALES_ANALYTICS_NAV_CHILDREN,
+    },
+    {
       segments: ["orders"],
       label: "Order Master",
       icon: "ClipboardList",
@@ -221,6 +252,12 @@ export const PORTAL_NAV: Record<PortalKey, readonly PortalNavLeaf[]> = {
   ],
   coordinator: [
     { segments: [], label: "Overview", icon: "LayoutDashboard" },
+    {
+      segments: ["sales-analytics"],
+      label: "Sales Analytics",
+      icon: "BarChart3",
+      children: SALES_ANALYTICS_NAV_CHILDREN,
+    },
     {
       segments: ["orders"],
       label: "Order Master",
@@ -288,6 +325,19 @@ export function resolvePortalPageTitle(
       pathSegs[1],
     );
     if (queueLabel) return queueLabel;
+  }
+
+  if (pathSegs[0] === "sales-analytics") {
+    if (pathSegs[2] === "zone" || pathSegs[1] === "zone") return "Zone Analytics";
+    if (pathSegs[2] === "city" || pathSegs[1] === "city") return "City Analytics";
+    if (pathSegs[2] === "rate-type" || pathSegs[1] === "rate-type") return "Rate Type Analytics";
+    if (pathSegs[2] === "sales-person" || pathSegs[1] === "sales-person") return "Sales Person Analytics";
+    if (pathSegs[2] === "product-group" || pathSegs[1] === "product-group") return "Product Group Analytics";
+    if (pathSegs.length === 1 || pathSegs[1] === "orders") return "Order Analytics";
+    if (pathSegs[1] === "products") return "Product Analytics";
+    if (pathSegs[1] === "parties") return "Party Analytics";
+    if (pathSegs[1] === "sales-persons") return "Sales Person Analytics";
+    return "Sales Analytics";
   }
 
   const hit = leaves.find(

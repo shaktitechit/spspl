@@ -34,6 +34,7 @@ import {
   X,
 } from "lucide-react";
 import PeriodFilter from "@/components/portal/shared/dashboard/PeriodFilter";
+import SalesAnalyticsDropdown from "@/components/portal/shared/dashboard/SalesAnalyticsDropdown";
 import { useDashboardSummary } from "@/components/portal/shared/dashboard/useDashboardSummary";
 import { dashboardPeriodToStatsQuery } from "@/components/portal/shared/dashboard/periodFilterUtils";
 const ADMIN_PENDING_PUSH_INTERVAL_MS = 300_000;
@@ -388,6 +389,7 @@ export default function AdminOverview() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <SalesAnalyticsDropdown portalHome="/admin" currentView="overview" />
           <OverviewFlagsWidget currentDepartment="admin" variant="headerButton" />
 
           <button

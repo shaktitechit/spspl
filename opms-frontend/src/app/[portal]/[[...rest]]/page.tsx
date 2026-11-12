@@ -28,6 +28,7 @@ import {
   SuperAdminSettingsPage,
   ProfilePage,
   UnbilledOrdersPage,
+  SalesAnalyticsPage,
 } from "@/components/portal";
 import CreateOrderPage from "@/components/portal/sales/CreateOrderPage";
 import CoordinatorCreateOrderPage from "@/components/portal/coordinator/CreateOrderPage";
@@ -132,7 +133,6 @@ export default function PortalCatchAllPage() {
       : [];
 
   const title = resolvePortalPageTitle(portal, restArr);
-  const workPlannerView = searchParams.get("view") || "plans";
 
   if (restArr.length === 0) {
     return <PortalOverview portal={portal} />;
@@ -152,6 +152,92 @@ export default function PortalCatchAllPage() {
         <UnbilledOrdersPage
           portalHome={`/${portal}`}
           portalLabel={portalLabel}
+        />
+      );
+    }
+  }
+
+  // ── SALES ANALYTICS ───────────────────────────────────────────────────────
+  if (restArr[0] === "sales-analytics" && restArr.length <= 4) {
+    if (
+      portal === "admin" ||
+      portal === "coordinator" ||
+      portal === "finance" ||
+      portal === "account" ||
+      portal === "super_admin"
+    ) {
+      const portalLabel = portal.charAt(0).toUpperCase() + portal.slice(1);
+      let subPage = "orders";
+      let zoneId: string | undefined = undefined;
+      let cityId: string | undefined = undefined;
+      let rateTypeId: string | undefined = undefined;
+      let salesPersonId: string | undefined = undefined;
+      let productGroupId: string | undefined = undefined;
+
+      if (restArr[1] === "zone" && restArr[2]) {
+        zoneId = restArr[2];
+        subPage = "orders";
+      } else if (restArr[1] === "city" && restArr[2]) {
+        cityId = restArr[2];
+        subPage = "orders";
+      } else if (restArr[1] === "rate-type" && restArr[2]) {
+        rateTypeId = restArr[2];
+        subPage = "orders";
+      } else if (restArr[1] === "sales-person" && restArr[2]) {
+        salesPersonId = restArr[2];
+        subPage = "orders";
+      } else if (restArr[1] === "product-group" && restArr[2]) {
+        productGroupId = restArr[2];
+        subPage = "orders";
+      } else if (restArr[1]) {
+        subPage = restArr[1];
+        if (restArr[2] === "zone" && restArr[3]) {
+          zoneId = restArr[3];
+        } else if (restArr[2] === "city" && restArr[3]) {
+          cityId = restArr[3];
+        } else if (restArr[2] === "rate-type" && restArr[3]) {
+          rateTypeId = restArr[3];
+        } else if (restArr[2] === "sales-person" && restArr[3]) {
+          salesPersonId = restArr[3];
+        } else if (restArr[2] === "product-group" && restArr[3]) {
+          productGroupId = restArr[3];
+        }
+      }
+
+      if (!zoneId) {
+        const queryZoneId = searchParams.get("zoneId");
+        if (queryZoneId) zoneId = queryZoneId;
+      }
+      if (!cityId) {
+        const queryCityId = searchParams.get("cityId");
+        if (queryCityId) cityId = queryCityId;
+      }
+      if (!rateTypeId) {
+        const queryRateType = searchParams.get("rateType");
+        if (queryRateType) rateTypeId = queryRateType;
+      }
+      if (!salesPersonId) {
+        const querySalesPerson =
+          searchParams.get("salesPerson") || searchParams.get("salesPersonId");
+        if (querySalesPerson) salesPersonId = querySalesPerson;
+      }
+      if (!productGroupId) {
+        const queryProductGroup =
+          searchParams.get("productGroup") || searchParams.get("productGroupId");
+        if (queryProductGroup) productGroupId = queryProductGroup;
+      }
+
+      return (
+        <SalesAnalyticsPage
+          portalHome={`/${portal}`}
+          role={portal}
+          portalLabel={portalLabel}
+          subPage={subPage}
+          zoneId={zoneId}
+          cityId={cityId}
+          rateType={rateTypeId}
+          salesPersonId={salesPersonId}
+          productGroupId={productGroupId}
         />
       );
     }

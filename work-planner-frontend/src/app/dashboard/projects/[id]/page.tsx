@@ -107,7 +107,7 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
 
   const isAdmin = isWpAdmin(user);
   const isManager = isWpManager(user);
-  const canAdminClose = isAdmin || isManager;
+  const canAdminClose = true;
   const isClosed = project.status === 'closed' || project.status === 'completed';
 
   return (

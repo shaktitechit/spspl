@@ -17,7 +17,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { fetchProjects } from '@/lib/projectApi';
-import { readSessionFromStorage, isWpAdmin, isWpManager } from '@/utils/authStorage';
+import { readSessionFromStorage } from '@/utils/authStorage';
 import { CreateProjectModal } from '@/components/project/CreateProjectModal';
 import type { Project, ProjectStatus } from '@/types/project';
 
@@ -73,7 +73,7 @@ export default function ProjectsPage() {
     }
   }, [token, loadProjects]);
 
-  const canCreate = isWpAdmin(user) || isWpManager(user);
+  const canCreate = true;
 
   // Stats computation
   const totalCount = projects.length;

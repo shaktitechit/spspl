@@ -159,7 +159,7 @@ export function ExpenseClaimsTab({
   const queryParams = useMemo(() => {
     const p: Record<string, string | number | undefined> = {
       page: currentPage,
-      limit: 50,
+      limit: 100,
     };
     if (isFinance) {
       p.status = "approved";

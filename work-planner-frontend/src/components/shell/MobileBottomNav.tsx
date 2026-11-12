@@ -24,8 +24,12 @@ export function MobileBottomNav({
   const pendingDirectives = remarksData?.stats?.pending_response_count || 0;
 
   const isHomeActive = pathname === "/dashboard";
-  const isPlansActive = pathname.startsWith("/dashboard/plans") && !pathname.startsWith("/dashboard/plans/calendar");
-  const isTasksVisitsActive = pathname.startsWith("/dashboard/tasks-visits");
+  const isPlansActive =
+    (pathname.startsWith("/dashboard/plans") && !pathname.startsWith("/dashboard/plans/calendar")) ||
+    pathname.startsWith("/dashboard/team-plans");
+  const isTasksVisitsActive =
+    pathname.startsWith("/dashboard/tasks-visits") ||
+    pathname.startsWith("/dashboard/team-tasks-visits");
   const isExpensesActive = pathname.startsWith("/dashboard/expenses");
   const isDirectivesActive = pathname.startsWith("/dashboard/senior-remarks");
 

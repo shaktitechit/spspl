@@ -27,13 +27,13 @@ router.use(requireWorkPlannerAccess);
 // Projects Listing, Creation & Metadata
 router.get('/eligible-members', controller.getEligibleMembers);
 router.get('/', controller.listProjects);
-router.post('/', elevatedRoles, controller.createProject);
+router.post('/', controller.createProject);
 
 // Single Project Operations
 router.get('/:id', controller.getProject);
 router.patch('/:id', controller.updateProject);
 router.put('/:id', controller.updateProject);
-router.post('/:id/close', elevatedRoles, controller.closeProject);
+router.post('/:id/close', controller.closeProject);
 router.post('/:id/reopen', adminRole, controller.reopenProject);
 router.delete('/:id', adminRole, controller.deleteProject);
 

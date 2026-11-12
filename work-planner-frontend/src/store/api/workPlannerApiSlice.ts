@@ -33,38 +33,56 @@ function normalizePaginatedResponse<T>(res: any): {
     return { data: [], total: 0, page: 1, limit: 50, pages: 1 };
   }
 
-  // Handle nested standard express wrapper res = { success: true, data: { total, page, limit, pages, data: [...] } }
-  const payload = res.data !== undefined && res.success !== undefined ? res.data : res;
-
-  if (payload && typeof payload === "object") {
-    if (Array.isArray(payload.data)) {
-      const total = payload.total ?? payload.data.length;
-      const limit = payload.limit ?? 50;
-      return {
-        data: payload.data,
-        total,
-        page: payload.page ?? 1,
-        limit,
-        pages: payload.pages ?? (limit > 0 ? Math.ceil(total / limit) : 1),
-      };
-    }
-    if (Array.isArray(payload)) {
-      return {
-        data: payload,
-        total: payload.length,
-        page: 1,
-        limit: payload.length || 50,
-        pages: 1,
-      };
-    }
+  // 1. If res has top-level data array with pagination metadata (e.g. { success: true, total, pages, data: [...] })
+  if (Array.isArray(res.data)) {
+    const total = typeof res.total === "number" ? res.total : res.data.length;
+    const limit = typeof res.limit === "number" ? res.limit : 50;
+    const page = typeof res.page === "number" ? res.page : 1;
+    const pages = typeof res.pages === "number" ? res.pages : (limit > 0 ? Math.ceil(total / limit) : 1);
+    return {
+      data: res.data,
+      total,
+      page,
+      limit,
+      pages,
+    };
   }
 
+  // 2. If res.data is a nested pagination wrapper (e.g. { success: true, data: { total, pages, data: [...] } })
+  if (res.data && typeof res.data === "object" && Array.isArray(res.data.data)) {
+    const inner = res.data;
+    const total = typeof inner.total === "number" ? inner.total : inner.data.length;
+    const limit = typeof inner.limit === "number" ? inner.limit : 50;
+    const page = typeof inner.page === "number" ? inner.page : 1;
+    const pages = typeof inner.pages === "number" ? inner.pages : (limit > 0 ? Math.ceil(total / limit) : 1);
+    return {
+      data: inner.data,
+      total,
+      page,
+      limit,
+      pages,
+    };
+  }
+
+  // 3. If res itself is an array
   if (Array.isArray(res)) {
     return {
       data: res,
       total: res.length,
       page: 1,
       limit: res.length || 50,
+      pages: 1,
+    };
+  }
+
+  // 4. Fallback if res.data is an array
+  const payload = res.data !== undefined ? res.data : res;
+  if (Array.isArray(payload)) {
+    return {
+      data: payload,
+      total: payload.length,
+      page: 1,
+      limit: payload.length || 50,
       pages: 1,
     };
   }

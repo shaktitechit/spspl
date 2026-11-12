@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Briefcase, X } from "lucide-react";
 import { LargeModalBackdrop } from "@/components/portal/shared/ui/modals/LargeModalBackdrop";
 import { largeModalPanelClass } from "@/components/portal/shared/ui/modals/modalLayout";
@@ -26,6 +26,8 @@ interface SalesLeaderboardProps {
   disableInternalFilter?: boolean;
   externalFilterCaption?: string;
   qtyBasis?: QtyBasis;
+  dataType?: "approved" | "billed";
+  onDataTypeChange?: (type: "approved" | "billed") => void;
 }
 
 import {
@@ -55,10 +57,10 @@ export default function SalesLeaderboard({
   disableInternalFilter = true,
   externalFilterCaption,
   qtyBasis: propQtyBasis,
+  dataType,
+  onDataTypeChange,
 }: SalesLeaderboardProps) {
   const [showAll, setShowAll] = useState(false);
-  const [metricState, setMetric] = useState<Metric>("quantity");
-
   const user = useAppSelector((s) => s.auth.user);
   const isSales = getOpmsAccessRole(user) === "sales";
   const { canSalesMapQuantity, canSalesMapVolume } = usePortalSettings();
@@ -66,15 +68,17 @@ export default function SalesLeaderboard({
   const allowQuantity = !isSales || canSalesMapQuantity;
   const allowVolume = !isSales || canSalesMapVolume;
 
-  useEffect(() => {
-    if (!allowVolume && metricState === "volume") {
-      setMetric("quantity");
-    } else if (!allowQuantity && metricState === "quantity") {
-      setMetric("volume");
-    }
-  }, [allowVolume, allowQuantity, metricState]);
+  const [metricState, setMetric] = useState<Metric>(() =>
+    allowVolume ? "volume" : "quantity"
+  );
 
-  const metric = forceMetric ?? metricState;
+  const metric =
+    forceMetric ??
+    (!allowVolume
+      ? "quantity"
+      : !allowQuantity
+      ? "volume"
+      : metricState);
   const {
     availableYears,
     selectedYears,
@@ -244,6 +248,32 @@ export default function SalesLeaderboard({
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                {onDataTypeChange && (
+                  <div className="flex rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => onDataTypeChange("approved")}
+                      className={`rounded-md px-2.5 py-1 text-2xs font-semibold transition cursor-pointer ${
+                        (dataType ?? (qtyBasis === "dispatched" ? "billed" : "approved")) === "approved"
+                          ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300"
+                          : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                      }`}
+                    >
+                      Approved Data
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDataTypeChange("billed")}
+                      className={`rounded-md px-2.5 py-1 text-2xs font-semibold transition cursor-pointer ${
+                        (dataType ?? (qtyBasis === "dispatched" ? "billed" : "approved")) === "billed"
+                          ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-300"
+                          : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                      }`}
+                    >
+                      Billed Data
+                    </button>
+                  </div>
+                )}
                 {metricToggle}
                 <button
                   type="button"

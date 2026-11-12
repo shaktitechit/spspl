@@ -137,11 +137,23 @@ async function applySalesUserFilter(filter, user, query = {}) {
 
   // 3. 'team' scope or all visible members
   if (visible === null) {
-    // Admin: can view all portal members without restriction
+    // Admin: can view all portal members without restriction.
+    // When strictly 'team' scope, exclude self so team views show team content only.
+    if (scope === 'team') {
+      filter.sales_user = { $nin: [selfOid, selfId].filter(Boolean) };
+    }
     return;
   }
 
-  // Manager: can view all permitted team members (self + direct reports)
+  // Manager/Coordinator: can view all permitted team members.
+  // When strictly 'team' scope, exclude self so team views show team members only.
+  if (scope === 'team') {
+    const teamOnly = visible.filter((id) => String(id) !== selfId);
+    const oids = teamOnly.map(asObjectId).filter(Boolean);
+    filter.sales_user = { $in: oids };
+    return;
+  }
+
   const oids = visible.map(asObjectId).filter(Boolean);
   filter.sales_user = { $in: oids };
 }

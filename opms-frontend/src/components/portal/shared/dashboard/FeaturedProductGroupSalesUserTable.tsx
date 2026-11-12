@@ -70,7 +70,7 @@ export default function FeaturedProductGroupSalesUserTable({
   salesUsersById,
   userNameById,
 }: FeaturedProductGroupSalesUserTableProps) {
-  const [metricState, setMetric] = useState<MatrixMetric>("quantity");
+  const [metricState, setMetric] = useState<MatrixMetric>("volume");
   const metric = forceMetric ?? metricState;
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 

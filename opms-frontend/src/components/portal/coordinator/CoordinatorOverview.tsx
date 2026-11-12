@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import PeriodFilter from "@/components/portal/shared/dashboard/PeriodFilter";
+import SalesAnalyticsDropdown from "@/components/portal/shared/dashboard/SalesAnalyticsDropdown";
 import { useDashboardSummary } from "@/components/portal/shared/dashboard/useDashboardSummary";
 export default function CoordinatorOverview() {
   const user = useAppSelector((state) => state.auth.user);
@@ -88,6 +89,7 @@ export default function CoordinatorOverview() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <SalesAnalyticsDropdown portalHome="/coordinator" currentView="overview" />
           <OverviewFlagsWidget currentDepartment="coordinator" variant="headerButton" />
 
           <button

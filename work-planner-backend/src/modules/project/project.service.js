@@ -352,10 +352,6 @@ async function closeProject(id, closureData = {}, currentUser) {
   const project = await Project.findOne({ _id: id, deletedAt: null });
   if (!project) throw new ApiError(404, 'Project not found');
 
-  if (!hasProjectAdminAccess(project, currentUser)) {
-    throw new ApiError(403, 'Access denied: Only Admins or Project Managers can close a project');
-  }
-
   const userId = getUserId(currentUser);
 
   // Check if force close or all steps completed

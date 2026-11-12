@@ -2766,9 +2766,22 @@ async function listAllExpenses(query = {}, user) {
   const fromDate = query.from_date || query.from || query.start_date;
   const toDate = query.to_date || query.to || query.end_date;
   if (fromDate || toDate) {
-    filter.expense_date = {};
-    if (fromDate) filter.expense_date.$gte = startOfDay(fromDate);
-    if (toDate) filter.expense_date.$lte = endOfDay(toDate);
+    const dateRange = {};
+    if (fromDate) dateRange.$gte = startOfDay(fromDate);
+    if (toDate) dateRange.$lte = endOfDay(toDate);
+
+    const planIdsInDate = await WorkPlan.find({
+      plan_date: dateRange,
+      deletedAt: null,
+    }).distinct('_id');
+
+    const dateOr = [{ expense_date: dateRange }];
+    if (planIdsInDate && planIdsInDate.length > 0) {
+      dateOr.push({ work_plan: { $in: planIdsInDate } });
+    }
+
+    filter.$and = filter.$and || [];
+    filter.$and.push({ $or: dateOr });
   }
 
   const searchParam = query.q || query.search;
@@ -4353,6 +4366,8 @@ async function getSeniorRemarksFeed(query = {}, user) {
     } else if (query.sales_user && query.sales_user !== 'all') {
       const targetOid = asObjectId(query.sales_user) || query.sales_user;
       baseSalesFilter.sales_user = targetOid;
+    } else if (scope === 'team') {
+      baseSalesFilter.sales_user = { $nin: [selfOid, selfId].filter(Boolean) };
     }
   } else if (isManagerOrCoord) {
     // 3. Coordinator & Manager
@@ -4365,6 +4380,10 @@ async function getSeniorRemarksFeed(query = {}, user) {
       } else {
         baseSalesFilter.sales_user = { $in: [] };
       }
+    } else if (scope === 'team') {
+      const teamOnly = visibleIds.filter((id) => String(id) !== selfId);
+      const visibleOids = teamOnly.map(asObjectId).filter(Boolean);
+      baseSalesFilter.sales_user = { $in: visibleOids };
     } else {
       const visibleOids = visibleIds.map(asObjectId).filter(Boolean);
       baseSalesFilter.sales_user = { $in: visibleOids };

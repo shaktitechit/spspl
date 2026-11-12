@@ -20,9 +20,10 @@ import {
   StickyNote,
   LifeBuoy,
   Settings,
+  ClipboardList,
 } from "lucide-react";
 import type { UserSession } from "@/types/workPlanner";
-import { isWpAdmin, isWpManager, isWpCoordinator, readSessionFromStorage } from "@/utils/authStorage";
+import { isWpAdmin, isWpManager, isWpCoordinator, isWpElevated, readSessionFromStorage } from "@/utils/authStorage";
 import { useGetHelpDeskStatsQuery } from "@/store/api/helpDeskApiSlice";
 
 export function Sidebar({
@@ -57,6 +58,7 @@ export function Sidebar({
   const coordinatorRole = isWpCoordinator(activeUser);
   const managerRole = isWpManager(activeUser);
   const adminRole = isWpAdmin(activeUser);
+  const elevatedRole = isWpElevated(activeUser);
 
   const { data: helpDeskStats } = useGetHelpDeskStatsQuery(undefined, {
     pollingInterval: 45000,
@@ -71,7 +73,9 @@ export function Sidebar({
   const isNotesActive = pathname.startsWith("/dashboard/notes");
   const isHelpDeskActive = pathname.startsWith("/dashboard/help-desk");
   const isPlansActive = pathname === "/dashboard/plans";
-  const isTasksVisitsActive = pathname.startsWith("/dashboard/tasks-visits");
+  const isTeamPlansActive = pathname.startsWith("/dashboard/plans/team") || pathname.startsWith("/dashboard/team-plans");
+  const isTasksVisitsActive = pathname === "/dashboard/tasks-visits";
+  const isTeamTasksVisitsActive = pathname.startsWith("/dashboard/tasks-visits/team") || pathname.startsWith("/dashboard/team-tasks-visits");
   const isCalendarActive = pathname.startsWith("/dashboard/plans/calendar");
   const isSeniorRemarksActive = pathname.startsWith("/dashboard/senior-remarks");
   const isExpensesActive = pathname.startsWith("/dashboard/expenses");
@@ -194,35 +198,116 @@ export function Sidebar({
             {!desktopCollapsed && <span>My Notes &amp; Scratchpad</span>}
           </Link>
 
-          {/* Work Plans */}
-          <Link
-            href="/dashboard/plans"
-            onClick={() => setMobileNavOpen(false)}
-            className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
-              isPlansActive
-                ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
-                : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
-            }`}
-            title="Work Plans"
-          >
-            <FileText className={`h-4 w-4 shrink-0 ${isPlansActive ? "text-primary" : ""}`} />
-            {!desktopCollapsed && <span>Work Plans</span>}
-          </Link>
+          {/* Plans & Tasks Navigation */}
+          {elevatedRole ? (
+            <>
+              {/* My Plans */}
+              <Link
+                href="/dashboard/plans"
+                onClick={() => setMobileNavOpen(false)}
+                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
+                  isPlansActive
+                    ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
+                    : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
+                }`}
+                title="My Plans"
+              >
+                <FileText className={`h-4 w-4 shrink-0 ${isPlansActive ? "text-primary" : ""}`} />
+                {!desktopCollapsed && <span>My Plans</span>}
+              </Link>
 
-          {/* Tasks & Visits */}
-          <Link
-            href="/dashboard/tasks-visits"
-            onClick={() => setMobileNavOpen(false)}
-            className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
-              isTasksVisitsActive
-                ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
-                : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
-            }`}
-            title="Tasks & Field Visits"
-          >
-            <CheckSquare className={`h-4 w-4 shrink-0 ${isTasksVisitsActive ? "text-primary" : ""}`} />
-            {!desktopCollapsed && <span>Tasks & Visits</span>}
-          </Link>
+              {/* Team Plans */}
+              <Link
+                href="/dashboard/plans/team"
+                onClick={() => setMobileNavOpen(false)}
+                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
+                  isTeamPlansActive
+                    ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
+                    : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
+                }`}
+                title="Team Plans"
+              >
+                <Users className={`h-4 w-4 shrink-0 ${isTeamPlansActive ? "text-primary" : ""}`} />
+                {!desktopCollapsed && (
+                  <div className="flex items-center justify-between flex-1 min-w-0">
+                    <span className="truncate">Team Plans</span>
+                    <span className="ml-1 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-primary/20 text-primary border border-primary/30 shrink-0">
+                      Team
+                    </span>
+                  </div>
+                )}
+              </Link>
+
+              {/* My Tasks & Visits */}
+              <Link
+                href="/dashboard/tasks-visits"
+                onClick={() => setMobileNavOpen(false)}
+                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
+                  isTasksVisitsActive
+                    ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
+                    : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
+                }`}
+                title="My Tasks & Visits"
+              >
+                <CheckSquare className={`h-4 w-4 shrink-0 ${isTasksVisitsActive ? "text-primary" : ""}`} />
+                {!desktopCollapsed && <span>My Tasks &amp; Visits</span>}
+              </Link>
+
+              {/* Team Tasks & Visits */}
+              <Link
+                href="/dashboard/tasks-visits/team"
+                onClick={() => setMobileNavOpen(false)}
+                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
+                  isTeamTasksVisitsActive
+                    ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
+                    : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
+                }`}
+                title="Team Tasks & Visits"
+              >
+                <ClipboardList className={`h-4 w-4 shrink-0 ${isTeamTasksVisitsActive ? "text-primary" : ""}`} />
+                {!desktopCollapsed && (
+                  <div className="flex items-center justify-between flex-1 min-w-0">
+                    <span className="truncate">Team Tasks &amp; Visits</span>
+                    <span className="ml-1 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-primary/20 text-primary border border-primary/30 shrink-0">
+                      Team
+                    </span>
+                  </div>
+                )}
+              </Link>
+            </>
+          ) : (
+            <>
+              {/* Work Plans */}
+              <Link
+                href="/dashboard/plans"
+                onClick={() => setMobileNavOpen(false)}
+                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
+                  isPlansActive
+                    ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
+                    : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
+                }`}
+                title="Work Plans"
+              >
+                <FileText className={`h-4 w-4 shrink-0 ${isPlansActive ? "text-primary" : ""}`} />
+                {!desktopCollapsed && <span>Work Plans</span>}
+              </Link>
+
+              {/* Tasks & Visits */}
+              <Link
+                href="/dashboard/tasks-visits"
+                onClick={() => setMobileNavOpen(false)}
+                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition ${
+                  isTasksVisitsActive
+                    ? "bg-primary/15 border border-primary/30 text-primary font-bold shadow-xs"
+                    : "text-muted hover:bg-surface-muted hover:text-foreground border border-transparent"
+                }`}
+                title="Tasks & Field Visits"
+              >
+                <CheckSquare className={`h-4 w-4 shrink-0 ${isTasksVisitsActive ? "text-primary" : ""}`} />
+                {!desktopCollapsed && <span>Tasks &amp; Visits</span>}
+              </Link>
+            </>
+          )}
 
           {/* Calendar View */}
           <Link

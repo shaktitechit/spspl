@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, LogOut, Menu, Moon, Sun, User, Settings } from "lucide-react";
 import type { UserSession, ThemeColor } from "@/types/workPlanner";
-import { isWpAdmin, isWpManager, isWpCoordinator } from "@/utils/authStorage";
+import { isWpAdmin, isWpManager, isWpCoordinator, isWpElevated } from "@/utils/authStorage";
 import { NotificationBell } from "./NotificationBell";
 
 export function Topbar({
@@ -34,6 +34,7 @@ export function Topbar({
   const adminRole = isWpAdmin(user);
   const managerRole = isWpManager(user);
   const coordinatorRole = isWpCoordinator(user);
+  const elevatedRole = isWpElevated(user);
 
   const getPageHeader = () => {
     if (pathname.startsWith("/dashboard/settings") && pathname.includes("/visits")) {
@@ -78,15 +79,32 @@ export function Topbar({
         subtitle: "Your account details and portal access",
       };
     }
+    if (
+      pathname.startsWith("/dashboard/plans/team/") ||
+      pathname.startsWith("/dashboard/team-plans/") ||
+      pathname.startsWith("/dashboard/tasks-visits/team/") ||
+      pathname.startsWith("/dashboard/team-tasks-visits/")
+    ) {
+      return {
+        title: "Team Member Deep Dive",
+        subtitle: "Comprehensive 360° profile, plans, visits & activity history",
+      };
+    }
     if (pathname.startsWith("/dashboard/senior-remarks")) {
       return {
         title: "Senior Directives",
         subtitle: "Supervisory directives, guidance & objections",
       };
     }
+    if (pathname.startsWith("/dashboard/tasks-visits/team") || pathname.startsWith("/dashboard/team-tasks-visits")) {
+      return {
+        title: "Team Tasks & Visits",
+        subtitle: "Monitor and coordinate team field visits & task execution",
+      };
+    }
     if (pathname.startsWith("/dashboard/tasks-visits")) {
       return {
-        title: "Tasks & Visits",
+        title: elevatedRole ? "My Tasks & Visits" : "Tasks & Visits",
         subtitle: "Field visits, activities & doctor meetings",
       };
     }
@@ -96,9 +114,15 @@ export function Topbar({
         subtitle: "Interactive schedule & planned visits calendar",
       };
     }
+    if (pathname.startsWith("/dashboard/plans/team") || pathname.startsWith("/dashboard/team-plans")) {
+      return {
+        title: "Team Work Plans",
+        subtitle: "Review, monitor & manage team itineraries and field logs",
+      };
+    }
     if (pathname.startsWith("/dashboard/plans")) {
       return {
-        title: "Work Plans",
+        title: elevatedRole ? "My Work Plans" : "Work Plans",
         subtitle: "Daily visit itineraries, tasks & field logs",
       };
     }

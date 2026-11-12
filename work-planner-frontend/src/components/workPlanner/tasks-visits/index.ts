@@ -1,4 +1,5 @@
 export * from "./TasksVisitsPage";
+export * from "./TeamTasksVisitsPage";
 export { default as TasksVisitsPageDefault } from "./TasksVisitsPage";
 export * from "./WorkFormModal";
 export * from "./VisitFormModal";

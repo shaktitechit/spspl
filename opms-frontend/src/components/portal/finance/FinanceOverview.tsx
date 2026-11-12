@@ -30,6 +30,7 @@ import {
   X,
 } from "lucide-react";
 import PeriodFilter from "@/components/portal/shared/dashboard/PeriodFilter";
+import SalesAnalyticsDropdown from "@/components/portal/shared/dashboard/SalesAnalyticsDropdown";
 import { useDashboardSummary } from "@/components/portal/shared/dashboard/useDashboardSummary";
 const FINANCE_PENDING_PUSH_INTERVAL_MS = 300_000;
 const FINANCE_PENDING_ALERT_URL = "/finance/orders/pending_finance_approval";
@@ -356,6 +357,7 @@ export default function FinanceOverview() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <SalesAnalyticsDropdown portalHome="/finance" currentView="overview" />
           <OverviewFlagsWidget currentDepartment="finance" variant="headerButton" />
 
           <button

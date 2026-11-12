@@ -33,6 +33,7 @@ import {
   Settings,
 } from "lucide-react";
 import PeriodFilter from "@/components/portal/shared/dashboard/PeriodFilter";
+import SalesAnalyticsDropdown from "@/components/portal/shared/dashboard/SalesAnalyticsDropdown";
 import { useDashboardSummary } from "@/components/portal/shared/dashboard/useDashboardSummary";
 import { dashboardPeriodToStatsQuery } from "@/components/portal/shared/dashboard/periodFilterUtils";
 import { buildSsoLaunchUrl } from "@/lib/ssoHandoff";
@@ -147,6 +148,7 @@ export default function SuperAdminOverview() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <SalesAnalyticsDropdown portalHome={PORTAL_HOME} currentView="overview" />
           <OverviewFlagsWidget currentDepartment="admin" variant="headerButton" />
 
           <Link

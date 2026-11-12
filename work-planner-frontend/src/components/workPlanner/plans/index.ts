@@ -1,4 +1,6 @@
 export * from "./WorkPlansPage";
+export * from "./TeamPlansPage";
+export * from "./UserSpecificDetailsPage";
 export * from "./WorkPlanDetailPage";
 export * from "./WorkPlanFormPage";
 export * from "./WorkPlanCalendarPage";

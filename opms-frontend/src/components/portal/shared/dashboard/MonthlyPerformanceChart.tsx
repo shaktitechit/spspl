@@ -18,7 +18,7 @@ import { getOpmsAccessRole } from "@/lib/opmsAuth";
 import { usePortalSettings } from "@/hooks/usePortalSettings";
 
 interface MonthlyPerformanceChartProps {
-  orders?: any[];
+  orders?: Array<Record<string, unknown>>;
   monthly?: DashboardOrdersSummary["monthly"];
   chartYears?: number[];
   isOrdersFetching: boolean;
@@ -46,13 +46,6 @@ const MONTH_LABELS = [
 
 const EMPTY_ORDERS: never[] = [];
 
-function sameNumbers(left: number[], right: number[]) {
-  return (
-    left.length === right.length &&
-    left.every((value, index) => value === right[index])
-  );
-}
-
 const YEAR_COLORS = [
   { fill: "fill-blue-500", hover: "fill-blue-400", swatch: "bg-blue-500" },
   { fill: "fill-emerald-500", hover: "fill-emerald-400", swatch: "bg-emerald-500" },
@@ -79,7 +72,11 @@ function isKitBucketLine(item: unknown): boolean {
   );
 }
 
-function orderMetricValue(order: any, metric: Metric, basis: QtyBasis): number {
+function orderMetricValue(
+  order: Record<string, unknown>,
+  metric: Metric,
+  basis: QtyBasis,
+): number {
   if (!shouldIncludeOrder(order, basis === "net" ? "approved" : basis)) return 0;
   const items = Array.isArray(order?.order_items) ? order.order_items : [];
   let total = 0;
@@ -113,15 +110,21 @@ function monthlySeriesHasValues(
 }
 
 function orderYearMonth(
-  order: any,
+  order: Record<string, unknown>,
   basis: QtyBasis = "approved",
 ): { year: number; month: number } | null {
-  const dateStr =
+  const rawDate =
     basis === "dispatched"
       ? (order?.billing_date ?? order?.dispatched_at ?? order?.dispatch_date)
       : (order?.order_date ?? order?.created_at ?? order?.createdAt);
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
+  if (
+    typeof rawDate !== "string" &&
+    typeof rawDate !== "number" &&
+    !(rawDate instanceof Date)
+  ) {
+    return null;
+  }
+  const d = new Date(rawDate);
   if (Number.isNaN(d.getTime())) return null;
   return { year: d.getFullYear(), month: d.getMonth() };
 }
@@ -167,24 +170,21 @@ export default function MonthlyPerformanceChart({
   const allowVolume = !isSales || canSalesMapVolume;
 
   const [metricState, setMetric] = useState<Metric>(() =>
-    allowQuantity ? "quantity" : "volume"
+    allowVolume ? "volume" : "quantity"
   );
-  const metric = forceMetric ?? metricState;
 
-  useEffect(() => {
-    if (!allowVolume && metricState === "volume") {
-      setMetric("quantity");
-    } else if (!allowQuantity && metricState === "quantity") {
-      setMetric("volume");
-    }
-  }, [allowVolume, allowQuantity, metricState]);
+  const metric =
+    forceMetric ??
+    (!allowVolume
+      ? "quantity"
+      : !allowQuantity
+      ? "volume"
+      : metricState);
   const [dataBasisState, setDataBasisState] = useState<QtyBasis>(
     propQtyBasis === "dispatched" ? "dispatched" : "approved",
   );
   const qtyBasis = dataBasisState;
-  const [selectedYears, setSelectedYears] = useState<number[]>([
-    new Date().getFullYear(),
-  ]);
+  const [selectedYearsOverride, setSelectedYears] = useState<number[]>([]);
   const [yearMenuOpen, setYearMenuOpen] = useState(false);
   const [hoveredCell, setHoveredCell] = useState<{ month: number; year: number } | null>(null);
   const yearMenuRef = useRef<HTMLDivElement>(null);
@@ -218,19 +218,19 @@ export default function MonthlyPerformanceChart({
     return Array.from(years).sort((a, b) => b - a);
   }, [orders, qtyBasis, chartYears, monthly]);
 
-  useEffect(() => {
-    if (availableYears.length === 0) return;
+  const activeYears = useMemo(() => {
+    if (availableYears.length === 0) return [];
     const currentYear = new Date().getFullYear();
     const fallback = availableYears.includes(currentYear)
       ? [currentYear]
       : [availableYears[0]];
-    setSelectedYears((prev) => {
-      if (prev.length === 0) return sameNumbers(prev, fallback) ? prev : fallback;
-      const next = prev.filter((y) => availableYears.includes(y));
-      const resolved = next.length > 0 ? next : fallback;
-      return sameNumbers(prev, resolved) ? prev : resolved;
-    });
-  }, [availableYears]);
+
+    if (selectedYearsOverride.length === 0) return fallback;
+    const valid = selectedYearsOverride.filter((y) => availableYears.includes(y));
+    return valid.length > 0 ? [...valid].sort((a, b) => a - b) : fallback;
+  }, [availableYears, selectedYearsOverride]);
+
+  const selectedYears = activeYears;
 
   useEffect(() => {
     if (!yearMenuOpen) return;
@@ -242,11 +242,6 @@ export default function MonthlyPerformanceChart({
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [yearMenuOpen]);
-
-  const activeYears = useMemo(
-    () => [...selectedYears].sort((a, b) => a - b),
-    [selectedYears],
-  );
 
   const monthlyByYear = useMemo(() => {
     const map = new Map<number, number[]>();
@@ -290,15 +285,31 @@ export default function MonthlyPerformanceChart({
     return Math.ceil(max / 5000) * 5000;
   }, [monthlyByYear, activeYears]);
 
+  const averageRunRate = useMemo(() => {
+    let sum = 0;
+    let count = 0;
+    for (const year of activeYears) {
+      const row = monthlyByYear.get(year) ?? [];
+      for (const v of row) {
+        if (v > 0) {
+          sum += v;
+          count += 1;
+        }
+      }
+    }
+    return count > 0 ? sum / count : 0;
+  }, [monthlyByYear, activeYears]);
+
   const gridTicks = [0, maxVal * 0.25, maxVal * 0.5, maxVal * 0.75, maxVal];
 
   const toggleYear = (year: number) => {
     setSelectedYears((prev) => {
-      if (prev.includes(year)) {
-        if (prev.length === 1) return prev;
-        return prev.filter((y) => y !== year);
+      const current = prev.length > 0 ? prev : activeYears;
+      if (current.includes(year)) {
+        if (current.length === 1) return current;
+        return current.filter((y) => y !== year);
       }
-      return [...prev, year].sort((a, b) => b - a);
+      return [...current, year].sort((a, b) => b - a);
     });
   };
 
@@ -534,6 +545,27 @@ export default function MonthlyPerformanceChart({
               y2={190}
               className="stroke-slate-200 dark:stroke-slate-700 opacity-60"
             />
+
+            {averageRunRate > 0 && maxVal > 0 && (
+              <g className="opacity-80">
+                <line
+                  x1={52}
+                  y1={190 - (averageRunRate / maxVal) * 170}
+                  x2={620}
+                  y2={190 - (averageRunRate / maxVal) * 170}
+                  className="stroke-amber-500 dark:stroke-amber-400 stroke-[1.5]"
+                  strokeDasharray="6 3"
+                />
+                <text
+                  x={618}
+                  y={190 - (averageRunRate / maxVal) * 170 - 4}
+                  textAnchor="end"
+                  className="text-[9px] font-bold fill-amber-600 dark:fill-amber-400 font-sans"
+                >
+                  Avg Run Rate: {formatAxisValue(averageRunRate, metric)}
+                </text>
+              </g>
+            )}
 
             {MONTH_LABELS.map((label, monthIdx) => {
               const slotWidth = 568 / 12;

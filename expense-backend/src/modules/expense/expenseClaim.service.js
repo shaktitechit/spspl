@@ -22,14 +22,26 @@ function asObjectId(id) {
  * List expense claims with extensive filtering.
  */
 async function listExpenses(query = {}, actor) {
-  const { WorkPlanExpense } = getModels();
+  const { WorkPlan, WorkPlanExpense } = getModels();
   const filter = { deletedAt: null };
 
   // Filter by user
   const targetUser = query.sales_user || query.user_id;
   if (targetUser && targetUser !== 'all') {
     const uOid = asObjectId(targetUser);
-    filter.sales_user = uOid || targetUser;
+    const userMatchIds = [uOid, targetUser].filter(Boolean);
+    const planIds = await WorkPlan.find({
+      sales_user: { $in: userMatchIds },
+      deletedAt: null,
+    }).distinct('_id');
+
+    filter.$and = filter.$and || [];
+    filter.$and.push({
+      $or: [
+        { sales_user: { $in: userMatchIds } },
+        { work_plan: { $in: planIds } },
+      ],
+    });
   }
 
   // Filter by status
@@ -58,26 +70,42 @@ async function listExpenses(query = {}, actor) {
     filter.settlement_status = query.settlement_status;
   }
 
-  // Filter by date range
+  // Filter by date range (matching both expense_date and linked work_plan date)
   const fromDate = query.from_date || query.from || query.start_date;
   const toDate = query.to_date || query.to || query.end_date;
   if (fromDate || toDate) {
-    filter.expense_date = {};
-    if (fromDate) filter.expense_date.$gte = startOfDay(fromDate);
-    if (toDate) filter.expense_date.$lte = endOfDay(toDate);
+    const dateRange = {};
+    if (fromDate) dateRange.$gte = startOfDay(fromDate);
+    if (toDate) dateRange.$lte = endOfDay(toDate);
+
+    const planIdsInDate = await WorkPlan.find({
+      plan_date: dateRange,
+      deletedAt: null,
+    }).distinct('_id');
+
+    const dateOr = [{ expense_date: dateRange }];
+    if (planIdsInDate && planIdsInDate.length > 0) {
+      dateOr.push({ work_plan: { $in: planIdsInDate } });
+    }
+
+    filter.$and = filter.$and || [];
+    filter.$and.push({ $or: dateOr });
   }
 
   // Search keyword (vendor, bill #, description)
   const search = String(query.q || query.search || '').trim();
   if (search) {
     const rgx = new RegExp(search, 'i');
-    filter.$or = [
-      { vendor_name: rgx },
-      { bill_number: rgx },
-      { description: rgx },
-      { category: rgx },
-      { sub_category: rgx },
-    ];
+    filter.$and = filter.$and || [];
+    filter.$and.push({
+      $or: [
+        { vendor_name: rgx },
+        { bill_number: rgx },
+        { description: rgx },
+        { category: rgx },
+        { sub_category: rgx },
+      ],
+    });
   }
 
   const limit = Math.min(parseInt(query.limit, 10) || 50, 1000);

@@ -3,10 +3,35 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { CalendarDays, Copy, Download, ExternalLink, Plus, RefreshCw, Trash2, Search, FileSpreadsheet, MessageSquare } from "lucide-react";
+import {
+  CalendarDays,
+  Copy,
+  Download,
+  ExternalLink,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Search,
+  FileSpreadsheet,
+  MessageSquare,
+  Users,
+  ShieldAlert,
+} from "lucide-react";
 import { toast } from "sonner";
-import { useGetPlansQuery, useDeletePlanMutation } from "@/store/api/workPlannerApiSlice";
-import { isWpElevated, readSessionFromStorage } from "@/utils/authStorage";
+import {
+  useGetPlansQuery,
+  useDeletePlanMutation,
+  useGetMyTeamQuery,
+} from "@/store/api/workPlannerApiSlice";
+import { useGetUsersQuery } from "@/store/api/authApiSlice";
+import {
+  isWpAdmin,
+  isWpManager,
+  isWpCoordinator,
+  isWpElevated,
+  hasWorkPlannerPortalAccess,
+  readSessionFromStorage,
+} from "@/utils/authStorage";
 import type { WorkPlanRecord } from "@/types/workPlanner";
 import { ConfirmDeleteWorkPlanModal } from "./ConfirmDeleteWorkPlanModal";
 import { DownloadWorkPlansModal } from "./DownloadWorkPlansModal";
@@ -24,25 +49,33 @@ import {
 } from "../shared/workPlanUtils";
 
 import { CopyWorkPlanModal } from "./CopyWorkPlanModal";
+import { TeamPlansPage } from "./TeamPlansPage";
 
-type OwnershipScope = "mine" | "team";
+export type OwnershipScope = "mine" | "team";
 
-export function WorkPlansPage() {
+export interface WorkPlansPageProps {
+  forcedScope?: OwnershipScope;
+}
+
+export function WorkPlansPage({ forcedScope }: WorkPlansPageProps = {}) {
   const searchParams = useSearchParams();
 
+  // If forcedScope is team or query param scope is team, render dedicated TeamPlansPage
+  if (forcedScope === "team" || searchParams.get("scope") === "team") {
+    return <TeamPlansPage />;
+  }
+
   const user = readSessionFromStorage()?.user;
+  const currentUserId = String(user?._id || (user as any)?.id || "");
   const elevatedRole = isWpElevated(user);
 
   const initialStatus = searchParams.get("status") || "all";
   const initialPlanType = searchParams.get("plan_type") || "all";
   const initialSearch = searchParams.get("search") || searchParams.get("q") || "";
-  const initialScope = (searchParams.get("scope") === "team" ? "team" : "mine") as OwnershipScope;
+
   const [statusFilter, setStatusFilter] = useState(initialStatus);
   const [planTypeFilter, setPlanTypeFilter] = useState(initialPlanType);
   const [searchQuery, setSearchQuery] = useState(initialSearch);
-  const [ownershipScope, setOwnershipScope] = useState<OwnershipScope>(
-    elevatedRole ? initialScope : "mine"
-  );
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -57,30 +90,49 @@ export function WorkPlansPage() {
     const q: Record<string, string | number | undefined> = {
       page: currentPage,
       limit: itemsPerPage,
+      scope: "mine",
     };
     if (statusFilter && statusFilter !== "all") q.status = statusFilter;
     if (planTypeFilter && planTypeFilter !== "all") q.plan_type = planTypeFilter;
     if (dateFrom) q.from = dateFrom;
     if (dateTo) q.to = dateTo;
-    if (elevatedRole) {
-      q.scope = ownershipScope;
-    }
     return q;
-  }, [currentPage, itemsPerPage, statusFilter, planTypeFilter, dateFrom, dateTo, elevatedRole, ownershipScope]);
+  }, [
+    currentPage,
+    itemsPerPage,
+    statusFilter,
+    planTypeFilter,
+    dateFrom,
+    dateTo,
+  ]);
 
   const { data: plansRes, isLoading: loading, refetch: loadData } = useGetPlansQuery(queryParams);
 
-  const plans = plansRes?.data || [];
+  const rawPlans = plansRes?.data || [];
   const total = plansRes?.total || 0;
   const pages = plansRes?.pages || 0;
+
+  // STRICTLY filter to own plans so My Plans contains only my plans!
+  const myPlans = useMemo(() => {
+    return rawPlans.filter((r) => {
+      const planSalesId =
+        typeof r.sales_user === "object" && r.sales_user
+          ? String(r.sales_user._id || r.sales_user.id || "")
+          : String(r.sales_user || "");
+      if (currentUserId && planSalesId && planSalesId !== currentUserId) {
+        return false;
+      }
+      return true;
+    });
+  }, [rawPlans, currentUserId]);
 
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
 
   const filteredPlans = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return plans;
-    return plans.filter((r) => {
+    if (!q) return myPlans;
+    return myPlans.filter((r) => {
       const sales = salesUserLabel(r.sales_user).toLowerCase();
       const remarks = (r.remarks || "").toLowerCase();
       const location = (r.location || "").toLowerCase();
@@ -104,7 +156,7 @@ export function WorkPlansPage() {
         method.includes(q)
       );
     });
-  }, [plans, searchQuery]);
+  }, [myPlans, searchQuery]);
 
   async function handleDeleteConfirm() {
     if (!deleteTarget) return;
@@ -127,13 +179,11 @@ export function WorkPlansPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3.5 sm:p-4 rounded-2xl border border-border shadow-2xs">
         <div>
           <h1 className="text-lg sm:text-xl font-bold text-foreground">
-            Work Plans Management
+            {elevatedRole ? "My Work Plans" : "Work Plans Management"}
           </h1>
           <p className="text-[11px] sm:text-xs text-muted">
             {elevatedRole
-              ? ownershipScope === "mine"
-                ? "Your own work plans — create, track, and complete"
-                : "Team work plans — review visits, tasks, and approvals"
+              ? "Your own work plans — create, track, and complete personal field visits"
               : "Plan and track daily field visits, tasks, and expense entries"}
           </p>
         </div>
@@ -171,37 +221,21 @@ export function WorkPlansPage() {
         </div>
       </div>
 
-      {/* My Plans vs Team Plans (admin / manager) */}
+      {/* My Plans vs Team Plans Pages Switcher (for seniors) */}
       {elevatedRole && (
         <div className="flex items-center gap-1 rounded-xl border border-border bg-card p-1 overflow-x-auto scrollbar-none">
-          <button
-            type="button"
-            onClick={() => {
-              setOwnershipScope("mine");
-              setCurrentPage(1);
-            }}
-            className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap active:scale-95 transition ${
-              ownershipScope === "mine"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "text-muted hover:bg-surface-muted hover:text-foreground"
-            }`}
+          <Link
+            href="/dashboard/plans"
+            className="rounded-lg px-4 py-1.5 text-xs font-bold whitespace-nowrap active:scale-95 transition bg-primary text-primary-foreground shadow-xs"
           >
             My Plans
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setOwnershipScope("team");
-              setCurrentPage(1);
-            }}
-            className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap active:scale-95 transition ${
-              ownershipScope === "team"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "text-muted hover:bg-surface-muted hover:text-foreground"
-            }`}
+          </Link>
+          <Link
+            href="/dashboard/plans/team"
+            className="rounded-lg px-4 py-1.5 text-xs font-semibold whitespace-nowrap active:scale-95 transition text-muted hover:bg-surface-muted hover:text-foreground"
           >
             Team Plans
-          </button>
+          </Link>
         </div>
       )}
 
@@ -234,7 +268,7 @@ export function WorkPlansPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by executive, location, remarks..."
+            placeholder="Search location, remarks..."
             className="w-full rounded-xl border border-border bg-surface-muted pl-9 pr-3 py-2 text-xs text-foreground placeholder:text-muted outline-none focus:border-primary focus:ring-1 focus:ring-primary"
           />
         </div>

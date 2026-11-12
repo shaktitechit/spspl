@@ -54,7 +54,7 @@ export default function FeaturedProductGroupZoneTable({
   enabled = true,
   contributions,
 }: FeaturedProductGroupZoneTableProps) {
-  const [metricState, setMetric] = useState<MatrixMetric>("quantity");
+  const [metricState, setMetric] = useState<MatrixMetric>("volume");
   const metric = forceMetric ?? metricState;
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
