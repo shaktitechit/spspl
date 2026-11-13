@@ -231,21 +231,21 @@ export async function buildPerformaInvoicePdf(
     company?.trade_name ||
     company?.legal_name ||
     letterhead.companyName ||
-    "Shakti Technology IT";
+    "";
   const companyAddress = letterhead.addressLine || company?.address || "";
   const companyPhone = letterhead.phone || company?.phone || "";
   const companyEmail = letterhead.email || company?.email || "";
   const companyGstin = letterhead.gstin || company?.gstin || "";
 
-  const bankName = company?.bank_name || "HDFC BANK PVT. LTD.";
+  const bankName = company?.bank_name || "";
   const accountName =
     company?.account_name ||
     company?.trade_name ||
     company?.legal_name ||
-    "Shakti Power Solutions Pvt Limited";
-  const accountNumber = company?.account_number || "50200056748687";
-  const ifscCode = company?.ifsc_code || "HDFC0001822";
-  const branchName = company?.branch_name || "Majitha Road";
+    "";
+  const accountNumber = company?.account_number || "";
+  const ifscCode = company?.ifsc_code || "";
+  const branchName = company?.branch_name || "";
 
   const pName = input.partyName ? input.partyName.trim() : "";
   const customerName =
@@ -262,7 +262,7 @@ export async function buildPerformaInvoicePdf(
   const invoiceDateStr = formatDate(input.orderDate || new Date());
   const poNumber = input.poNumber || "Verbal";
   const poDateStr = formatDate(input.poDate || input.orderDate || new Date());
-  const approvedBy = input.approvedBy || "Kritika Thakur";
+  const approvedBy = input.approvedBy || "N?A";
   const approvedDateStr = formatDate(input.approvedDate || input.orderDate || new Date());
 
   let currentY = M;
@@ -550,7 +550,7 @@ export async function buildPerformaInvoicePdf(
       const qty = Number(it.quantity || 1);
       const rate = Number(it.unitPrice || 0);
       const subtotal = Number(it.taxableAmount || qty * rate);
-      const gstRate = Number(it.gstPercent || 18);
+      const gstRate = Number(it.gstPercent || 0);
       const gstAmt = Number(it.gstAmount || (subtotal * gstRate) / 100);
       const total = Number(it.lineTotal || subtotal + gstAmt);
 
@@ -708,7 +708,7 @@ export async function buildPerformaInvoicePdf(
     const colW = boxW / 2;
 
     const leftRows = [
-      { label: "Sales Person", val: input.salesPerson || "Manish" },
+      { label: "Sales Person", val: input.salesPerson || "N/A" },
       { label: "ORC", val: input.orc || "na" },
       { label: "Dispatch Date", val: formatDate(input.dispatchDate || input.orderDate) },
       { label: "Payment Terms", val: input.paymentTerms || "30 days" },
@@ -865,10 +865,10 @@ export async function buildPerformaInvoicePdf(
       input.termsAndConditions && input.termsAndConditions.length > 0
         ? input.termsAndConditions
         : [
-            `Payment ${input.paymentTerms || "Advance against Supplies"}`,
-            "Delivery Terms as per Customer PO",
-            "Warranty Terms as agreed on Purchase",
-          ];
+          `Payment ${input.paymentTerms || "Advance against Supplies"}`,
+          "Delivery Terms as per Customer PO",
+          "Warranty Terms as agreed on Purchase",
+        ];
 
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(7.5);
