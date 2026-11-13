@@ -21,7 +21,9 @@ import PartyBreakdownSection from "./PartyBreakdownSection";
 import PeriodFilter from "./PeriodFilter";
 import { formatPeriodCaption } from "./PeriodHeadingCaption";
 import { useDashboardSummary } from "./useDashboardSummary";
-import { downloadCsvFile, reportFilename } from "./reportDownloadUtils";
+import { reportFilename } from "./reportDownloadUtils";
+import { useDashboardPdfExport } from "./dashboardPdfEngine";
+import ReportDownloadButton from "./ReportDownloadButton";
 import {
   itemMetricValue,
   normalizeRateType,
@@ -578,59 +580,114 @@ export default function ProductGroupAnalyticsDetailPage({
     );
   }, [productRows, productSearchQuery]);
 
-  // CSV Exports
-  const handleExportPartyCsv = () => {
+  const { exportPdf, isExporting } = useDashboardPdfExport();
+
+  // PDF Exports
+  const handleExportPartyPdf = async () => {
+    const qtyColHeader =
+      dataType === "billed" ? "Billed Qty" : "Approved Qty";
+    const revColHeader =
+      dataType === "billed" ? "Billed Revenue (INR)" : "Approved Revenue (INR)";
+
     const headers = [
       "Party Name",
       "City",
       "State",
-      `Quantity (Qty)`,
-      "Revenue (INR)",
+      qtyColHeader,
+      revColHeader,
       "Share (%)",
       "Orders",
     ];
     const data = partyRows.map((p) => [
-      `"${p.name.replace(/"/g, '""')}"`,
-      `"${p.city.replace(/"/g, '""')}"`,
-      `"${p.state.replace(/"/g, '""')}"`,
+      p.name,
+      p.city,
+      p.state,
       p.quantity.toFixed(2),
       p.revenue.toFixed(2),
       `${p.pct}%`,
       p.orderCount,
     ]);
-    downloadCsvFile(
-      reportFilename(`prodgroup_${groupName.replace(/\s+/g, "_").toLowerCase()}_parties_${dataType}`, selectedYears, selectedMonths),
+
+    const totalQty = partyRows.reduce((s, p) => s + p.quantity, 0);
+    const totalRev = partyRows.reduce((s, p) => s + p.revenue, 0);
+    data.push([
+      "Total",
+      "",
+      "",
+      totalQty.toFixed(2),
+      totalRev.toFixed(2),
+      "100%",
+      partyRows.reduce((s, p) => s + (p.orderCount || 0), 0),
+    ]);
+
+    await exportPdf({
+      title: `Product Group: ${groupName} - Party Breakdown`,
+      subtitle: `Customer distribution of orders & volumes for ${groupName} (${dataType === "billed" ? "Billed" : "Approved"} Orders)`,
+      metaLines: [
+        `Group: ${groupName}`,
+        `Period: ${filterCaption || "All Time"}`,
+        `Mode: ${dataType.toUpperCase()}`,
+      ],
       headers,
-      data,
-    );
+      rows: data,
+      filename: reportFilename(`prodgroup_${groupName.replace(/\s+/g, "_").toLowerCase()}_parties_${dataType}`, selectedYears, selectedMonths),
+      orientation: "portrait",
+    });
   };
 
-  const handleExportProductCsv = () => {
+  const handleExportProductPdf = async () => {
+    const qtyColHeader =
+      dataType === "billed" ? "Billed Qty" : "Approved Qty";
+    const revColHeader =
+      dataType === "billed" ? "Billed Revenue (INR)" : "Approved Revenue (INR)";
+
     const headers = [
       "Product Name",
       "Product Code",
       "Category",
-      `Quantity (Qty)`,
-      "Revenue (INR)",
+      qtyColHeader,
+      revColHeader,
       "Avg Rate (INR/Qty)",
       "Revenue Share (%)",
       "Occurrences",
     ];
     const data = filteredProductRows.map((p) => [
-      `"${p.name.replace(/"/g, '""')}"`,
-      `"${p.code.replace(/"/g, '""')}"`,
-      `"${p.category.replace(/"/g, '""')}"`,
+      p.name,
+      p.code,
+      p.category,
       p.quantity.toFixed(2),
       p.revenue.toFixed(2),
       p.avgRate.toFixed(2),
       `${p.pct}%`,
       p.orderCount,
     ]);
-    downloadCsvFile(
-      reportFilename(`prodgroup_${groupName.replace(/\s+/g, "_").toLowerCase()}_skus_${dataType}`, selectedYears, selectedMonths),
+
+    const totalQty = filteredProductRows.reduce((s, p) => s + p.quantity, 0);
+    const totalRev = filteredProductRows.reduce((s, p) => s + p.revenue, 0);
+    data.push([
+      "Total",
+      "",
+      "",
+      totalQty.toFixed(2),
+      totalRev.toFixed(2),
+      "",
+      "100%",
+      filteredProductRows.reduce((s, p) => s + (p.orderCount || 0), 0),
+    ]);
+
+    await exportPdf({
+      title: `Product Group: ${groupName} - SKU Breakdown`,
+      subtitle: `Commercial performance of individual SKUs in ${groupName} (${dataType === "billed" ? "Billed" : "Approved"} Orders)`,
+      metaLines: [
+        `Group: ${groupName}`,
+        `Period: ${filterCaption || "All Time"}`,
+        `Mode: ${dataType.toUpperCase()}`,
+      ],
       headers,
-      data,
-    );
+      rows: data,
+      filename: reportFilename(`prodgroup_${groupName.replace(/\s+/g, "_").toLowerCase()}_skus_${dataType}`, selectedYears, selectedMonths),
+      orientation: "landscape",
+    });
   };
 
   return (
@@ -914,15 +971,13 @@ export default function ProductGroupAnalyticsDetailPage({
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={handleExportProductCsv}
-              disabled={filteredProductRows.length === 0}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span>Export CSV</span>
-            </button>
+            <ReportDownloadButton
+              onDownload={handleExportProductPdf}
+              disabled={filteredProductRows.length === 0 || isExporting}
+              loading={isExporting}
+              size="sm"
+              label="PDF"
+            />
           </div>
         </div>
 
@@ -1026,7 +1081,8 @@ export default function ProductGroupAnalyticsDetailPage({
         dataType={dataType}
         onDataTypeChange={setDataType}
         portalHome={portalHome}
-        onExportCsv={handleExportPartyCsv}
+        onExportPdf={handleExportPartyPdf}
+        isExportingPdf={isExporting}
       />
     </div>
   );

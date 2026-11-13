@@ -98,7 +98,7 @@ export default function OrderQuickAccess({
   const basePath = portalHome ?? config.path;
 
   const orderStats = useMemo(() => {
-    if (counts) {
+    if (counts && Object.keys(counts).length > 0) {
       return Object.fromEntries(
         Object.entries(counts).map(([id, count]) => [id, { count }]),
       );

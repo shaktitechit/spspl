@@ -1,61 +1,25 @@
 import { formatPeriodLabel } from "./periodFilterUtils";
 import type { MatrixEntity } from "./featuredMatrixUtils";
 
-export function escapeCsvCell(value: string | number | null | undefined): string {
-  if (value == null) return "";
-  const s = String(value);
-  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
-
-export function downloadCsvFile(
-  filename: string,
-  headers: string[],
-  rows: Array<Array<string | number | null | undefined>>,
-  metaLines?: string[],
-): void {
-  const lines: string[] = [];
-  if (metaLines?.length) {
-    for (const line of metaLines) lines.push(escapeCsvCell(line));
-    lines.push("");
-  }
-  lines.push(headers.map(escapeCsvCell).join(","));
-  for (const row of rows) {
-    lines.push(row.map((cell) => escapeCsvCell(cell)).join(","));
-  }
-
-  const blob = new Blob(["\uFEFF" + lines.join("\n")], {
-    type: "text/csv;charset=utf-8;",
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename.endsWith(".csv") ? filename : `${filename}.csv`;
-  link.style.visibility = "hidden";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-
 export function reportFilename(
   base: string,
   selectedYears: number[],
   selectedMonths?: number[],
+  ext: "pdf" | "csv" = "pdf",
 ): string {
   const period = formatPeriodLabel(selectedYears, selectedMonths)
     .replace(/[·–]/g, "-")
     .replace(/[^a-zA-Z0-9_-]+/g, "_")
     .replace(/_+/g, "_")
     .replace(/^_|_$/g, "");
-  return `${base}_${period}_${new Date().toISOString().slice(0, 10)}.csv`;
+  return `${base}_${period}_${new Date().toISOString().slice(0, 10)}.${ext}`;
 }
 
 export function roundToTwo(num: number): number {
   return Math.round((Number(num) + Number.EPSILON) * 100) / 100;
 }
 
-export function buildMatrixCsvPayload(opts: {
+export function buildMatrixTablePayload(opts: {
   rowLabel: string;
   rows: MatrixEntity[];
   cols: MatrixEntity[];
@@ -98,4 +62,45 @@ export function buildMatrixCsvPayload(opts: {
   ]);
 
   return { headers, rows: out };
+}
+
+/** Legacy alias for backwards compatibility during migration. */
+export const buildMatrixCsvPayload = buildMatrixTablePayload;
+
+/** Legacy CSV download kept for temporary fallback. */
+export function escapeCsvCell(value: string | number | null | undefined): string {
+  if (value == null) return "";
+  const s = String(value);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+export function downloadCsvFile(
+  filename: string,
+  headers: string[],
+  rows: Array<Array<string | number | null | undefined>>,
+  metaLines?: string[],
+): void {
+  const lines: string[] = [];
+  if (metaLines?.length) {
+    for (const line of metaLines) lines.push(escapeCsvCell(line));
+    lines.push("");
+  }
+  lines.push(headers.map(escapeCsvCell).join(","));
+  for (const row of rows) {
+    lines.push(row.map((cell) => escapeCsvCell(cell)).join(","));
+  }
+
+  const blob = new Blob(["\uFEFF" + lines.join("\n")], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename.endsWith(".csv") ? filename : `${filename}.csv`;
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }

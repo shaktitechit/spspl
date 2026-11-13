@@ -13,7 +13,8 @@ import { usePeriodFilter } from "./usePeriodFilter";
 import PeriodHeadingCaption from "./PeriodHeadingCaption";
 import ReportDownloadButton from "./ReportDownloadButton";
 import { formatPeriodLabel } from "./periodFilterUtils";
-import { downloadCsvFile, reportFilename } from "./reportDownloadUtils";
+import { reportFilename } from "./reportDownloadUtils";
+import { useDashboardPdfExport } from "./dashboardPdfEngine";
 import { shouldIncludeOrder } from "./featuredMatrixUtils";
 import type { DashboardLeaderboardRow } from "@/store/api/slices/dashboardApi";
 
@@ -178,27 +179,46 @@ export default function PartyLeaderboard({
     </div>
   ) : null;
 
-  const handleDownload = () => {
+  const { exportPdf, isExporting } = useDashboardPdfExport();
+
+  const handleDownload = async () => {
     if (partyRows.length === 0) return;
-    const headers = ["Party", valueLabel, "SR", "SRA", "CR"];
-    const rows = partyRows.map((r) => [
+    const headers = ["Rank", "Party", valueLabel, "SR", "SRA", "CR"];
+    const rows = partyRows.map((r, i) => [
+      i + 1,
       r.name,
       roundToTwo(r.total),
       roundToTwo(r.sr),
       roundToTwo(r.sra),
       roundToTwo(r.cr),
     ]);
-    downloadCsvFile(
-      reportFilename("party_leaderboard", selectedYears, selectedMonths),
-      headers,
-      rows,
-      [
-        `Report: PartyLeaderboard`,
+
+    const totalVal = partyRows.reduce((s, r) => s + r.total, 0);
+    const totalSr = partyRows.reduce((s, r) => s + r.sr, 0);
+    const totalSra = partyRows.reduce((s, r) => s + r.sra, 0);
+    const totalCr = partyRows.reduce((s, r) => s + r.cr, 0);
+    rows.push([
+      "Total",
+      `${partyRows.length} Parties`,
+      roundToTwo(totalVal),
+      roundToTwo(totalSr),
+      roundToTwo(totalSra),
+      roundToTwo(totalCr),
+    ]);
+
+    await exportPdf({
+      title: "Party Leaderboard Report",
+      subtitle: `Top parties ranked by ${valueLabel}`,
+      metaLines: [
         `Period: ${formatPeriodLabel(selectedYears, selectedMonths)}`,
-        `Metric: ${metric}`,
+        `Metric: ${metric === "volume" ? "Volume (Revenue in INR)" : "Quantity (Qty)"}`,
         `Basis: ${qtyBasis}`,
       ],
-    );
+      headers,
+      rows,
+      filename: reportFilename("party_leaderboard", selectedYears, selectedMonths),
+      orientation: "portrait",
+    });
   };
 
   const periodFilter = (
@@ -280,7 +300,8 @@ export default function PartyLeaderboard({
             <div className="flex flex-wrap items-center justify-end gap-2">
               <ReportDownloadButton
                 onDownload={handleDownload}
-                disabled={isOrdersFetching || partyRows.length === 0}
+                disabled={isOrdersFetching || partyRows.length === 0 || isExporting}
+                loading={isExporting}
                 size="sm"
               />
             </div>
@@ -378,7 +399,8 @@ export default function PartyLeaderboard({
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <ReportDownloadButton
                   onDownload={handleDownload}
-                  disabled={isOrdersFetching || partyRows.length === 0}
+                  disabled={isOrdersFetching || partyRows.length === 0 || isExporting}
+                  loading={isExporting}
                   size="sm"
                 />
               </div>

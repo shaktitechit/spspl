@@ -16,7 +16,9 @@ import {
 
 import { useListZonesQuery } from "@/store/api";
 import type { DashboardOrdersSummary } from "@/store/api/slices/dashboardApi";
-import { downloadCsvFile, reportFilename } from "./reportDownloadUtils";
+import { reportFilename } from "./reportDownloadUtils";
+import { useDashboardPdfExport } from "./dashboardPdfEngine";
+import ReportDownloadButton from "./ReportDownloadButton";
 
 export interface ZoneOrderAnalyticsProps {
   contributions?: DashboardOrdersSummary["contributions"];
@@ -275,12 +277,19 @@ export default function ZoneOrderAnalytics({
     });
   }, [totalPrimaryMetric, zoneRows, hoveredZoneId]);
 
-  const handleDownloadCsv = () => {
+  const { exportPdf, isExporting } = useDashboardPdfExport();
+
+  const handleDownloadPdf = async () => {
+    const qtyColHeader =
+      effectiveDataType === "billed" ? "Billed Qty" : "Approved Qty";
+    const revColHeader =
+      effectiveDataType === "billed" ? "Billed Revenue (INR)" : "Approved Revenue (INR)";
+
     const headers = [
       "Zone Name",
       "Active Buying Parties",
-      "Order Quantity",
-      "Commercial Revenue (INR)",
+      qtyColHeader,
+      revColHeader,
       "Percentage Share (%)",
     ];
 
@@ -300,8 +309,18 @@ export default function ZoneOrderAnalytics({
       "100%",
     ]);
 
-    const filename = reportFilename("zone_wise_orders", selectedYears, selectedMonths);
-    downloadCsvFile(filename, headers, rows);
+    await exportPdf({
+      title: "Zone-Wise Order Analytics Report",
+      subtitle: `Geographical distribution (${effectiveDataType === "billed" ? "Billed" : "Approved"} Orders)`,
+      metaLines: [
+        ...(externalFilterCaption ? [`Filter: ${externalFilterCaption}`] : []),
+        `Basis: ${qtyBasis || "standard"} | Mode: ${effectiveDataType}`,
+      ],
+      headers,
+      rows,
+      filename: reportFilename("zone_wise_orders", selectedYears, selectedMonths),
+      orientation: "portrait",
+    });
   };
 
   const isLoading = isOrdersFetching || isZonesFetching;
@@ -431,16 +450,14 @@ export default function ZoneOrderAnalytics({
             </button>
           </div>
 
-          {/* Download CSV */}
-          <button
-            type="button"
-            onClick={handleDownloadCsv}
-            disabled={zoneRows.length === 0}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 disabled:opacity-50 cursor-pointer"
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Export CSV</span>
-          </button>
+          {/* Download PDF */}
+          <ReportDownloadButton
+            onDownload={handleDownloadPdf}
+            disabled={zoneRows.length === 0 || isLoading || isExporting}
+            loading={isExporting}
+            size="sm"
+            label="PDF"
+          />
         </div>
       </div>
 

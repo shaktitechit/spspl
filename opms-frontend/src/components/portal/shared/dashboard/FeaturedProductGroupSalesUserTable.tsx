@@ -21,10 +21,10 @@ import {
 import type { DashboardOrdersSummary } from "@/store/api/slices/dashboardApi";
 import { formatPeriodLabel } from "./periodFilterUtils";
 import {
-  buildMatrixCsvPayload,
-  downloadCsvFile,
+  buildMatrixTablePayload,
   reportFilename,
 } from "./reportDownloadUtils";
+import { useDashboardPdfExport } from "./dashboardPdfEngine";
 import {
   useFeaturedMatrixCatalog,
   type FeaturedMatrixCatalog,
@@ -347,28 +347,34 @@ export default function FeaturedProductGroupSalesUserTable({
     return sum;
   };
 
+  const { exportPdf, isExporting } = useDashboardPdfExport();
   const isLoading = isOrdersFetching || isCatalogFetching || isUsersFetching;
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (featuredGroups.length === 0 || salesUsers.length === 0) return;
-    const { headers, rows } = buildMatrixCsvPayload({
+    const { headers, rows } = buildMatrixTablePayload({
       rowLabel: "Product Group / Product",
       rows: featuredGroups,
       cols: salesUsers,
       matrix,
       childrenByRow: productsByGroup,
     });
-    downloadCsvFile(
-      reportFilename("product_group_sales_user", selectedYears, selectedMonths),
-      headers,
-      rows,
-      [
-        `Report: Featured Groups × Sales Persons`,
+    await exportPdf({
+      title: "Featured Groups × Sales Persons",
+      subtitle:
+        qtyBasis === "dispatched"
+          ? "Dispatched sales by product group across sales persons"
+          : "Approved sales by product group across sales persons",
+      metaLines: [
         `Period: ${formatPeriodLabel(selectedYears, selectedMonths)}`,
-        `Metric: ${metric}`,
+        `Metric: ${metric === "volume" ? "Volume (Revenue in INR)" : "Quantity (Qty)"}`,
         `Basis: ${qtyBasis}`,
       ],
-    );
+      headers,
+      rows,
+      filename: reportFilename("product_group_sales_user", selectedYears, selectedMonths),
+      orientation: "landscape",
+    });
   };
 
   return (
@@ -390,7 +396,8 @@ export default function FeaturedProductGroupSalesUserTable({
       onYearsChange={setSelectedYears}
       onMonthsChange={setSelectedMonths}
       onDownload={handleDownload}
-      downloadDisabled={isLoading}
+      downloadDisabled={isLoading || isExporting}
+      downloadLoading={isExporting}
       hidePeriodFilter={syncWithExternalFilter}
       externalFilterCaption={externalFilterCaption}
     >

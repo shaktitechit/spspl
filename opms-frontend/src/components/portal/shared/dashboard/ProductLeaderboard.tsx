@@ -12,7 +12,8 @@ import { usePeriodFilter } from "./usePeriodFilter";
 import PeriodHeadingCaption from "./PeriodHeadingCaption";
 import ReportDownloadButton from "./ReportDownloadButton";
 import { formatPeriodLabel } from "./periodFilterUtils";
-import { downloadCsvFile, reportFilename } from "./reportDownloadUtils";
+import { reportFilename } from "./reportDownloadUtils";
+import { useDashboardPdfExport } from "./dashboardPdfEngine";
 import { shouldIncludeOrder } from "./featuredMatrixUtils";
 import type { DashboardLeaderboardRow } from "@/store/api/slices/dashboardApi";
 
@@ -214,34 +215,53 @@ export default function ProductLeaderboard({
     </div>
   ) : null;
 
-  const handleDownload = () => {
+  const { exportPdf, isExporting } = useDashboardPdfExport();
+
+  const handleDownload = async () => {
     if (productRows.length === 0) return;
-    const headers = ["Product", valueLabel, "SR", "SRA", "CR"];
-    const rows = productRows.map((r) => [
+    const headers = ["Rank", "Product", valueLabel, "SR", "SRA", "CR"];
+    const rows = productRows.map((r, i) => [
+      i + 1,
       r.name,
       roundToTwo(r.total),
       roundToTwo(r.sr),
       roundToTwo(r.sra),
       roundToTwo(r.cr),
     ]);
+
+    const totalVal = productRows.reduce((s, r) => s + r.total, 0);
+    const totalSr = productRows.reduce((s, r) => s + r.sr, 0);
+    const totalSra = productRows.reduce((s, r) => s + r.sra, 0);
+    const totalCr = productRows.reduce((s, r) => s + r.cr, 0);
+    rows.push([
+      "Total",
+      `${productRows.length} Products`,
+      roundToTwo(totalVal),
+      roundToTwo(totalSr),
+      roundToTwo(totalSra),
+      roundToTwo(totalCr),
+    ]);
+
     const meta = [
-      `Report: ProductLeaderboard`,
       `Period: ${formatPeriodLabel(selectedYears, selectedMonths)}`,
-      `Metric: ${metric}`,
+      `Metric: ${metric === "volume" ? "Volume (Revenue in INR)" : "Quantity (Qty)"}`,
       `Basis: ${qtyBasis}`,
     ];
     if (metric === "quantity") {
       meta.push(
-        `Footer item qty (excl. kits): ${roundToTwo(footerTotals.total)}`,
-        `Footer kit qty: ${roundToTwo(footerTotals.kitTotal)}`,
+        `Item Qty (excl. kits): ${roundToTwo(footerTotals.total)} | Kit Qty: ${roundToTwo(footerTotals.kitTotal)}`,
       );
     }
-    downloadCsvFile(
-      reportFilename("product_leaderboard", selectedYears, selectedMonths),
+
+    await exportPdf({
+      title: "Product Leaderboard Report",
+      subtitle: `Top products ranked by ${valueLabel}`,
+      metaLines: meta,
       headers,
       rows,
-      meta,
-    );
+      filename: reportFilename("product_leaderboard", selectedYears, selectedMonths),
+      orientation: "portrait",
+    });
   };
 
   const formatFooterTotal = () => {
@@ -339,7 +359,8 @@ export default function ProductLeaderboard({
             <div className="flex flex-wrap items-center justify-end gap-2">
               <ReportDownloadButton
                 onDownload={handleDownload}
-                disabled={isOrdersFetching || productRows.length === 0}
+                disabled={isOrdersFetching || productRows.length === 0 || isExporting}
+                loading={isExporting}
                 size="sm"
               />
             </div>
@@ -437,7 +458,8 @@ export default function ProductLeaderboard({
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <ReportDownloadButton
                   onDownload={handleDownload}
-                  disabled={isOrdersFetching || productRows.length === 0}
+                  disabled={isOrdersFetching || productRows.length === 0 || isExporting}
+                  loading={isExporting}
                   size="sm"
                 />
               </div>

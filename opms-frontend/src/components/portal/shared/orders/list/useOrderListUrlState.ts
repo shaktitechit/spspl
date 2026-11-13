@@ -18,7 +18,7 @@ type UseOrderListUrlStateOptions = {
   processStageFromPath?: ListOrdersTabId;
 };
 
-function buildOrdersQueryString(params: {
+export function buildOrdersQueryString(params: {
   q: string;
   priority: string;
 }): string {

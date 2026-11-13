@@ -5,7 +5,8 @@ import { BarChart3, Check, ChevronDown, Info } from "lucide-react";
 import PeriodHeadingCaption from "./PeriodHeadingCaption";
 import ReportDownloadButton from "./ReportDownloadButton";
 import { formatPeriodLabel } from "./periodFilterUtils";
-import { downloadCsvFile, reportFilename } from "./reportDownloadUtils";
+import { reportFilename } from "./reportDownloadUtils";
+import { useDashboardPdfExport } from "./dashboardPdfEngine";
 import {
   itemQty,
   itemUnitPrice,
@@ -320,10 +321,12 @@ export default function MonthlyPerformanceChart({
         ? String(selectedYears[0])
         : `${selectedYears.length} years`;
 
-  const handleDownload = () => {
+  const { exportPdf, isExporting } = useDashboardPdfExport();
+
+  const handleDownload = async () => {
     if (activeYears.length === 0) return;
     const headers = ["Month", ...activeYears.map(String)];
-    const rows = MONTH_LABELS.map((monthLabel, monthIdx) => [
+    const rows: Array<Array<string | number>> = MONTH_LABELS.map((monthLabel, monthIdx) => [
       monthLabel,
       ...activeYears.map((year) =>
         Math.round(
@@ -331,17 +334,30 @@ export default function MonthlyPerformanceChart({
         ) / 100,
       ),
     ]);
-    downloadCsvFile(
-      reportFilename("monthly_performance", selectedYears),
-      headers,
-      rows,
-      [
-        `Report: Monthly Performance`,
+
+    // Calculate month totals across active years
+    const totalRow = [
+      "Total",
+      ...activeYears.map((year) => {
+        const sum = (monthlyByYear.get(year) ?? []).reduce((a, b) => a + b, 0);
+        return Math.round((sum + Number.EPSILON) * 100) / 100;
+      }),
+    ];
+    rows.push(totalRow);
+
+    await exportPdf({
+      title: "Monthly Performance Report",
+      subtitle: `${metric === "quantity" ? "Quantity" : "Volume (Revenue in INR)"} by month across ${yearFilterLabel}`,
+      metaLines: [
         `Period: ${formatPeriodLabel(selectedYears)}`,
-        `Metric: ${metric}`,
+        `Metric: ${metric === "quantity" ? "Quantity (Qty)" : "Volume (Revenue INR)"}`,
         `Basis: ${qtyBasis}`,
       ],
-    );
+      headers,
+      rows,
+      filename: reportFilename("monthly_performance", selectedYears),
+      orientation: activeYears.length > 5 ? "landscape" : "portrait",
+    });
   };
 
   const hasMonthlySeries = monthly ? monthlySeriesHasValues(monthly) : false;
@@ -378,7 +394,8 @@ export default function MonthlyPerformanceChart({
         <div className="flex flex-wrap items-center gap-3 self-end sm:self-auto">
           <ReportDownloadButton
             onDownload={handleDownload}
-            disabled={isOrdersFetching || activeYears.length === 0}
+            disabled={isOrdersFetching || activeYears.length === 0 || isExporting}
+            loading={isExporting}
             size="sm"
           />
 

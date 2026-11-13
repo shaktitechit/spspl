@@ -29,6 +29,7 @@ interface FeaturedMatrixTableFrameProps {
   onMonthsChange: (months: number[]) => void;
   onDownload?: () => void;
   downloadDisabled?: boolean;
+  downloadLoading?: boolean;
   /** Hide year/month controls when the parent already applies date filters. */
   hidePeriodFilter?: boolean;
   /** Custom period / filter caption (used with hidePeriodFilter). */
@@ -54,6 +55,7 @@ export default function FeaturedMatrixTableFrame({
   onMonthsChange,
   onDownload,
   downloadDisabled = false,
+  downloadLoading = false,
   hidePeriodFilter = true,
   externalFilterCaption,
   children,
@@ -148,7 +150,9 @@ export default function FeaturedMatrixTableFrame({
               <ReportDownloadButton
                 onDownload={onDownload}
                 disabled={downloadDisabled}
+                loading={downloadLoading}
                 size="sm"
+                label="PDF"
               />
             )}
           </div>

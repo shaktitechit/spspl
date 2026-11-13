@@ -17,9 +17,10 @@ import {
 } from "./featuredMatrixUtils";
 import { formatPeriodLabel } from "./periodFilterUtils";
 import {
-  downloadCsvFile,
+  buildMatrixTablePayload,
   reportFilename,
 } from "./reportDownloadUtils";
+import { useDashboardPdfExport } from "./dashboardPdfEngine";
 import {
   useFeaturedMatrixCatalog,
   type FeaturedMatrixCatalog,
@@ -241,71 +242,33 @@ export default function FeaturedProductGroupZoneTable({
     });
   }, [zonesList, matrix, groupIds]);
 
-  const handleDownload = () => {
+  const { exportPdf, isExporting } = useDashboardPdfExport();
+
+  const handleDownload = async () => {
     if (featuredGroups.length === 0 || activeZones.length === 0) return;
-    const { headers, rows } = buildMatrixPayload({
+    const { headers, rows } = buildMatrixTablePayload({
       rowLabel: "Product Group / Product",
       rows: featuredGroups,
       cols: activeZones,
       matrix,
       childrenByRow: productsByGroup,
     });
-    downloadCsvFile(
-      reportFilename("product_group_zone", selectedYears, selectedMonths),
-      headers,
-      rows,
-      [
-        `Report: Featured Groups × Zones`,
+    await exportPdf({
+      title: "Featured Groups × Zones",
+      subtitle:
+        qtyBasis === "dispatched"
+          ? "Dispatched sales by product group across operational zones"
+          : "Approved sales by product group across operational zones",
+      metaLines: [
         `Period: ${formatPeriodLabel(selectedYears, selectedMonths)}`,
-        `Metric: ${metric}`,
+        `Metric: ${metric === "volume" ? "Volume (Revenue in INR)" : "Quantity (Qty)"}`,
         `Basis: ${qtyBasis}`,
       ],
-    );
-  };
-
-  // Symmetrical build CSV logic
-  const buildMatrixPayload = ({
-    rowLabel,
-    rows,
-    cols,
-    matrix,
-    childrenByRow,
-  }: {
-    rowLabel: string;
-    rows: MatrixEntity[];
-    cols: MatrixEntity[];
-    matrix: Map<string, Map<string, number>>;
-    childrenByRow: Map<string, { id: string; name: string }[]>;
-  }) => {
-    const headers = [rowLabel, ...cols.map((c) => c.name), "Total"];
-    const fileRows: string[][] = [];
-
-    for (const r of rows) {
-      const mainRow = [r.name];
-      for (const c of cols) {
-        mainRow.push(String(matrix.get(r.id)?.get(c.id) ?? 0));
-      }
-      mainRow.push(String(getRowTotal(r.id)));
-      fileRows.push(mainRow);
-
-      for (const child of childrenByRow.get(r.id) ?? []) {
-        const subRow = [`  ${child.name}`];
-        for (const c of cols) {
-          subRow.push(String(matrix.get(child.id)?.get(c.id) ?? 0));
-        }
-        subRow.push(String(getRowTotal(child.id)));
-        fileRows.push(subRow);
-      }
-    }
-
-    const totalRow = ["Total"];
-    for (const c of cols) {
-      totalRow.push(String(getColTotal(c.id)));
-    }
-    totalRow.push(String(getGrandTotal()));
-    fileRows.push(totalRow);
-
-    return { headers, rows: fileRows };
+      headers,
+      rows,
+      filename: reportFilename("product_group_zone", selectedYears, selectedMonths),
+      orientation: "landscape",
+    });
   };
 
   return (
@@ -327,7 +290,8 @@ export default function FeaturedProductGroupZoneTable({
       onYearsChange={setSelectedYears}
       onMonthsChange={setSelectedMonths}
       onDownload={handleDownload}
-      downloadDisabled={isLoading}
+      downloadDisabled={isLoading || isExporting}
+      downloadLoading={isExporting}
       hidePeriodFilter={syncWithExternalFilter}
       externalFilterCaption={externalFilterCaption}
     >

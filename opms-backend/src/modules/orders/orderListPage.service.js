@@ -808,18 +808,101 @@ async function countProcessStages(scopeQuery, salesTabs) {
   await ensureProcessStagesForScope(scopeQuery, salesTabs);
   const match = { ...scopeQuery };
   if (!salesTabs) {
-    match.process_stage = { $nin: ['draft', null] };
+    match.status = { $ne: 'draft' };
+    match.lifecycle_status = { $ne: 'draft' };
   }
+  const postAdminArr = Array.from(POST_ADMIN_STATUSES);
+  const postFinanceArr = Array.from(POST_FINANCE_STATUSES);
+
   const rows = await getModels().Order.aggregate([
     { $match: match },
     {
-      $group: {
-        _id: {
-          $ifNull: [
-            '$process_stage',
-            { $cond: [{ $eq: ['$status', 'draft'] }, 'draft', null] },
+      $project: {
+        effective_stage: {
+          $cond: [
+            {
+              $or: [
+                { $eq: ['$status', 'draft'] },
+                { $eq: ['$lifecycle_status', 'draft'] },
+              ],
+            },
+            'draft',
+            {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$process_stage', 'due_sheet_pending'] },
+                    {
+                      $or: [
+                        { $eq: ['$is_due_sheet_uploaded', true] },
+                        { $eq: ['$due_sheet_uploaded', true] },
+                        { $eq: ['$finance_approval_status', 'approved'] },
+                        { $eq: ['$account_approval_status', 'approved'] },
+                        { $in: ['$status', postFinanceArr] },
+                      ],
+                    },
+                  ],
+                },
+                null,
+                {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: ['$process_stage', 'pending_admin_approval'] },
+                        {
+                          $or: [
+                            { $eq: ['$is_admin_approved', true] },
+                            { $in: ['$admin_approval_status', ['approved', 'full']] },
+                            { $in: ['$status', postAdminArr] },
+                          ],
+                        },
+                      ],
+                    },
+                    null,
+                    {
+                      $cond: [
+                        {
+                          $and: [
+                            { $eq: ['$process_stage', 'pending_finance_approval'] },
+                            {
+                              $or: [
+                                { $eq: ['$is_finance_approved', true] },
+                                { $eq: ['$account_approval_status', 'approved'] },
+                              ],
+                            },
+                          ],
+                        },
+                        null,
+                        {
+                          $cond: [
+                            {
+                              $and: [
+                                { $in: ['$process_stage', ['open_dispatched', 'transport_pending']] },
+                                {
+                                  $or: [
+                                    { $eq: ['$delivery_status', 'completed'] },
+                                    { $in: ['$status', ['delivered', 'closed']] },
+                                  ],
+                                },
+                              ],
+                            },
+                            null,
+                            '$process_stage',
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
           ],
         },
+      },
+    },
+    {
+      $group: {
+        _id: '$effective_stage',
         count: { $sum: 1 },
       },
     },

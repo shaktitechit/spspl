@@ -23,10 +23,12 @@ import {
   type OrderWorkflowTabStat,
   type OrderWorkflowTabStats,
 } from "@/components/portal/shared/orders/list/orderWorkflowTabs";
+import { useOrderWorkflowCategoryOptions } from "@/components/portal/shared/orders/list/useOrderWorkflowCategoryOptions";
 import PeriodHeadingCaption from "./PeriodHeadingCaption";
 import ReportDownloadButton from "./ReportDownloadButton";
 import { formatPeriodLabel } from "./periodFilterUtils";
-import { downloadCsvFile, reportFilename } from "./reportDownloadUtils";
+import { reportFilename } from "./reportDownloadUtils";
+import { useDashboardPdfExport } from "./dashboardPdfEngine";
 import { usePortalSettings } from "@/hooks/usePortalSettings";
 
 import type { QtyBasis } from "./leaderboardUtils";
@@ -132,13 +134,20 @@ export default function OverviewWidgets({
   const allowQuantity = !isSales || canSalesMapQuantity;
   const showAmount = showPricing ?? allowVolume;
 
+  const hookCategoryOptions = useOrderWorkflowCategoryOptions();
+  const effectiveCategoryOptions = categoryOptions ?? hookCategoryOptions;
+
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
 
   const tabStats = useMemo(
     () =>
       (tabStatsProp as OrderWorkflowTabStats | undefined) ??
-      computeOrderWorkflowTabStats(filteredOrders, categoryOptions, qtyBasis),
-    [tabStatsProp, filteredOrders, categoryOptions, qtyBasis],
+      computeOrderWorkflowTabStats(
+        filteredOrders,
+        effectiveCategoryOptions,
+        qtyBasis,
+      ),
+    [tabStatsProp, filteredOrders, effectiveCategoryOptions, qtyBasis],
   );
 
   const kpis = useMemo(() => {
@@ -360,7 +369,9 @@ export default function OverviewWidgets({
     });
   }, [totalValue, slicesWithData, hoveredKey]);
 
-  const handleDownload = () => {
+  const { exportPdf, isExporting } = useDashboardPdfExport();
+
+  const handleDownload = async () => {
     const headers = showAmount
       ? [
           "Metric Category",
@@ -400,15 +411,18 @@ export default function OverviewWidgets({
       }),
     ];
 
-    downloadCsvFile(
-      reportFilename(`overview_widgets_${role}`, selectedYears, selectedMonths),
-      headers,
-      rows,
-      [
-        `Report: Overview Widgets (${role.toUpperCase()})`,
+    await exportPdf({
+      title: `KPI Overview (${role.toUpperCase()})`,
+      subtitle: `Key Performance Indicators summary for ${formatPeriodLabel(selectedYears, selectedMonths)}`,
+      metaLines: [
+        `Role: ${role.toUpperCase()}`,
         `Period: ${formatPeriodLabel(selectedYears, selectedMonths)}`,
       ],
-    );
+      headers,
+      rows,
+      filename: reportFilename(`overview_widgets_${role}`, selectedYears, selectedMonths),
+      orientation: "portrait",
+    });
   };
 
   return (
@@ -439,8 +453,9 @@ export default function OverviewWidgets({
             <div className="flex items-center gap-2 shrink-0">
               <ReportDownloadButton
                 onDownload={handleDownload}
-                disabled={isOrdersFetching}
-                label="Export"
+                disabled={isOrdersFetching || isExporting}
+                loading={isExporting}
+                label="PDF"
               />
             </div>
           </div>
@@ -647,7 +662,7 @@ export default function OverviewWidgets({
           orders={filteredOrders}
           counts={queueCounts}
           isOrdersFetching={isOrdersFetching}
-          categoryOptions={categoryOptions}
+          categoryOptions={effectiveCategoryOptions}
           role={role}
           portalHome={portalHome}
         />

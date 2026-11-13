@@ -21,7 +21,9 @@ import {
   useListOrdersQuery,
 } from "@/store/api";
 import type { DashboardOrdersSummary } from "@/store/api/slices/dashboardApi";
-import { downloadCsvFile, reportFilename } from "./reportDownloadUtils";
+import { reportFilename } from "./reportDownloadUtils";
+import { useDashboardPdfExport } from "./dashboardPdfEngine";
+import ReportDownloadButton from "./ReportDownloadButton";
 import { shouldIncludeOrder } from "./featuredMatrixUtils";
 import { itemMetricValue, type QtyBasis } from "./leaderboardUtils";
 
@@ -349,20 +351,27 @@ export default function ProductGroupOrderAnalytics({
     }
   };
 
-  // CSV Export handler
-  const handleExportCsv = () => {
+  const { exportPdf, isExporting } = useDashboardPdfExport();
+
+  // PDF Export handler
+  const handleExportPdf = async () => {
+    const qtyColHeader =
+      localDataType === "billed" ? "Billed Qty" : "Approved Qty";
+    const revColHeader =
+      localDataType === "billed" ? "Billed Revenue (INR)" : "Approved Revenue (INR)";
+
     const headers = [
       "Product Group",
       "Active SKUs",
       "Buying Parties",
-      `Total Quantity (Qty)`,
-      "Total Revenue (INR)",
+      qtyColHeader,
+      revColHeader,
       "Order Count",
       "Revenue Share (%)",
     ];
 
     const data = filteredRows.map((g) => [
-      `"${g.name.replace(/"/g, '""')}"`,
+      g.name,
       g.productsCount,
       g.partiesCount,
       g.quantity.toFixed(2),
@@ -381,12 +390,22 @@ export default function ProductGroupOrderAnalytics({
       "100%",
     ]);
 
-    const filename = reportFilename(
-      `product_groups_order_analytics_${localDataType}`,
-      selectedYears,
-      selectedMonths,
-    );
-    downloadCsvFile(filename, headers, data);
+    await exportPdf({
+      title: "Product Group Order Analytics Report",
+      subtitle: `Portfolio distribution (${localDataType === "billed" ? "Billed" : "Approved"} Orders)`,
+      metaLines: [
+        ...(externalFilterCaption ? [`Filter: ${externalFilterCaption}`] : []),
+        `Basis: ${activeQtyBasis || "standard"} | Mode: ${localDataType}`,
+      ],
+      headers,
+      rows: data,
+      filename: reportFilename(
+        `product_groups_order_analytics_${localDataType}`,
+        selectedYears,
+        selectedMonths,
+      ),
+      orientation: "portrait",
+    });
   };
 
   const isLoading =
@@ -511,16 +530,14 @@ export default function ProductGroupOrderAnalytics({
             </button>
           </div>
 
-          {/* Export CSV Button */}
-          <button
-            type="button"
-            onClick={handleExportCsv}
-            disabled={filteredRows.length === 0}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer"
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span>Export CSV</span>
-          </button>
+          {/* Export PDF Button */}
+          <ReportDownloadButton
+            onDownload={handleExportPdf}
+            disabled={filteredRows.length === 0 || isLoading || isExporting}
+            loading={isExporting}
+            size="sm"
+            label="PDF"
+          />
         </div>
       </div>
 

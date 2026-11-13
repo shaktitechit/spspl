@@ -14,7 +14,8 @@ import PartyBreakdownSection from "./PartyBreakdownSection";
 import PeriodFilter from "./PeriodFilter";
 import { formatPeriodCaption } from "./PeriodHeadingCaption";
 import { useDashboardSummary } from "./useDashboardSummary";
-import { downloadCsvFile, reportFilename } from "./reportDownloadUtils";
+import { reportFilename } from "./reportDownloadUtils";
+import { useDashboardPdfExport } from "./dashboardPdfEngine";
 import {
   useGetZoneQuery,
   useListZonesQuery,
@@ -257,11 +258,18 @@ export default function ZoneAnalyticsDetailPage({
     };
   }, [summary?.contributions, isUnzoned, otherZonesPartyIdSet, zonePartyIdSet]);
 
-  const handleDownloadCsv = () => {
+  const { exportPdf, isExporting } = useDashboardPdfExport();
+
+  const handleDownloadPdf = async () => {
+    const qtyColHeader =
+      dataType === "billed" ? "Billed Quantity (Qty)" : "Approved Quantity (Qty)";
+    const revColHeader =
+      dataType === "billed" ? "Billed Revenue (INR)" : "Approved Revenue (INR)";
+
     const headers = [
       "Party Name",
-      "Order Quantity",
-      "Commercial Revenue (INR)",
+      qtyColHeader,
+      revColHeader,
       "Percentage Share (%)",
     ];
 
@@ -279,12 +287,23 @@ export default function ZoneAnalyticsDetailPage({
       "100%",
     ]);
 
-    const filename = reportFilename(
-      `zone_${zoneName.replace(/\s+/g, "_").toLowerCase()}_parties`,
-      selectedYears,
-      selectedMonths,
-    );
-    downloadCsvFile(filename, headers, rows);
+    await exportPdf({
+      title: `Zone Analytics: ${zoneName}`,
+      subtitle: `Party-wise sales distribution within ${zoneName} (${dataType === "billed" ? "Billed" : "Approved"} Orders)`,
+      metaLines: [
+        `Zone: ${zoneName}`,
+        `Period: ${filterCaption || "All Time"}`,
+        `Mode: ${dataType.toUpperCase()}`,
+      ],
+      headers,
+      rows,
+      filename: reportFilename(
+        `zone_${zoneName.replace(/\s+/g, "_").toLowerCase()}_parties`,
+        selectedYears,
+        selectedMonths,
+      ),
+      orientation: "portrait",
+    });
   };
 
   const backHref = `${portalHome}/sales-analytics/orders`;
@@ -457,7 +476,8 @@ export default function ZoneAnalyticsDetailPage({
         dataType={dataType}
         onDataTypeChange={setDataType}
         portalHome={portalHome}
-        onExportCsv={handleDownloadCsv}
+        onExportPdf={handleDownloadPdf}
+        isExportingPdf={isExporting}
       />
     </div>
   );

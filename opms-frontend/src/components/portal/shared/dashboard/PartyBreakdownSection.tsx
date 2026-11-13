@@ -13,6 +13,8 @@ import {
   TrendingUp,
 } from "lucide-react";
 
+import ReportDownloadButton from "./ReportDownloadButton";
+
 export interface PartyBreakdownRow {
   id: string;
   name: string;
@@ -36,6 +38,8 @@ export interface PartyBreakdownSectionProps {
   onDataTypeChange?: (type: "approved" | "billed") => void;
   portalHome?: string;
   onSelectParty?: (partyId: string, partyName?: string) => void;
+  onExportPdf?: () => void | Promise<void>;
+  isExportingPdf?: boolean;
   onExportCsv?: () => void;
   className?: string;
 }
@@ -79,6 +83,8 @@ export default function PartyBreakdownSection({
   onDataTypeChange,
   portalHome,
   onSelectParty,
+  onExportPdf,
+  isExportingPdf = false,
   onExportCsv,
   className = "",
 }: PartyBreakdownSectionProps) {
@@ -319,17 +325,15 @@ export default function PartyBreakdownSection({
             </button>
           </div>
 
-          {/* Export CSV */}
-          {onExportCsv && (
-            <button
-              type="button"
-              onClick={onExportCsv}
-              disabled={enrichedRows.length === 0}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 disabled:opacity-50 cursor-pointer"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Export CSV</span>
-            </button>
+          {/* Export PDF */}
+          {(onExportPdf || onExportCsv) && (
+            <ReportDownloadButton
+              onDownload={onExportPdf || onExportCsv!}
+              disabled={enrichedRows.length === 0 || isExportingPdf}
+              loading={isExportingPdf}
+              size="sm"
+              label="PDF"
+            />
           )}
         </div>
       </div>

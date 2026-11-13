@@ -28,6 +28,7 @@ import {
 import {
   normalizeSalesTabFromUrl,
   orderMatchesSalesTab,
+  SALES_ORDER_TABS,
   type SalesOrderTabCategory,
 } from "@/components/portal/sales/orderUtils";
 import { GoogleSheetAnalyticsModal } from "@/components/portal/shared/orders/integrations/GoogleSheetAnalyticsModal";
@@ -68,6 +69,7 @@ import {
   renderWorkflowStatusBadge,
   type OrderListRow,
 } from "./orderListDisplay";
+import { OrderListBottomTabStrip } from "./OrderListBottomTabStrip";
 import { OrderListPaginationBar } from "./OrderListPaginationBar";
 import { OrderListSearchDatePanel } from "./OrderListSearchDatePanel";
 import type {
@@ -78,10 +80,14 @@ import {
   isDueSheetPending,
   isDueSheetStageCleared,
   isDueSheetUploaded,
+  ORDER_WORKFLOW_TABS,
   orderMatchesWorkflowTab,
   type OrderWorkflowTabCategory,
 } from "./orderWorkflowTabs";
-import { useOrderListUrlState } from "./useOrderListUrlState";
+import {
+  buildOrdersQueryString,
+  useOrderListUrlState,
+} from "./useOrderListUrlState";
 import { useOrderWorkflowCategoryOptions } from "./useOrderWorkflowCategoryOptions";
 
 type ListOrdersPageProps = {
@@ -243,10 +249,16 @@ export default function ListOrdersPage({
     if (processStage === "all") return rawOrders;
     return rawOrders.filter((o) => {
       const rowStage = o as { workflow_tab?: string; process_stage?: string };
-      if (
-        rowStage.workflow_tab === processStage ||
-        rowStage.process_stage === processStage
-      ) {
+      if (rowStage.workflow_tab) {
+        if (rowStage.workflow_tab === processStage) {
+          if (processStage === "due_sheet_pending") {
+            return isDueSheetPending(o);
+          }
+          return true;
+        }
+        return false;
+      }
+      if (rowStage.process_stage === processStage) {
         if (processStage === "due_sheet_pending") {
           return isDueSheetPending(o);
         }
@@ -275,10 +287,16 @@ export default function ListOrdersPage({
     if (processStage === "all") return rawBulkOrders;
     return rawBulkOrders.filter((o) => {
       const rowStage = o as { workflow_tab?: string; process_stage?: string };
-      if (
-        rowStage.workflow_tab === processStage ||
-        rowStage.process_stage === processStage
-      ) {
+      if (rowStage.workflow_tab) {
+        if (rowStage.workflow_tab === processStage) {
+          if (processStage === "due_sheet_pending") {
+            return isDueSheetPending(o);
+          }
+          return true;
+        }
+        return false;
+      }
+      if (rowStage.process_stage === processStage) {
         if (processStage === "due_sheet_pending") {
           return isDueSheetPending(o);
         }
@@ -355,9 +373,17 @@ export default function ListOrdersPage({
     stageForUi === "pending_finance_approval" ||
     stageForUi === "pending_account_approval";
 
-  const queueCount =
-    tabCounts[processStage] ??
-    (isFetching ? undefined : totalEntries);
+  const hasActiveFilters = Boolean(
+    searchQuery.trim() ||
+      priorityFilter !== "all" ||
+      dateFilter !== "all",
+  );
+
+  const queueCount = hasActiveFilters
+    ? totalEntries
+    : (tabCounts[processStage] ?? (isFetching ? undefined : totalEntries));
+
+  const workflowTabs = includeDraftTab ? SALES_ORDER_TABS : ORDER_WORKFLOW_TABS;
 
   const hasAction = useCallback(
     (action: (typeof headerActions)[number]) => headerActions.includes(action),
@@ -843,6 +869,31 @@ export default function ListOrdersPage({
           </>
         )}
       </div>
+
+      <OrderListBottomTabStrip
+        tabs={workflowTabs}
+        activeTab={processStage}
+        onTabChange={(tabId) => {
+          const qs = buildOrdersQueryString({
+            q: searchQuery,
+            priority: priorityFilter,
+          });
+          router.push(`${portalHome}/orders/${tabId}${qs}`);
+        }}
+        filteredCount={totalEntries}
+        tabCounts={tabCounts}
+        isFetching={isFetching}
+        searchQuery=""
+        onClearSearch={() => setSearchQuery("")}
+        priorityFilter={priorityFilter}
+        onPriorityFilterChange={setPriorityFilter}
+        showReset={showReset}
+        onReset={handleResetFilters}
+        accentActiveClass={accents.tabActive}
+        searchResultAccentClass={accents.searchResult}
+        countBadgeClass={accents.countBadge}
+        compact
+      />
 
       {hasAction("sheet") &&
         sheetPortal &&

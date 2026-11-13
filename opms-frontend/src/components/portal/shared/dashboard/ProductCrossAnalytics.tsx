@@ -9,7 +9,9 @@ import {
   useListOrdersQuery,
 } from "@/store/api";
 import type { DashboardOrdersSummary } from "@/store/api/slices/dashboardApi";
-import { downloadCsvFile, reportFilename } from "./reportDownloadUtils";
+import { reportFilename } from "./reportDownloadUtils";
+import { useDashboardPdfExport } from "./dashboardPdfEngine";
+import ReportDownloadButton from "./ReportDownloadButton";
 import { itemMetricValue, shouldIncludeOrder, type QtyBasis } from "./leaderboardUtils";
 
 type TabId = "product-monthly" | "group-monthly" | "group-sales" | "group-party";
@@ -269,28 +271,77 @@ export default function ProductCrossAnalytics({
       .map(([id, v]) => ({ id, name: cross.colNames.get(id) ?? "—", value: v, pct: total > 0 ? (v / total) * 100 : 0 }));
   }, [cross, focusGid]);
 
+  const { exportPdf, isExporting } = useDashboardPdfExport();
   const dl = dataType === "billed" ? "Billed" : "Approved";
 
-  const exportCsv = () => {
-    const meta = [`Data: ${dl}`, `Metric: ${metric === "revenue" ? "Revenue (INR)" : "Quantity (Qty)"}`, `Period: ${externalFilterCaption || "All time"}`];
+  const exportPdfReport = async () => {
+    const meta = [
+      `Data Mode: ${dl}`,
+      `Metric: ${metric === "revenue" ? "Revenue (INR)" : "Quantity (Qty)"}`,
+      `Period: ${externalFilterCaption || "All time"}`,
+    ];
+
     if (isMonthlyTab) {
-      downloadCsvFile(
-        reportFilename(`${tab}_${activeYear}_${dataType}`, selectedYears, selectedMonths),
-        [tab === "product-monthly" ? "Product" : "Product Group", ...MONTHS, "Total"],
-        monthlyRows.map((r) => [r.name, ...r.months.map((v) => Math.round(v * 100) / 100), Math.round(r.total * 100) / 100]),
-        [...meta, `Year: ${activeYear}`],
-      );
+      const headers = [
+        tab === "product-monthly" ? "Product" : "Product Group",
+        ...MONTHS,
+        "Total",
+      ];
+      const rows = monthlyRows.map((r) => [
+        r.name,
+        ...r.months.map((v) => Math.round(v * 100) / 100),
+        Math.round(r.total * 100) / 100,
+      ]);
+
+      // Calculate column month sums
+      const monthSums = MONTHS.map((_, mIdx) => {
+        const sum = monthlyRows.reduce((acc, r) => acc + (r.months[mIdx] || 0), 0);
+        return Math.round(sum * 100) / 100;
+      });
+      const grandTot = Math.round(monthlyRows.reduce((acc, r) => acc + r.total, 0) * 100) / 100;
+      rows.push(["Total", ...monthSums, grandTot]);
+
+      await exportPdf({
+        title: `Product Cross Analytics - ${tab === "product-monthly" ? "Product Monthly Trends" : "Group Monthly Trends"}`,
+        subtitle: `Monthly matrix distribution for year ${activeYear}`,
+        metaLines: [...meta, `Year: ${activeYear}`],
+        headers,
+        rows,
+        filename: reportFilename(`${tab}_${activeYear}_${dataType}`, selectedYears, selectedMonths),
+        orientation: "landscape",
+      });
     } else {
-      downloadCsvFile(
-        reportFilename(`${tab}_${dataType}`, selectedYears, selectedMonths),
-        ["Product Group", ...cross.cols.map((c) => cross.colNames.get(c) ?? c), "Total (all)"],
-        cross.rows.map(([gid, tot]) => [
-          groupNames.get(gid) ?? "Group",
-          ...cross.cols.map((c) => Math.round((cross.cells.get(gid)?.get(c) ?? 0) * 100) / 100),
-          Math.round(tot * 100) / 100,
-        ]),
-        meta,
-      );
+      const headers = [
+        "Product Group",
+        ...cross.cols.map((c) => cross.colNames.get(c) ?? c),
+        "Total",
+      ];
+      const rows = cross.rows.map(([gid, tot]) => [
+        groupNames.get(gid) ?? "Group",
+        ...cross.cols.map((c) => Math.round((cross.cells.get(gid)?.get(c) ?? 0) * 100) / 100),
+        Math.round(tot * 100) / 100,
+      ]);
+
+      // Column sums
+      const colSums = cross.cols.map((c) => {
+        let sum = 0;
+        for (const [gid] of cross.rows) {
+          sum += cross.cells.get(gid)?.get(c) ?? 0;
+        }
+        return Math.round(sum * 100) / 100;
+      });
+      const grandSum = Math.round(cross.rows.reduce((s, [, tot]) => s + tot, 0) * 100) / 100;
+      rows.push(["Total", ...colSums, grandSum]);
+
+      await exportPdf({
+        title: `Product Cross Analytics - ${tab === "group-sales" ? "Group × Sales Persons" : "Group × Parties"}`,
+        subtitle: `Cross-dimensional sales matrix (${dl} data)`,
+        metaLines: meta,
+        headers,
+        rows,
+        filename: reportFilename(`${tab}_${dataType}`, selectedYears, selectedMonths),
+        orientation: "landscape",
+      });
     }
   };
 
@@ -331,15 +382,13 @@ export default function ProductCrossAnalytics({
             <button type="button" onClick={() => setMetric("revenue")} className={seg(metric === "revenue")}>Revenue (₹)</button>
             <button type="button" onClick={() => setMetric("quantity")} className={seg(metric === "quantity")}>Quantity (Qty)</button>
           </div>
-          <button
-            type="button"
-            onClick={exportCsv}
-            disabled={loading}
-            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span>Export CSV</span>
-          </button>
+          <ReportDownloadButton
+            onDownload={exportPdfReport}
+            disabled={loading || isExporting}
+            loading={isExporting}
+            size="sm"
+            label="Export PDF"
+          />
         </div>
       </div>
 

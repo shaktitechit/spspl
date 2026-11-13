@@ -19,10 +19,10 @@ import {
 } from "./featuredMatrixUtils";
 import { formatPeriodLabel } from "./periodFilterUtils";
 import {
-  buildMatrixCsvPayload,
-  downloadCsvFile,
+  buildMatrixTablePayload,
   reportFilename,
 } from "./reportDownloadUtils";
+import { useDashboardPdfExport } from "./dashboardPdfEngine";
 import {
   useFeaturedMatrixCatalog,
   type FeaturedMatrixCatalog,
@@ -213,29 +213,35 @@ export default function FeaturedProductGroupFeaturedPartyTable({
     return sum;
   };
 
+  const { exportPdf, isExporting } = useDashboardPdfExport();
   const isLoading =
     isOrdersFetching || isCatalogFetching || isPartiesFetching;
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (featuredGroups.length === 0 || featuredParties.length === 0) return;
-    const { headers, rows } = buildMatrixCsvPayload({
+    const { headers, rows } = buildMatrixTablePayload({
       rowLabel: "Product Group / Product",
       rows: featuredGroups,
       cols: featuredParties,
       matrix,
       childrenByRow: productsByGroup,
     });
-    downloadCsvFile(
-      reportFilename("product_group_party", selectedYears, selectedMonths),
-      headers,
-      rows,
-      [
-        `Report: Featured Groups × Featured Parties`,
+    await exportPdf({
+      title: "Featured Groups × Featured Parties",
+      subtitle:
+        qtyBasis === "dispatched"
+          ? "Dispatched sales by product group across featured parties"
+          : "Approved sales by product group across featured parties",
+      metaLines: [
         `Period: ${formatPeriodLabel(selectedYears, selectedMonths)}`,
-        `Metric: ${metric}`,
+        `Metric: ${metric === "volume" ? "Volume (Revenue in INR)" : "Quantity (Qty)"}`,
         `Basis: ${qtyBasis}`,
       ],
-    );
+      headers,
+      rows,
+      filename: reportFilename("product_group_party", selectedYears, selectedMonths),
+      orientation: "landscape",
+    });
   };
 
   return (
@@ -257,7 +263,8 @@ export default function FeaturedProductGroupFeaturedPartyTable({
       onYearsChange={setSelectedYears}
       onMonthsChange={setSelectedMonths}
       onDownload={handleDownload}
-      downloadDisabled={isLoading}
+      downloadDisabled={isLoading || isExporting}
+      downloadLoading={isExporting}
       hidePeriodFilter={syncWithExternalFilter}
       externalFilterCaption={externalFilterCaption}
     >

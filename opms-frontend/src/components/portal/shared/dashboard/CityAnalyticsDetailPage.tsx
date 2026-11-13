@@ -14,7 +14,8 @@ import PartyBreakdownSection from "./PartyBreakdownSection";
 import PeriodFilter from "./PeriodFilter";
 import { formatPeriodCaption } from "./PeriodHeadingCaption";
 import { useDashboardSummary } from "./useDashboardSummary";
-import { downloadCsvFile, reportFilename } from "./reportDownloadUtils";
+import { reportFilename } from "./reportDownloadUtils";
+import { useDashboardPdfExport } from "./dashboardPdfEngine";
 import {
   useGetPartyCityQuery,
   useListPartyCitiesQuery,
@@ -306,11 +307,18 @@ export default function CityAnalyticsDetailPage({
     };
   }, [summary?.contributions, isUnspecified, otherCitiesPartyIdSet, cityPartyIdSet]);
 
-  const handleDownloadCsv = () => {
+  const { exportPdf, isExporting } = useDashboardPdfExport();
+
+  const handleDownloadPdf = async () => {
+    const qtyColHeader =
+      dataType === "billed" ? "Billed Quantity (Qty)" : "Approved Quantity (Qty)";
+    const revColHeader =
+      dataType === "billed" ? "Billed Revenue (INR)" : "Approved Revenue (INR)";
+
     const headers = [
       "Party Name",
-      dataType === "billed" ? "Billed Quantity (Qty)" : "Approved Quantity (Qty)",
-      dataType === "billed" ? "Billed Revenue (INR)" : "Approved Revenue (INR)",
+      qtyColHeader,
+      revColHeader,
       "Percentage Share (%)",
     ];
 
@@ -328,12 +336,23 @@ export default function CityAnalyticsDetailPage({
       "100%",
     ]);
 
-    const filename = reportFilename(
-      `city_${cityName.replace(/\s+/g, "_").toLowerCase()}_parties_${dataType}`,
-      selectedYears,
-      selectedMonths,
-    );
-    downloadCsvFile(filename, headers, rows);
+    await exportPdf({
+      title: `City Analytics: ${cityName}`,
+      subtitle: `Party-wise sales distribution within ${cityName} (${dataType === "billed" ? "Billed" : "Approved"} Orders)`,
+      metaLines: [
+        `City: ${cityName}`,
+        `Period: ${filterCaption || "All Time"}`,
+        `Mode: ${dataType.toUpperCase()}`,
+      ],
+      headers,
+      rows,
+      filename: reportFilename(
+        `city_${cityName.replace(/\s+/g, "_").toLowerCase()}_parties_${dataType}`,
+        selectedYears,
+        selectedMonths,
+      ),
+      orientation: "portrait",
+    });
   };
 
   const backHref = `${portalHome}/sales-analytics/orders`;
@@ -507,7 +526,8 @@ export default function CityAnalyticsDetailPage({
         dataType={dataType}
         onDataTypeChange={setDataType}
         portalHome={portalHome}
-        onExportCsv={handleDownloadCsv}
+        onExportPdf={handleDownloadPdf}
+        isExportingPdf={isExporting}
       />
     </div>
   );

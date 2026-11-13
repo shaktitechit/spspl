@@ -22,10 +22,11 @@ import {
 } from "@/store/api";
 import type { DashboardOrdersSummary } from "@/store/api/slices/dashboardApi";
 import {
-  downloadCsvFile,
   reportFilename,
   roundToTwo,
 } from "./reportDownloadUtils";
+import { useDashboardPdfExport } from "./dashboardPdfEngine";
+import ReportDownloadButton from "./ReportDownloadButton";
 import {
   itemMetricValue,
   normalizeRateType,
@@ -416,10 +417,12 @@ export default function ProductReportGenerator({
       return next;
     });
 
-  const handleExportCsv = () => {
+  const { exportPdf, isExporting } = useDashboardPdfExport();
+
+  const handleExportPdf = async () => {
     const dl = dataType === "billed" ? "Billed" : "Approved";
     const meta = [
-      `Report: ${REPORT_LABELS[reportType]}`,
+      `Report Type: ${REPORT_LABELS[reportType]}`,
       `Data Scope: ${dl} Orders`,
       `Period: ${externalFilterCaption || "All time"}`,
     ];
@@ -427,39 +430,66 @@ export default function ProductReportGenerator({
       reportFilename(`${base}_${dataType}`, selectedYears, selectedMonths);
 
     if (reportType === "sku-ledger") {
-      downloadCsvFile(
-        file("sku_performance_ledger"),
-        [
-          "Rank", "Product Name", "SKU Code", "Product Group",
-          `${dl} Quantity (Qty)`, `${dl} Revenue (INR)`, "Effective Rate (INR/Qty)",
-          "Revenue Share (%)", "Quantity Share (%)",
-          "SR Revenue (INR)", "SRA Revenue (INR)", "CR Revenue (INR)",
-          "Distinct Buyers", "ABC Class",
-        ],
-        filteredSkus.map((s, i) => [
-          i + 1, s.name, s.code, s.groupName,
-          roundToTwo(s.quantity), roundToTwo(s.revenue), s.effectiveRate,
-          `${s.revenuePct}%`, `${s.quantityPct}%`,
-          roundToTwo(s.srRev), roundToTwo(s.sraRev), roundToTwo(s.crRev),
-          s.partiesCount, `Class ${s.abcClass}`,
-        ]),
-        meta,
-      );
+      const headers = [
+        "Rank", "Product Name", "SKU Code", "Product Group",
+        `${dl} Quantity (Qty)`, `${dl} Revenue (INR)`, "Effective Rate (INR/Qty)",
+        "Revenue Share (%)", "Quantity Share (%)",
+        "SR Rev (INR)", "SRA Rev (INR)", "CR Rev (INR)",
+        "Buyers", "Class",
+      ];
+      const rows = filteredSkus.map((s, i) => [
+        i + 1, s.name, s.code, s.groupName,
+        roundToTwo(s.quantity), roundToTwo(s.revenue), s.effectiveRate,
+        `${s.revenuePct}%`, `${s.quantityPct}%`,
+        roundToTwo(s.srRev), roundToTwo(s.sraRev), roundToTwo(s.crRev),
+        s.partiesCount, `Class ${s.abcClass}`,
+      ]);
+
+      const totQty = roundToTwo(filteredSkus.reduce((a, b) => a + b.quantity, 0));
+      const totRev = roundToTwo(filteredSkus.reduce((a, b) => a + b.revenue, 0));
+      rows.push([
+        "Total", `${filteredSkus.length} Products`, "", "",
+        totQty, totRev, totQty > 0 ? roundToTwo(totRev / totQty) : 0,
+        "100%", "100%", "", "", "", "", "",
+      ]);
+
+      await exportPdf({
+        title: "SKU Performance Ledger",
+        subtitle: `Granular commercial SKU performance analysis (${dl} Orders)`,
+        metaLines: meta,
+        headers,
+        rows,
+        filename: file("sku_performance_ledger"),
+        orientation: "landscape",
+      });
     } else if (reportType === "group-summary") {
-      downloadCsvFile(
-        file("product_group_summary"),
-        [
-          "Rank", "Product Group", "Active SKUs", `${dl} Quantity (Qty)`,
-          `${dl} Revenue (INR)`, "Effective Rate (INR/Qty)", "Revenue Share (%)",
-          "Distinct Buying Parties", "Top Selling SKU",
-        ],
-        filteredGroups.map((g, i) => [
-          i + 1, g.name, g.activeSKUsCount, roundToTwo(g.quantity),
-          roundToTwo(g.revenue), g.effectiveRate, `${g.revenuePct}%`,
-          g.partiesCount, g.topSku,
-        ]),
-        meta,
-      );
+      const headers = [
+        "Rank", "Product Group", "Active SKUs", `${dl} Quantity (Qty)`,
+        `${dl} Revenue (INR)`, "Effective Rate (INR/Qty)", "Revenue Share (%)",
+        "Distinct Buying Parties", "Top Selling SKU",
+      ];
+      const rows = filteredGroups.map((g, i) => [
+        i + 1, g.name, g.activeSKUsCount, roundToTwo(g.quantity),
+        roundToTwo(g.revenue), g.effectiveRate, `${g.revenuePct}%`,
+        g.partiesCount, g.topSku,
+      ]);
+
+      const totQty = roundToTwo(filteredGroups.reduce((a, b) => a + b.quantity, 0));
+      const totRev = roundToTwo(filteredGroups.reduce((a, b) => a + b.revenue, 0));
+      rows.push([
+        "Total", `${filteredGroups.length} Groups`, "", totQty,
+        totRev, totQty > 0 ? roundToTwo(totRev / totQty) : 0, "100%", "", "",
+      ]);
+
+      await exportPdf({
+        title: "Product Group Summary",
+        subtitle: `High-level group portfolio analysis (${dl} Orders)`,
+        metaLines: meta,
+        headers,
+        rows,
+        filename: file("product_group_summary"),
+        orientation: "landscape",
+      });
     } else if (reportType === "hierarchy-tree") {
       const rows: Array<Array<string | number>> = [];
       for (const g of filteredGroups) {
@@ -474,35 +504,46 @@ export default function ProductReportGenerator({
           ]);
         }
       }
-      downloadCsvFile(
-        file("group_sku_hierarchy"),
-        [
-          "Group / SKU", "SKU Code", "Type", `${dl} Quantity (Qty)`,
-          `${dl} Revenue (INR)`, "Effective Rate (INR/Qty)", "Share (%)",
-        ],
+      const headers = [
+        "Group / SKU", "SKU Code", "Type", `${dl} Quantity (Qty)`,
+        `${dl} Revenue (INR)`, "Effective Rate (INR/Qty)", "Share (%)",
+      ];
+
+      await exportPdf({
+        title: "Product Group & SKU Hierarchy",
+        subtitle: `Tree view of groups and nested products (${dl} Orders)`,
+        metaLines: meta,
+        headers,
         rows,
-        meta,
-      );
+        filename: file("group_sku_hierarchy"),
+        orientation: "portrait",
+      });
     } else {
       const rate = (r: number, q: number) => (q > 0 ? roundToTwo(r / q) : 0);
-      downloadCsvFile(
-        file("rate_tier_realization"),
-        [
-          "Product Name", "SKU Code", "Product Group",
-          "SR Qty", "SR Rev (INR)", "SR Rate",
-          "SRA Qty", "SRA Rev (INR)", "SRA Rate",
-          "CR Qty", "CR Rev (INR)", "CR Rate",
-          "Total Qty", "Total Rev (INR)", "Avg Rate (INR/Qty)",
-        ],
-        filteredSkus.map((s) => [
-          s.name, s.code, s.groupName,
-          roundToTwo(s.srQty), roundToTwo(s.srRev), rate(s.srRev, s.srQty),
-          roundToTwo(s.sraQty), roundToTwo(s.sraRev), rate(s.sraRev, s.sraQty),
-          roundToTwo(s.crQty), roundToTwo(s.crRev), rate(s.crRev, s.crQty),
-          roundToTwo(s.quantity), roundToTwo(s.revenue), s.effectiveRate,
-        ]),
-        meta,
-      );
+      const headers = [
+        "Product Name", "SKU Code", "Product Group",
+        "SR Qty", "SR Rev (INR)", "SR Rate",
+        "SRA Qty", "SRA Rev (INR)", "SRA Rate",
+        "CR Qty", "CR Rev (INR)", "CR Rate",
+        "Total Qty", "Total Rev (INR)", "Avg Rate",
+      ];
+      const rows = filteredSkus.map((s) => [
+        s.name, s.code, s.groupName,
+        roundToTwo(s.srQty), roundToTwo(s.srRev), rate(s.srRev, s.srQty),
+        roundToTwo(s.sraQty), roundToTwo(s.sraRev), rate(s.sraRev, s.sraQty),
+        roundToTwo(s.crQty), roundToTwo(s.crRev), rate(s.crRev, s.crQty),
+        roundToTwo(s.quantity), roundToTwo(s.revenue), s.effectiveRate,
+      ]);
+
+      await exportPdf({
+        title: "Rate Tier Realization Report",
+        subtitle: `Pricing realization across SR, SRA, and CR tiers (${dl} Orders)`,
+        metaLines: meta,
+        headers,
+        rows,
+        filename: file("rate_tier_realization"),
+        orientation: "landscape",
+      });
     }
   };
 
@@ -569,15 +610,13 @@ export default function ProductReportGenerator({
             <Eye className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
             <span>Preview</span>
           </button>
-          <button
-            type="button"
-            onClick={handleExportCsv}
-            disabled={isLoading || filteredSkus.length === 0}
-            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span>Export CSV</span>
-          </button>
+          <ReportDownloadButton
+            onDownload={handleExportPdf}
+            disabled={isLoading || filteredSkus.length === 0 || isExporting}
+            loading={isExporting}
+            size="sm"
+            label="Export PDF"
+          />
         </div>
       </div>
 
@@ -679,14 +718,13 @@ export default function ProductReportGenerator({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleExportCsv}
-                  className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 cursor-pointer"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  <span>Download CSV</span>
-                </button>
+                <ReportDownloadButton
+                  onDownload={handleExportPdf}
+                  disabled={isLoading || filteredSkus.length === 0 || isExporting}
+                  loading={isExporting}
+                  size="sm"
+                  label="Download PDF"
+                />
                 <button
                   type="button"
                   onClick={() => setIsPreviewOpen(false)}
