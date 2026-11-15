@@ -193,6 +193,75 @@ async function complete(followUpId, body, user) {
 }
 
 /**
+ * Attach computed `last_action` (latest action message or follow-up outcome/notes) to populated `lead` objects.
+ */
+async function attachLatestLeadAction(rows, LeadFollowUp) {
+  const leadIds = Array.from(
+    new Set(
+      rows
+        .map((r) => (r.lead && typeof r.lead === 'object' && r.lead._id ? String(r.lead._id) : null))
+        .filter(Boolean)
+    )
+  );
+
+  if (leadIds.length === 0) return rows;
+
+  const allLeadFollowUps = await LeadFollowUp.find({ lead: { $in: leadIds }, deletedAt: null })
+    .populate('created_by', 'name email')
+    .populate('completed_by', 'name email')
+    .populate('actions.author', 'name email')
+    .sort({ updatedAt: -1, createdAt: -1 })
+    .lean();
+
+  const latestByLead = new Map();
+  const consider = (leadId, candidate) => {
+    if (!candidate.remarks) return;
+    const key = String(leadId);
+    const prev = latestByLead.get(key);
+    const ts = candidate.timestamp ? new Date(candidate.timestamp).getTime() : 0;
+    const prevTs = prev?.timestamp ? new Date(prev.timestamp).getTime() : 0;
+    if (!prev || ts > prevTs) {
+      latestByLead.set(key, candidate);
+    }
+  };
+
+  for (const fu of allLeadFollowUps) {
+    if (Array.isArray(fu.actions)) {
+      for (const act of fu.actions) {
+        if (act?.message && String(act.message).trim()) {
+          consider(fu.lead, {
+            remarks: String(act.message).trim(),
+            timestamp: act.createdAt || fu.updatedAt || fu.createdAt,
+            by_user: act.author ? toPlain(act.author) : null,
+          });
+        }
+      }
+    }
+    const remarksParts = [fu.outcome, fu.notes].map((v) => (v ? String(v).trim() : '')).filter(Boolean);
+    if (remarksParts.length > 0) {
+      consider(fu.lead, {
+        remarks: remarksParts.join(' • '),
+        timestamp: fu.completed_at || fu.updatedAt || fu.createdAt,
+        by_user: fu.completed_by ? toPlain(fu.completed_by) : fu.created_by ? toPlain(fu.created_by) : null,
+      });
+    }
+  }
+
+  return rows.map((r) => {
+    if (r.lead && typeof r.lead === 'object' && r.lead._id) {
+      return {
+        ...r,
+        lead: {
+          ...r.lead,
+          last_action: latestByLead.get(String(r.lead._id)) || null,
+        },
+      };
+    }
+    return r;
+  });
+}
+
+/**
  * Get follow-up list for calendar/agenda view.
  */
 async function getCalendar(query = {}, user) {
@@ -244,7 +313,7 @@ async function getCalendar(query = {}, user) {
   let rows = await LeadFollowUp.find(q)
     .populate({
       path: 'lead',
-      select: 'lead_no name company_name phone email status priority assigned_to assigned_users created_by estimated_value party_id requirement_details',
+      select: 'lead_no name company_name phone email status priority assigned_to assigned_users created_by estimated_value party_id requirement_details requirement notes products',
       populate: [
         { path: 'assigned_to', select: 'name email department' },
         { path: 'assigned_users', select: 'name email department' },
@@ -367,6 +436,8 @@ async function getCalendar(query = {}, user) {
     }
   }
 
+  rows = await attachLatestLeadAction(rows, LeadFollowUp);
+
   return rows.map(toPlain);
 }
 
@@ -374,8 +445,8 @@ async function getCalendar(query = {}, user) {
  * Get urgent follow-ups summary (overdue + due today) scoped by user role.
  * Powers the frontend persistent unskippable banner & intercept action modal.
  */
-async function getUrgentSummary(user, timeZone = 'Asia/Kolkata') {
-  const { LeadFollowUp } = getModels();
+async function getUrgentSummary(user, timeZone = 'Asia/Kolkata', scope = '') {
+  const { LeadFollowUp, LeadReportingEdge } = getModels();
   const now = new Date();
 
   const parts = Object.fromEntries(
@@ -402,22 +473,16 @@ async function getUrgentSummary(user, timeZone = 'Asia/Kolkata') {
     deletedAt: null,
     status: 'pending',
     follow_up_date: { $lte: endOfToday },
+    quotation: null,
+    lead: { $ne: null },
   })
     .populate({
       path: 'lead',
-      select: 'lead_no name company_name phone email status priority assigned_to assigned_users created_by requirement products party_id contacts',
+      select: 'lead_no name company_name phone email status priority assigned_to assigned_users created_by requirement notes estimated_value products party_id contacts deletedAt',
       populate: [
         { path: 'party_id', select: 'party_name legal_name' },
         { path: 'assigned_to', select: 'name email' },
         { path: 'assigned_users', select: 'name email' },
-        { path: 'created_by', select: 'name email' },
-      ],
-    })
-    .populate({
-      path: 'quotation',
-      select: 'quotation_no version grand_total status customer_name kind_attn phone email subject party_id created_by sales_person_user lead',
-      populate: [
-        { path: 'sales_person_user', select: 'name email' },
         { path: 'created_by', select: 'name email' },
       ],
     })
@@ -426,29 +491,87 @@ async function getUrgentSummary(user, timeZone = 'Asia/Kolkata') {
     .lean();
 
   const isAdmin = isLeadAdmin(user);
-  const userStr = String(user._id);
+  const isMgr = isLeadManager(user);
+  const isCoord = isLeadCoordinator(user);
+  const userStr = String(user?._id || user?.id || '');
 
-  // Filter based on user scope (assigned to OR created by)
+  const reqScope = String(scope || '').toLowerCase().trim();
+  const canSeeTeam = isAdmin || isMgr || isCoord;
+  let effectiveScope = 'mine';
+  if (reqScope === 'organization' || reqScope === 'all') {
+    effectiveScope = isAdmin ? 'organization' : canSeeTeam ? 'team' : 'mine';
+  } else if (reqScope === 'team') {
+    effectiveScope = canSeeTeam ? 'team' : 'mine';
+  } else if (reqScope === 'mine' || reqScope === 'me') {
+    effectiveScope = 'mine';
+  }
+
+  let teamSet = null;
+  if (effectiveScope === 'team') {
+    if (isMgr || isCoord) {
+      const teamIds = await getVisibleLeadUserIds(user);
+      teamSet = new Set([userStr, ...(teamIds || []).map(String)]);
+    } else if (isAdmin) {
+      const visited = new Set([userStr]);
+      let currentLevel = [user._id].filter(Boolean);
+      let depth = 0;
+      while (currentLevel.length > 0 && depth < 10) {
+        const edges = await LeadReportingEdge.find({
+          manager: { $in: currentLevel },
+          is_active: true,
+        })
+          .select('subordinate')
+          .lean();
+        const nextLevel = [];
+        for (const e of edges) {
+          const sid = String(e.subordinate || '');
+          if (sid && !visited.has(sid)) {
+            visited.add(sid);
+            nextLevel.push(e.subordinate);
+          }
+        }
+        currentLevel = nextLevel;
+        depth++;
+      }
+      teamSet = visited;
+    }
+  }
+
+  // Filter based on user scope (organization / team / mine), excluding deleted or closed leads
   const filtered = allPending.filter((fu) => {
-    if (isAdmin) return true;
+    if (!fu.lead || fu.lead.deletedAt || ['won', 'lost', 'converted'].includes(fu.lead.status)) {
+      return false;
+    }
+    if (effectiveScope === 'organization') return true;
+
+    const ids = new Set();
     const leadAssignee = fu.lead?.assigned_to?._id ? String(fu.lead.assigned_to._id) : (fu.lead?.assigned_to ? String(fu.lead.assigned_to) : null);
-    const inAssignedUsers = Array.isArray(fu.lead?.assigned_users) && fu.lead.assigned_users.some((u) => String(u?._id || u) === userStr);
-    const qRep = fu.quotation?.sales_person_user?._id ? String(fu.quotation.sales_person_user._id) : (fu.quotation?.sales_person_user ? String(fu.quotation.sales_person_user) : null);
-    const isAssigned = leadAssignee === userStr || inAssignedUsers || qRep === userStr;
+    if (leadAssignee) ids.add(leadAssignee);
+    if (Array.isArray(fu.lead?.assigned_users)) {
+      fu.lead.assigned_users.forEach((u) => {
+        const uid = u?._id ? String(u._id) : (u ? String(u) : null);
+        if (uid) ids.add(uid);
+      });
+    }
 
     const fuCreator = fu.created_by?._id ? String(fu.created_by._id) : (fu.created_by ? String(fu.created_by) : null);
+    if (fuCreator) ids.add(fuCreator);
     const leadCreator = fu.lead?.created_by?._id ? String(fu.lead.created_by._id) : (fu.lead?.created_by ? String(fu.lead.created_by) : null);
-    const qCreator = fu.quotation?.created_by?._id ? String(fu.quotation.created_by._id) : (fu.quotation?.created_by ? String(fu.quotation.created_by) : null);
-    const isCreator = fuCreator === userStr || leadCreator === userStr || qCreator === userStr;
+    if (leadCreator) ids.add(leadCreator);
 
-    return isAssigned || isCreator;
+    if (effectiveScope === 'team' && teamSet) {
+      return [...ids].some((id) => teamSet.has(id));
+    }
+    return ids.has(userStr);
   });
+
+  const filteredWithLastAction = await attachLatestLeadAction(filtered, LeadFollowUp);
 
   const overdue = [];
   const dueToday = [];
   const upcomingSoon = [];
 
-  for (const item of filtered) {
+  for (const item of filteredWithLastAction) {
     const isPast = new Date(item.follow_up_date) < startOfToday;
     if (isPast) {
       overdue.push(item);

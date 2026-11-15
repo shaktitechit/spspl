@@ -94,6 +94,7 @@ export type QuotationRevisionSnapshot = {
   sales_person_email?: string;
   sales_person_designation?: string;
   sales_person_user?: { _id: string; name?: string; email?: string; department?: string; phone?: string; designation?: string } | null;
+  secondary_sales_persons?: SecondarySalesPersonRecord[];
   status?: string;
   approval_status?: string;
   approved_by?: { _id: string; name?: string; email?: string } | null;
@@ -140,6 +141,14 @@ export type QuotationVersionComparison = {
   }>;
   terms_from: string[];
   terms_to: string[];
+};
+
+export type SecondarySalesPersonRecord = {
+  user?: string | { _id: string; name?: string; email?: string; department?: string; phone?: string; designation?: string } | null;
+  name?: string;
+  phone?: string;
+  email?: string;
+  designation?: string;
 };
 
 export type LeadQuotationRecord = {
@@ -214,6 +223,7 @@ export type LeadQuotationRecord = {
   sales_person_email?: string;
   sales_person_designation?: string;
   sales_person_user?: string | { _id: string; name?: string; email?: string; department?: string; phone?: string; designation?: string };
+  secondary_sales_persons?: SecondarySalesPersonRecord[];
   approval_status?: QuotationApprovalStatus;
   approved_at?: string;
   approved_by?: string | { _id: string; name?: string };
@@ -365,6 +375,13 @@ export type CreateQuotationPayload = {
   sales_person_email?: string;
   sales_person_designation?: string;
   sales_person_user?: string;
+  secondary_sales_persons?: Array<{
+    user?: string;
+    name?: string;
+    phone?: string;
+    email?: string;
+    designation?: string;
+  }>;
   department?: string;
   departments?: string[];
   approval_status?: QuotationApprovalStatus;
@@ -483,7 +500,7 @@ export const leadQuotationsApi = medicaApi.injectEndpoints({
   endpoints: (build) => ({
     listLeadQuotations: build.query<LeadQuotationRecord[], string>({
       query: (leadId) => ({
-        url: `/leads/${leadId}/quotations`,
+        url: `/quotations/lead/${leadId}`,
         method: "GET",
       }),
       transformResponse: (raw: ApiEnvelope<LeadQuotationRecord[]>) =>
@@ -495,7 +512,7 @@ export const leadQuotationsApi = medicaApi.injectEndpoints({
 
     getLeadQuotation: build.query<LeadQuotationRecord, string>({
       query: (quotationId) => ({
-        url: `/leads/quotations/${quotationId}`,
+        url: `/quotations/${quotationId}`,
         method: "GET",
       }),
       transformResponse: (raw: ApiEnvelope<LeadQuotationRecord>) =>
@@ -510,7 +527,7 @@ export const leadQuotationsApi = medicaApi.injectEndpoints({
       query: ({ leadId, body }) =>
         leadId
           ? {
-              url: `/leads/${leadId}/quotations`,
+              url: `/quotations/lead/${leadId}`,
               method: "POST",
               body,
             }
@@ -540,7 +557,7 @@ export const leadQuotationsApi = medicaApi.injectEndpoints({
       { quotationId: string; leadId?: string; body: UpdateQuotationPayload }
     >({
       query: ({ quotationId, body }) => ({
-        url: `/leads/quotations/${quotationId}`,
+        url: `/quotations/${quotationId}`,
         method: "PATCH",
         body,
       }),
@@ -560,7 +577,7 @@ export const leadQuotationsApi = medicaApi.injectEndpoints({
       { quotationId: string; leadId?: string }
     >({
       query: ({ quotationId }) => ({
-        url: `/leads/quotations/${quotationId}/submit-for-approval`,
+        url: `/quotations/${quotationId}/submit-for-approval`,
         method: "POST",
       }),
       transformResponse: (raw: ApiEnvelope<LeadQuotationRecord>) =>
@@ -569,7 +586,13 @@ export const leadQuotationsApi = medicaApi.injectEndpoints({
         { type: "LeadQuotation", id: quotationId },
         { type: "Quotation", id: quotationId },
         { type: "Quotation", id: "LIST" },
-        ...(leadId ? [{ type: "LeadQuotation" as const, id: `LEAD_${leadId}` }] : []),
+        ...(leadId
+          ? [
+              { type: "LeadQuotation" as const, id: `LEAD_${leadId}` },
+              { type: "Lead" as const, id: leadId },
+              { type: "Lead" as const, id: "LIST" },
+            ]
+          : []),
         "Activity",
       ],
     }),
@@ -579,7 +602,7 @@ export const leadQuotationsApi = medicaApi.injectEndpoints({
       { quotationId: string; leadId?: string }
     >({
       query: ({ quotationId }) => ({
-        url: `/leads/quotations/${quotationId}/approve`,
+        url: `/quotations/${quotationId}/approve`,
         method: "POST",
       }),
       transformResponse: (raw: ApiEnvelope<LeadQuotationRecord>) =>
@@ -588,7 +611,13 @@ export const leadQuotationsApi = medicaApi.injectEndpoints({
         { type: "LeadQuotation", id: quotationId },
         { type: "Quotation", id: quotationId },
         { type: "Quotation", id: "LIST" },
-        ...(leadId ? [{ type: "LeadQuotation" as const, id: `LEAD_${leadId}` }] : []),
+        ...(leadId
+          ? [
+              { type: "LeadQuotation" as const, id: `LEAD_${leadId}` },
+              { type: "Lead" as const, id: leadId },
+              { type: "Lead" as const, id: "LIST" },
+            ]
+          : []),
         "Activity",
       ],
     }),
@@ -598,7 +627,7 @@ export const leadQuotationsApi = medicaApi.injectEndpoints({
       { quotationId: string; leadId?: string; reason?: string; rejection_reason?: string }
     >({
       query: ({ quotationId, reason, rejection_reason }) => ({
-        url: `/leads/quotations/${quotationId}/reject`,
+        url: `/quotations/${quotationId}/reject`,
         method: "POST",
         body: { reason: reason || rejection_reason },
       }),
@@ -608,7 +637,13 @@ export const leadQuotationsApi = medicaApi.injectEndpoints({
         { type: "LeadQuotation", id: quotationId },
         { type: "Quotation", id: quotationId },
         { type: "Quotation", id: "LIST" },
-        ...(leadId ? [{ type: "LeadQuotation" as const, id: `LEAD_${leadId}` }] : []),
+        ...(leadId
+          ? [
+              { type: "LeadQuotation" as const, id: `LEAD_${leadId}` },
+              { type: "Lead" as const, id: leadId },
+              { type: "Lead" as const, id: "LIST" },
+            ]
+          : []),
         "Activity",
       ],
     }),
@@ -665,7 +700,7 @@ export const leadQuotationsApi = medicaApi.injectEndpoints({
 
     getDefaultQuotationTerms: build.query<string[], void>({
       query: () => ({
-        url: "/leads/quotations/default-terms",
+        url: "/quotations/default-terms",
         method: "GET",
       }),
       transformResponse: (raw: ApiEnvelope<string[]>) =>
@@ -678,7 +713,7 @@ export const leadQuotationsApi = medicaApi.injectEndpoints({
       { quotationId: string; leadId: string }
     >({
       query: ({ quotationId }) => ({
-        url: `/leads/quotations/${quotationId}`,
+        url: `/quotations/${quotationId}`,
         method: "DELETE",
       }),
       transformResponse: (raw: ApiEnvelope<{ success: boolean }>) =>
@@ -978,6 +1013,7 @@ export type QuotationSalesPerformanceRep = {
   rejected_value: number;
   pending_count: number;
   in_negotiation_count: number;
+  pipeline_value?: number;
   win_rate: number;
   avg_discount_percent: number;
 };

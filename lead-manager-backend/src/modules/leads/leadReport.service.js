@@ -203,15 +203,27 @@ async function buildLeadReportFilter(query = {}, user) {
  * Get dashboard KPI counters for leads.
  */
 async function getDashboardStats(query = {}, user) {
-  const { Lead } = getModels();
+  const { Lead, LeadFollowUp } = getModels();
   const q = await buildLeadReportFilter(query, user);
 
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+      .formatToParts(now)
+      .map((p) => [p.type, p.value])
+  );
+  const [y, m, d] = [Number(parts.year), Number(parts.month), Number(parts.day)];
+  const startOfToday = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+  const endOfToday = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
 
   const allLeads = await Lead.find(q)
-    .select('status estimated_value products.quantity next_follow_up_at lead_no company_name name')
+    .select('status estimated_value products.quantity next_follow_up_at lead_no company_name name department departments assigned_to')
+    .populate('assigned_to', 'department')
     .lean();
 
   let totalLeads = allLeads.length;
@@ -228,6 +240,8 @@ async function getDashboardStats(query = {}, user) {
   let totalWonValue = 0;
   let totalPipelineQuantity = 0;
   let totalWonQuantity = 0;
+  let sharedDepartmentLeads = 0;
+  const deptMap = new Map();
 
   for (const lead of allLeads) {
     const st = lead.status;
@@ -236,6 +250,31 @@ async function getDashboardStats(query = {}, user) {
       ? lead.products.reduce((acc, p) => acc + (Number(p.quantity) || 0), 0)
       : 0;
 
+    const deptCandidates =
+      Array.isArray(lead.departments) && lead.departments.length > 0
+        ? lead.departments.map((d) => String(d || '').trim()).filter(Boolean)
+        : lead.department && String(lead.department).trim()
+        ? [String(lead.department).trim()]
+        : lead.assigned_to && typeof lead.assigned_to === 'object' && lead.assigned_to.department
+        ? [String(lead.assigned_to.department).trim()]
+        : ['Unassigned'];
+
+    const uniqueDepts = Array.from(new Set(deptCandidates.length ? deptCandidates : ['Unassigned']));
+    if (uniqueDepts.length > 1) {
+      sharedDepartmentLeads += 1;
+    }
+    for (const deptName of uniqueDepts) {
+      if (!deptMap.has(deptName)) {
+        deptMap.set(deptName, { department: deptName, count: 0, value: 0, won_count: 0 });
+      }
+      const entry = deptMap.get(deptName);
+      entry.count += 1;
+      entry.value += estVal;
+      if (['won', 'converted'].includes(st)) {
+        entry.won_count += 1;
+      }
+    }
+
     if (st === 'new') newLeads++;
     else if (st === 'assigned') assignedLeads++;
     else if (st === 'follow_up') followUpLeads++;
@@ -243,15 +282,6 @@ async function getDashboardStats(query = {}, user) {
     else if (st === 'won') wonLeads++;
     else if (st === 'lost') lostLeads++;
     else if (st === 'converted') convertedLeads++;
-
-    if (lead.next_follow_up_at) {
-      const followUpDate = new Date(lead.next_follow_up_at);
-      if (followUpDate >= startOfToday && followUpDate <= endOfToday) {
-        followUpsToday++;
-      } else if (followUpDate < startOfToday && !['won', 'lost', 'converted'].includes(st)) {
-        overdueFollowUps++;
-      }
-    }
 
     if (['new', 'assigned', 'follow_up', 'quotation'].includes(st)) {
       totalPipelineValue += estVal;
@@ -262,19 +292,50 @@ async function getDashboardStats(query = {}, user) {
     }
   }
 
+  const activeLeadIds = allLeads
+    .filter((l) => !['won', 'lost', 'converted'].includes(l.status))
+    .map((l) => l._id);
+
+  if (activeLeadIds.length > 0) {
+    const pendingFollowUps = await LeadFollowUp.find({
+      deletedAt: null,
+      status: 'pending',
+      quotation: null,
+      lead: { $in: activeLeadIds },
+      follow_up_date: { $lte: endOfToday },
+    })
+      .select('follow_up_date')
+      .lean();
+
+    for (const fu of pendingFollowUps) {
+      const followUpDate = new Date(fu.follow_up_date);
+      if (followUpDate < startOfToday) {
+        overdueFollowUps++;
+      } else if (followUpDate <= endOfToday) {
+        followUpsToday++;
+      }
+    }
+  }
+
   const qualifiedLeads = quotationLeads + wonLeads + convertedLeads;
-  const totalDecided = wonLeads + convertedLeads + lostLeads;
-  const winRate = totalDecided > 0
-    ? Math.round(((wonLeads + convertedLeads) / totalDecided) * 1000) / 10
+  const winRate = totalLeads > 0
+    ? Math.round(((wonLeads + convertedLeads) / totalLeads) * 1000) / 10
     : 0;
   const conversionRate = totalLeads > 0
-    ? Math.round(((wonLeads + convertedLeads) / totalLeads) * 1000) / 10
+    ? Math.round((convertedLeads / totalLeads) * 1000) / 10
     : 0;
   const avgDealSize = (wonLeads + convertedLeads) > 0
     ? Math.round(totalWonValue / (wonLeads + convertedLeads))
     : totalLeads > 0
     ? Math.round((totalPipelineValue + totalWonValue) / totalLeads)
     : 0;
+
+  const departmentBreakdown = Array.from(deptMap.values())
+    .sort((a, b) => b.count - a.count)
+    .map((d) => ({
+      ...d,
+      percentage: totalLeads > 0 ? Math.round((d.count / totalLeads) * 1000) / 10 : 0,
+    }));
 
   return {
     totalLeads,
@@ -320,6 +381,8 @@ async function getDashboardStats(query = {}, user) {
       converted: { count: convertedLeads },
       lost: { count: lostLeads },
     },
+    department_breakdown: departmentBreakdown,
+    shared_department_leads: sharedDepartmentLeads,
   };
 }
 
@@ -338,8 +401,7 @@ async function getSalesFunnel(query = {}, user) {
     { key: 'assigned', label: 'Sales Assigned', statuses: ['assigned'] },
     { key: 'follow_up', label: 'Active Follow-Up', statuses: ['follow_up'] },
     { key: 'quotation', label: 'Quotation Submitted', statuses: ['quotation'] },
-    { key: 'won', label: 'Deal Won', statuses: ['won'] },
-    { key: 'converted', label: 'Converted to Account', statuses: ['converted'] },
+    { key: 'won_converted', label: 'Won / Converted', statuses: ['won', 'converted'] },
   ];
 
   const stages = stageDefs.map((def) => {
@@ -464,80 +526,70 @@ async function getSalesPerformance(query = {}, user) {
 
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const primaryOnly = String(query.primary_only || '').toLowerCase() === 'true';
 
-  const performance = assignees.map((su) => {
-    const uidStr = String(su._id);
-    const isExecutiveSelf = !isLeadAdmin(user) && !isLeadManager(user) && !isLeadCoordinator(user) && uidStr === String(user._id);
-    const userLeads = leads.filter((l) => {
-      if (leadAssignedToUser(l, uidStr)) return true;
-      if (isExecutiveSelf) {
-        const creatorId = typeof l.created_by === 'object' ? String(l.created_by?._id || l.created_by) : String(l.created_by);
-        if (creatorId === uidStr) return true;
-      }
-      return false;
-    });
+  const getPrimaryAssigneeId = (lead) => {
+    if (!lead || !lead.assigned_to) return null;
+    return String(
+      typeof lead.assigned_to === 'object'
+        ? lead.assigned_to._id || lead.assigned_to
+        : lead.assigned_to
+    );
+  };
+
+  if (primaryOnly && (!assigneeId || assigneeId === 'unassigned')) {
+    const existingIds = new Set(assignees.map((su) => String(su._id)));
+    const missingPrimaryIds = Array.from(
+      new Set(leads.map(getPrimaryAssigneeId).filter((pid) => pid && !existingIds.has(pid)))
+    );
+    if (missingPrimaryIds.length > 0) {
+      const extraUsers = await User.find({ _id: { $in: missingPrimaryIds.map(toObjectId).filter(Boolean) } })
+        .select('name email department portals portal_access')
+        .lean();
+      assignees = [...assignees, ...extraUsers];
+    }
+  }
+
+  const sumProductQty = (list) =>
+    list.reduce(
+      (sum, l) =>
+        sum +
+        (Array.isArray(l.products)
+          ? l.products.reduce((acc, p) => acc + (Number(p.quantity) || 0), 0)
+          : 0),
+      0
+    );
+
+  const buildPerformanceRow = (meta, userLeads) => {
+    const uidStr = meta.user_id ? String(meta.user_id) : null;
     const totalLeads = userLeads.length;
+    const inProgressList = userLeads.filter((l) =>
+      ['new', 'assigned', 'follow_up', 'quotation'].includes(l.status)
+    );
+    const wonList = userLeads.filter((l) => ['won', 'converted'].includes(l.status));
+    const lostList = userLeads.filter((l) => l.status === 'lost');
 
+    const inProgressLeads = inProgressList.length;
     const qualifiedLeads = userLeads.filter((l) =>
       ['quotation', 'won', 'converted'].includes(l.status)
     ).length;
-
     const quotations = userLeads.filter((l) => l.status === 'quotation').length;
-    const wonLeads = userLeads.filter((l) => ['won', 'converted'].includes(l.status)).length;
-    const lostLeads = userLeads.filter((l) => l.status === 'lost').length;
+    const wonLeads = wonList.length;
+    const lostLeads = lostList.length;
 
     const decided = wonLeads + lostLeads;
     const winRate = decided > 0 ? Number(((wonLeads / decided) * 100).toFixed(1)) : 0;
     const conversionRate = totalLeads > 0 ? Number(((wonLeads / totalLeads) * 100).toFixed(1)) : 0;
 
-    const pipelineQty = userLeads
-      .filter((l) =>
-        ['new', 'assigned', 'follow_up', 'quotation'].includes(l.status)
-      )
-      .reduce(
-        (sum, l) =>
-          sum +
-          (Array.isArray(l.products)
-            ? l.products.reduce((acc, p) => acc + (Number(p.quantity) || 0), 0)
-            : 0),
-        0
-      );
+    const pipelineQty = sumProductQty(inProgressList);
+    const wonQty = sumProductQty(wonList);
+    const lostQty = sumProductQty(lostList);
 
-    const wonQty = userLeads
-      .filter((l) => ['won', 'converted'].includes(l.status))
-      .reduce(
-        (sum, l) =>
-          sum +
-          (Array.isArray(l.products)
-            ? l.products.reduce((acc, p) => acc + (Number(p.quantity) || 0), 0)
-            : 0),
-        0
-      );
-
-    const lostQty = userLeads
-      .filter((l) => l.status === 'lost')
-      .reduce(
-        (sum, l) =>
-          sum +
-          (Array.isArray(l.products)
-            ? l.products.reduce((acc, p) => acc + (Number(p.quantity) || 0), 0)
-            : 0),
-        0
-      );
-
-    const pipelineValue = userLeads
-      .filter((l) =>
-        ['new', 'assigned', 'follow_up', 'quotation'].includes(l.status)
-      )
-      .reduce((sum, l) => sum + (Number(l.estimated_value) || 0), 0);
-
-    const wonValue = userLeads
-      .filter((l) => ['won', 'converted'].includes(l.status))
-      .reduce((sum, l) => sum + (Number(l.estimated_value) || 0), 0);
-
+    const pipelineValue = inProgressList.reduce((sum, l) => sum + (Number(l.estimated_value) || 0), 0);
+    const wonValue = wonList.reduce((sum, l) => sum + (Number(l.estimated_value) || 0), 0);
     const avgLeadValue = totalLeads > 0 ? Math.round((pipelineValue + wonValue) / totalLeads) : 0;
 
-    const userFollowUps = followUps.filter((f) => String(f.created_by) === uidStr);
+    const userFollowUps = uidStr ? followUps.filter((f) => String(f.created_by) === uidStr) : [];
     const completedFollowups = userFollowUps.filter((f) => f.status === 'completed').length;
     const overdueFollowups = userLeads.filter(
       (l) =>
@@ -547,11 +599,12 @@ async function getSalesPerformance(query = {}, user) {
     ).length;
 
     return {
-      user_id: su._id,
-      name: su.name,
-      email: su.email,
-      department: su.department,
+      user_id: meta.user_id,
+      name: meta.name,
+      email: meta.email,
+      department: meta.department,
       total_leads: totalLeads,
+      in_progress_leads: inProgressLeads,
       qualified_leads: qualifiedLeads,
       quotations,
       won_leads: wonLeads,
@@ -570,7 +623,46 @@ async function getSalesPerformance(query = {}, user) {
       completed_followups: completedFollowups,
       overdue_followups: overdueFollowups,
     };
+  };
+
+  const performance = assignees.map((su) => {
+    const uidStr = String(su._id);
+    const isExecutiveSelf =
+      !isLeadAdmin(user) &&
+      !isLeadManager(user) &&
+      !isLeadCoordinator(user) &&
+      uidStr === String(user._id);
+
+    const userLeads = leads.filter((l) => {
+      if (primaryOnly) {
+        return getPrimaryAssigneeId(l) === uidStr;
+      }
+      if (leadAssignedToUser(l, uidStr)) return true;
+      if (isExecutiveSelf) {
+        const creatorId =
+          typeof l.created_by === 'object' ? String(l.created_by?._id || l.created_by) : String(l.created_by);
+        if (creatorId === uidStr) return true;
+      }
+      return false;
+    });
+
+    return buildPerformanceRow(
+      { user_id: su._id, name: su.name, email: su.email, department: su.department },
+      userLeads
+    );
   });
+
+  if (primaryOnly && (!assigneeId || assigneeId === 'unassigned')) {
+    const unassignedLeads = leads.filter((l) => !getPrimaryAssigneeId(l));
+    if (unassignedLeads.length > 0) {
+      performance.push(
+        buildPerformanceRow(
+          { user_id: 'unassigned', name: 'Unassigned', email: '', department: '' },
+          unassignedLeads
+        )
+      );
+    }
+  }
 
   performance.sort((a, b) => b.won_value - a.won_value || b.total_leads - a.total_leads);
   return performance;
@@ -584,7 +676,8 @@ async function getLeadMonthlyTrends(query = {}, user) {
   const filter = await buildLeadReportFilter(query, user);
 
   const leads = await Lead.find(filter)
-    .select('createdAt status estimated_value products')
+    .select('createdAt status estimated_value products department departments assigned_to')
+    .populate('assigned_to', 'department')
     .sort({ createdAt: 1 })
     .lean();
 
@@ -601,6 +694,7 @@ async function getLeadMonthlyTrends(query = {}, user) {
         period_label: label,
         total_leads: 0,
         pipeline_value: 0,
+        in_process_count: 0,
         won_count: 0,
         won_value: 0,
         converted_count: 0,
@@ -608,6 +702,7 @@ async function getLeadMonthlyTrends(query = {}, user) {
         lost_count: 0,
         lost_value: 0,
         quotation_count: 0,
+        department_counts: {},
       });
     }
 
@@ -617,6 +712,20 @@ async function getLeadMonthlyTrends(query = {}, user) {
 
     m.total_leads += 1;
     m.pipeline_value += estVal;
+
+    const deptCandidates =
+      Array.isArray(l.departments) && l.departments.length > 0
+        ? l.departments.map((dep) => String(dep || '').trim()).filter(Boolean)
+        : l.department && String(l.department).trim()
+        ? [String(l.department).trim()]
+        : l.assigned_to && typeof l.assigned_to === 'object' && l.assigned_to.department
+        ? [String(l.assigned_to.department).trim()]
+        : ['Unassigned'];
+
+    const uniqueDepts = Array.from(new Set(deptCandidates.length ? deptCandidates : ['Unassigned']));
+    for (const deptName of uniqueDepts) {
+      m.department_counts[deptName] = (m.department_counts[deptName] || 0) + 1;
+    }
 
     if (st === 'won' || st === 'converted') {
       m.won_count += 1;
@@ -628,8 +737,11 @@ async function getLeadMonthlyTrends(query = {}, user) {
     } else if (st === 'lost') {
       m.lost_count += 1;
       m.lost_value += estVal;
-    } else if (st === 'quotation') {
-      m.quotation_count += 1;
+    } else {
+      m.in_process_count += 1;
+      if (st === 'quotation') {
+        m.quotation_count += 1;
+      }
     }
   }
 

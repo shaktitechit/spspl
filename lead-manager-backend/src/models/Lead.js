@@ -8,8 +8,8 @@ const leadProductItemSchema = new mongoose.Schema(
   {
     product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
     product_name: { type: String, required: true, trim: true },
-    quantity: { type: Number, default: 1, min: 1 },
-    target_price: { type: Number, default: 0, min: 0 },
+    quantity: { type: Number, default: 1 },
+    target_price: { type: Number, default: 0 },
     unit: { type: String, default: "pcs" },
     remarks: String,
   },
@@ -102,7 +102,7 @@ const leadSchema = new mongoose.Schema(
     billing_address: leadAddressSchema,
 
     requirement: { type: String, trim: true },
-    estimated_value: { type: Number, default: 0, min: 0, index: true },
+    estimated_value: { type: Number, default: 0, index: true },
     expected_closing_date: { type: Date, index: true },
 
     source: { type: String, required: true, trim: true, index: true },

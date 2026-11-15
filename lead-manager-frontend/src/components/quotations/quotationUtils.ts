@@ -65,6 +65,7 @@ export type QuotationLike = {
   _id?: string;
   status?: string;
   approval_status?: string;
+  lead?: string | { _id?: string; status?: string } | null;
   signatory_user?: string | QuotationUserRef | null;
   signatory_email?: string;
   signatory_name?: string;
@@ -75,6 +76,13 @@ export type QuotationLike = {
   sales_person_name?: string;
   sales_person_phone?: string;
   sales_person_designation?: string;
+  secondary_sales_persons?: Array<{
+    user?: string | QuotationUserRef | null;
+    email?: string;
+    name?: string;
+    phone?: string;
+    designation?: string;
+  }>;
 };
 
 import { getLeadManagerPortalRole } from "@/components/leads/leadUtils";
@@ -272,17 +280,39 @@ export function isQuotationSalesRepresentative(
 ): boolean {
   if (!user || !quotation) return false;
   const userId = user._id || (user as any).id;
+  const userEmail = user.email?.toLowerCase().trim();
+
   const sp = quotation.sales_person_user;
   const spId =
     sp && typeof sp === "object" ? sp._id || (sp as any).id : (sp as string | undefined);
   if (spId && userId && String(spId) === String(userId)) return true;
   if (
     quotation.sales_person_email &&
-    user.email &&
-    quotation.sales_person_email.toLowerCase().trim() === user.email.toLowerCase().trim()
+    userEmail &&
+    quotation.sales_person_email.toLowerCase().trim() === userEmail
   ) {
     return true;
   }
+
+  if (Array.isArray(quotation.secondary_sales_persons)) {
+    const matchesSecondary = quotation.secondary_sales_persons.some((sec) => {
+      const secUser = sec?.user;
+      const secId =
+        secUser && typeof secUser === "object"
+          ? secUser._id || (secUser as any).id
+          : (secUser as string | undefined);
+      if (secId && userId && String(secId) === String(userId)) return true;
+      const secEmail =
+        sec?.email ||
+        (secUser && typeof secUser === "object" ? secUser.email : undefined);
+      if (secEmail && userEmail && secEmail.toLowerCase().trim() === userEmail) {
+        return true;
+      }
+      return false;
+    });
+    if (matchesSecondary) return true;
+  }
+
   return false;
 }
 
@@ -359,12 +389,27 @@ export function isQuotationRosterVisible(
   );
 }
 
+export function isWonOrConvertedQuotationOrLead(
+  quotation?: QuotationLike | null
+): boolean {
+  if (!quotation) return false;
+  if (quotation.status === "accepted" || quotation.status === "converted") {
+    return true;
+  }
+  const leadStatus =
+    typeof quotation.lead === "object" && quotation.lead !== null
+      ? quotation.lead.status
+      : undefined;
+  return leadStatus === "won" || leadStatus === "converted";
+}
+
 export function isQuotationExpired(
   quotation?: (QuotationLike & { valid_until?: string | Date }) | null
 ): boolean {
   if (!quotation) return false;
+  if (isWonOrConvertedQuotationOrLead(quotation)) return false;
   if (quotation.status === "expired") return true;
-  if (quotation.status === "converted" || quotation.status === "rejected") return false;
+  if (quotation.status === "rejected") return false;
   if (!quotation.valid_until) return false;
 
   const validUntilDate = new Date(quotation.valid_until);
@@ -379,8 +424,9 @@ export function isQuotationExpiringSoon(
   withinDays = 2
 ): boolean {
   if (!quotation) return false;
+  if (isWonOrConvertedQuotationOrLead(quotation)) return false;
   if (isQuotationExpired(quotation)) return false;
-  if (quotation.status === "converted" || quotation.status === "rejected" || quotation.status === "draft") return false;
+  if (quotation.status === "rejected" || quotation.status === "draft") return false;
   if (!quotation.valid_until) return false;
 
   const validUntilDate = new Date(quotation.valid_until);
@@ -402,7 +448,17 @@ export function getQuotationExpiryInfo(
   label: string;
   badgeClass: string;
 } {
-  if (!quotation || !quotation.valid_until) {
+  if (!quotation || isWonOrConvertedQuotationOrLead(quotation)) {
+    return {
+      isExpired: false,
+      isExpiringSoon: false,
+      daysRemaining: 999,
+      label: quotation && isWonOrConvertedQuotationOrLead(quotation) ? "Won / Converted" : "No validity date",
+      badgeClass: "",
+    };
+  }
+
+  if (!quotation.valid_until) {
     return {
       isExpired: false,
       isExpiringSoon: false,
@@ -424,10 +480,12 @@ export function getQuotationExpiryInfo(
   }
 
   const now = new Date();
-  const isExpired = quotation.status === "expired" || (validUntilDate.getTime() < now.getTime() && quotation.status !== "converted" && quotation.status !== "rejected");
+  const isExpired =
+    quotation.status === "expired" ||
+    (validUntilDate.getTime() < now.getTime() && quotation.status !== "rejected");
   const diffMs = validUntilDate.getTime() - now.getTime();
   const daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  const isExpiringSoon = !isExpired && quotation.status !== "converted" && quotation.status !== "rejected" && daysRemaining <= 2 && daysRemaining >= 0;
+  const isExpiringSoon = !isExpired && quotation.status !== "rejected" && daysRemaining <= 2 && daysRemaining >= 0;
 
   if (isExpired) {
     return {

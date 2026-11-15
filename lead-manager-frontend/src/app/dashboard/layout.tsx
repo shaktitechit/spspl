@@ -8,7 +8,7 @@ import { logoutAndRedirect, readSessionFromStorage } from "@/utils/authStorage";
 import { useTheme } from "@/hooks/useTheme";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
-import { UrgentFollowUpBanner } from "@/components/leads/UrgentFollowUpBanner";
+import { UrgentFollowUpBanner } from "@/components/leads/shared/UrgentFollowUpBanner";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -144,7 +144,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <UrgentFollowUpBanner portalHome="/dashboard" />
 
         <main className="flex-1 overflow-y-auto scroll-smooth">
-          <div className="mx-auto w-full max-w-[1720px] p-4 sm:p-6 lg:p-8 space-y-6">
+          <div className="mx-auto w-full max-w-[1720px] p-3 sm:p-4 lg:p-5 space-y-3.5">
             {children}
           </div>
         </main>

@@ -152,6 +152,12 @@ export type LeadRecord = {
   last_contacted_at?: string;
   next_follow_up_at?: string;
   last_activity_at?: string;
+  last_action?: {
+    action?: string;
+    remarks?: string;
+    timestamp?: string;
+    by_user?: { _id: string; name: string; email?: string } | null;
+  } | null;
   created_by?: { _id: string; name: string; email?: string; department?: string } | string | null;
   createdAt?: string;
   updatedAt?: string;
@@ -203,6 +209,14 @@ export type LeadFollowUpRecord = {
     created_by?: { _id: string; name: string } | string;
     party_id?: { _id?: string; party_name?: string; legal_name?: string };
     contacts?: Array<{ name?: string; phone?: string; email?: string; designation?: string }>;
+    requirement?: string;
+    notes?: string;
+    products?: Array<{ product_name?: string; quantity?: number }>;
+    last_action?: {
+      remarks?: string;
+      timestamp?: string;
+      by_user?: { _id?: string; name?: string } | null;
+    } | null;
   } | string | null;
   quotation?: {
     _id: string;
@@ -284,6 +298,14 @@ export type DuplicateCheckResult = {
   }>;
 };
 
+export type LeadDepartmentBreakdown = {
+  department: string;
+  count: number;
+  value: number;
+  won_count: number;
+  percentage: number;
+};
+
 export type LeadDashboardStats = {
   totalLeads: number;
   total_leads?: number;
@@ -321,6 +343,8 @@ export type LeadDashboardStats = {
     value: number;
     quantity?: number;
   };
+  department_breakdown?: LeadDepartmentBreakdown[];
+  shared_department_leads?: number;
 };
 
 export type LeadFunnelStage = {
@@ -338,6 +362,7 @@ export type LeadSalesPerformance = {
   email: string;
   department?: string;
   total_leads: number;
+  in_progress_leads?: number;
   qualified_leads: number;
   quotations: number;
   won_leads: number;
@@ -368,6 +393,7 @@ export type LeadReportQueryParams = {
   assigned_to?: string;
   sales_person?: string;
   status?: string;
+  primary_only?: boolean | string;
 };
 
 export type LeadMonthlyTrend = {
@@ -375,6 +401,7 @@ export type LeadMonthlyTrend = {
   period_label: string;
   total_leads: number;
   pipeline_value: number;
+  in_process_count?: number;
   won_count: number;
   won_value: number;
   converted_count: number;
@@ -382,6 +409,7 @@ export type LeadMonthlyTrend = {
   lost_count: number;
   lost_value: number;
   quotation_count: number;
+  department_counts?: Record<string, number>;
 };
 
 export type LeadProductPerformance = {
@@ -400,6 +428,7 @@ export type LeadProductPerformance = {
 export type LeadSourcePerformance = {
   source: string;
   total_leads: number;
+  in_progress_leads?: number;
   qualified_leads: number;
   won_leads: number;
   lost_leads: number;
@@ -523,17 +552,24 @@ export type ListLeadsQueryArgs = {
   priority?: string;
   source?: string;
   assigned_to?: string;
+  secondary_assignees?: string;
   assigned_dept?: string;
   scope?: string;
   city?: string;
   state?: string;
   department?: string;
   created_by?: string;
+  contact_org?: string;
+  products?: string;
+  min_qty?: string | number;
+  max_qty?: string | number;
+  follow_up_from?: string;
+  follow_up_to?: string;
   from_date?: string;
   to_date?: string;
   follow_up_filter?: "today" | "overdue" | "upcoming";
-  min_value?: number;
-  max_value?: number;
+  min_value?: string | number;
+  max_value?: string | number;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
 };
@@ -878,12 +914,15 @@ export const leadsApi = medicaApi.injectEndpoints({
         followUpCount: number;
         skipped?: number;
       },
-      { force?: boolean } | void
+      { force?: boolean; scope?: "organization" | "team" | "mine" } | void
     >({
       query: (args) => ({
-        url: "/leads/follow-ups/reminders/today",
+        url: "/auto-emails/reminders/today",
         method: "POST",
-        params: args?.force ? { force: "1" } : undefined,
+        params: {
+          ...(args?.force ? { force: "1" } : {}),
+          ...(args?.scope ? { scope: args.scope } : {}),
+        },
       }),
       transformResponse: (
         res: ApiEnvelope<{
@@ -906,12 +945,15 @@ export const leadsApi = medicaApi.injectEndpoints({
         followUpCount: number;
         skipped?: number;
       },
-      { force?: boolean } | void
+      { force?: boolean; scope?: "organization" | "team" | "mine" } | void
     >({
       query: (args) => ({
-        url: "/leads/follow-ups/reminders/overdue",
+        url: "/auto-emails/reminders/overdue",
         method: "POST",
-        params: args?.force ? { force: "1" } : undefined,
+        params: {
+          ...(args?.force ? { force: "1" } : {}),
+          ...(args?.scope ? { scope: args.scope } : {}),
+        },
       }),
       transformResponse: (
         res: ApiEnvelope<{
@@ -998,7 +1040,10 @@ export const leadsApi = medicaApi.injectEndpoints({
       providesTags: [{ type: "Lead" as const, id: "PRODUCT_BREAKDOWN" }],
     }),
 
-    getUrgentFollowUpsSummary: build.query<UrgentFollowUpsSummary, { tz?: string } | void>({
+    getUrgentFollowUpsSummary: build.query<
+      UrgentFollowUpsSummary,
+      { tz?: string; scope?: "organization" | "team" | "mine" } | void
+    >({
       query: (params) => ({
         url: "/leads/follow-ups/urgent-summary",
         params: params || undefined,

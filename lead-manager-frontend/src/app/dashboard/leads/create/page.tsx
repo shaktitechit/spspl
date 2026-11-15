@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Suspense } from "react";
-import { LeadFormPage } from "@/components/leads/LeadFormPage";
+import { LeadFormPage } from "@/components/leads/shared/LeadFormPage";
 
 export default function CreateLeadPage() {
   return (

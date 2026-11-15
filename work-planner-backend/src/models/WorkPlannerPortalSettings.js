@@ -94,12 +94,12 @@ const workPlannerPortalSettingsSchema = new mongoose.Schema(
     blockPlanningIfSeniorObjectionsUnresolved: { type: Boolean, default: true },
 
     // 4. Expense Claims & Allowance Limits
-    dailyOutstationAllowanceLimit: { type: Number, default: 800 },
-    fuelRateTwoWheelerPerKm: { type: Number, default: 4.5 },
-    fuelRateFourWheelerPerKm: { type: Number, default: 9.0 },
+    dailyOutstationAllowanceLimit: { type: Number, default: 600 },
+    fuelRateTwoWheelerPerKm: { type: Number, default: 3.5 },
+    fuelRateFourWheelerPerKm: { type: Number, default: 6.0 },
     receiptRequiredThresholdAmount: { type: Number, default: 200 },
-    expenseSubmissionWindowDays: { type: Number, default: 7 },
-    twoLevelApprovalRequired: { type: Boolean, default: true },
+    expenseSubmissionWindowDays: { type: Number, default: 3 },
+    twoLevelApprovalRequired: { type: Boolean, default: false },
     blockExpenseWithoutApprovedPlan: { type: Boolean, default: false },
 
     // 5. Field Visits & GPS Geofencing Policies

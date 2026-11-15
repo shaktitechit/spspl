@@ -31,7 +31,7 @@ import {
 import { toast } from "@/lib/toast";
 import { useAppSelector } from "@/store/hooks";
 import { isAdmin as checkIsAdmin, isManager as checkIsManager, readSessionFromStorage } from "@/utils/authStorage";
-import { RichTextDisplay } from "@/components/quotations/RichTextDisplay";
+import { RichTextDisplay } from "@/components/quotations/shared/RichTextDisplay";
 
 export default function TermsListingRoutePage() {
   const portalHome = "/dashboard";

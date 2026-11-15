@@ -122,6 +122,26 @@ function registerModels() {
     mongoose.model('LeadSource', leadSourceSchema);
   }
 
+  // LeadDepartment schema
+  if (!mongoose.models.LeadDepartment) {
+    const leadDepartmentSchema = new mongoose.Schema(
+      {
+        name: { type: String, required: true, unique: true, trim: true, index: true },
+        code: { type: String, trim: true, lowercase: true },
+        description: { type: String, trim: true },
+        sort_order: { type: Number, default: 100, index: true },
+        is_active: { type: Boolean, default: true, index: true },
+        is_system: { type: Boolean, default: false },
+        created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        deletedAt: { type: Date, default: null, index: true },
+      },
+      { timestamps: true }
+    );
+    leadDepartmentSchema.plugin(softDeletePlugin);
+    mongoose.model('LeadDepartment', leadDepartmentSchema);
+  }
+
   // LeadLostReason schema
   if (!mongoose.models.LeadLostReason) {
     const leadLostReasonSchema = new mongoose.Schema(
@@ -147,8 +167,8 @@ function registerModels() {
       {
         product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
         product_name: { type: String, required: true, trim: true },
-        quantity: { type: Number, default: 1, min: 1 },
-        target_price: { type: Number, default: 0, min: 0 },
+        quantity: { type: Number, default: 1 },
+        target_price: { type: Number, default: 0 },
         unit: { type: String, default: 'pcs' },
         remarks: String,
       },
@@ -194,7 +214,7 @@ function registerModels() {
         },
 
         requirement: { type: String, trim: true },
-        estimated_value: { type: Number, default: 0, min: 0, index: true },
+        estimated_value: { type: Number, default: 0, index: true },
         expected_closing_date: { type: Date, index: true },
 
         source: { type: String, required: true, trim: true, index: true },
@@ -444,6 +464,15 @@ function registerModels() {
         sales_person_email: { type: String, trim: true, default: '' },
         sales_person_designation: { type: String, trim: true, default: 'Sales Executive' },
         sales_person_user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+        secondary_sales_persons: [
+          {
+            user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+            name: { type: String, trim: true, default: '' },
+            phone: { type: String, trim: true, default: '' },
+            email: { type: String, trim: true, default: '' },
+            designation: { type: String, trim: true, default: 'Sales Executive' },
+          },
+        ],
         department: { type: String, trim: true, default: 'UPS/Batteries', index: true },
         departments: [{ type: String, trim: true }],
         approval_status: {
@@ -515,6 +544,7 @@ function registerModels() {
             sales_person_email: { type: String, default: '' },
             sales_person_designation: { type: String, default: '' },
             sales_person_user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+            secondary_sales_persons: { type: Array, default: [] },
             department: { type: String, default: '' },
             departments: [{ type: String }],
             status: { type: String, default: '' },
@@ -848,6 +878,7 @@ function registerModels() {
     FollowUpDigestLog: mongoose.model('FollowUpDigestLog'),
     LeadQuotation: mongoose.model('LeadQuotation'),
     LeadSource: mongoose.model('LeadSource'),
+    LeadDepartment: mongoose.model('LeadDepartment'),
     LeadLostReason: mongoose.model('LeadLostReason'),
     TermsAndConditions: mongoose.model('TermsAndConditions'),
     TermsText: mongoose.model('TermsText'),

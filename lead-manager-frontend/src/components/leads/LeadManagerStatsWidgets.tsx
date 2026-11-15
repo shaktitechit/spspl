@@ -31,9 +31,15 @@ import {
 import {
   useGetLeadDashboardStatsQuery,
   useGetLeadFollowUpCalendarQuery,
+  useListLeadsQuery,
+  type LeadDepartmentBreakdown,
   type LeadFollowUpRecord,
   type LeadFollowUpType,
+  type LeadReportQueryParams,
 } from "@/store/api";
+import { DepartmentBarChart } from "@/components/dashboard/DepartmentPieChart";
+import { LeadTrendsLineChart } from "@/components/dashboard/LeadTrendsLineChart";
+import { CommercialsQuotationsList } from "@/components/dashboard/CommercialsQuotationsList";
 import PeriodHeadingCaption from "@/components/portal/shared/dashboard/PeriodHeadingCaption";
 import {
   dashboardPeriodToStatsQuery,
@@ -57,6 +63,7 @@ type LeadManagerStatsWidgetsProps = {
   assigned_to?: string;
   isExecutive?: boolean;
   isTeamScope?: boolean;
+  reportQueryParams?: LeadReportQueryParams;
 } & DashboardPeriodQuery;
 
 type StatCard = {
@@ -95,6 +102,7 @@ export default function LeadManagerStatsWidgets({
   assigned_to,
   isExecutive = false,
   isTeamScope = false,
+  reportQueryParams,
   dateFilter,
   customDateFrom,
   customDateTo,
@@ -107,25 +115,102 @@ export default function LeadManagerStatsWidgets({
   const showQuotationsModule = canViewQuotations(authUser);
 
   const currentUserId = authUser?._id ? String(authUser._id) : undefined;
-  const effectiveAssignedTo = assigned_to || (isExecutive && currentUserId ? currentUserId : undefined);
+  const effectiveAssignedTo =
+    reportQueryParams?.assigned_to ||
+    assigned_to ||
+    (isExecutive && currentUserId ? currentUserId : undefined);
 
   const hasPeriod =
     dateFilter != null || selectedYears != null || selectedMonths != null;
+  const basePeriodQuery = useMemo(
+    () =>
+      dashboardPeriodToStatsQuery({
+        dateFilter,
+        customDateFrom,
+        customDateTo,
+        selectedYears,
+        selectedMonths,
+      }),
+    [dateFilter, customDateFrom, customDateTo, selectedYears, selectedMonths]
+  );
+
   const statsQuery = useMemo(() => {
-    const base = dashboardPeriodToStatsQuery({
-      dateFilter,
-      customDateFrom,
-      customDateTo,
-      selectedYears,
-      selectedMonths,
-    });
-    if (effectiveAssignedTo) {
-      return { ...base, assigned_to: effectiveAssignedTo };
-    }
-    return base;
-  }, [dateFilter, customDateFrom, customDateTo, selectedYears, selectedMonths, effectiveAssignedTo]);
+    return {
+      ...basePeriodQuery,
+      ...(reportQueryParams || {}),
+      ...(effectiveAssignedTo ? { assigned_to: effectiveAssignedTo } : {}),
+    };
+  }, [basePeriodQuery, reportQueryParams, effectiveAssignedTo]);
 
   const { data, isFetching } = useGetLeadDashboardStatsQuery(statsQuery);
+  const { data: leadsListData, isFetching: isLeadsListFetching } = useListLeadsQuery(
+    {
+      limit: 1000,
+      ...(effectiveAssignedTo ? { assigned_to: effectiveAssignedTo } : {}),
+      ...(basePeriodQuery.from_date || reportQueryParams?.startDate
+        ? { from_date: basePeriodQuery.from_date || reportQueryParams?.startDate }
+        : {}),
+      ...(basePeriodQuery.to_date || reportQueryParams?.endDate
+        ? { to_date: basePeriodQuery.to_date || reportQueryParams?.endDate }
+        : {}),
+    },
+    {
+      skip: Boolean(data?.department_breakdown?.length),
+    }
+  );
+
+  const { departmentBreakdown, sharedDepartmentLeads } = useMemo<{
+    departmentBreakdown: LeadDepartmentBreakdown[];
+    sharedDepartmentLeads: number;
+  }>(() => {
+    if (Array.isArray(data?.department_breakdown) && data.department_breakdown.length > 0) {
+      return {
+        departmentBreakdown: data.department_breakdown,
+        sharedDepartmentLeads: data.shared_department_leads ?? 0,
+      };
+    }
+    const items = leadsListData?.items;
+    if (!Array.isArray(items) || items.length === 0) {
+      return { departmentBreakdown: [], sharedDepartmentLeads: 0 };
+    }
+    let shared = 0;
+    const map = new Map<string, { department: string; count: number; value: number; won_count: number }>();
+    for (const lead of items) {
+      const deptCandidates: string[] =
+        Array.isArray(lead.departments) && lead.departments.length > 0
+          ? lead.departments.map((d: string) => String(d || "").trim()).filter(Boolean)
+          : lead.department && String(lead.department).trim()
+          ? [String(lead.department).trim()]
+          : lead.assigned_to && typeof lead.assigned_to === "object" && lead.assigned_to.department
+          ? [String(lead.assigned_to.department).trim()]
+          : ["Unassigned"];
+
+      const uniqueDepts = Array.from(new Set<string>(deptCandidates.length ? deptCandidates : ["Unassigned"]));
+      if (uniqueDepts.length > 1) {
+        shared += 1;
+      }
+      for (const dept of uniqueDepts) {
+        const existing = map.get(dept) || { department: dept, count: 0, value: 0, won_count: 0 };
+        existing.count += 1;
+        existing.value += Number(lead.estimated_value) || 0;
+        if (lead.status === "won" || lead.status === "converted") {
+          existing.won_count += 1;
+        }
+        map.set(dept, existing);
+      }
+    }
+    const grouped = Array.from(map.values()).filter((d) => d.count > 0);
+    const total = data?.totalLeads ?? items.length;
+    return {
+      departmentBreakdown: grouped
+        .sort((a, b) => b.count - a.count)
+        .map((d) => ({
+          ...d,
+          percentage: total > 0 ? Math.round((d.count / total) * 1000) / 10 : 0,
+        })),
+      sharedDepartmentLeads: shared,
+    };
+  }, [data?.department_breakdown, data?.shared_department_leads, data?.totalLeads, leadsListData?.items]);
 
   const todayYmd = useMemo(() => {
     const now = new Date();
@@ -135,13 +220,16 @@ export default function LeadManagerStatsWidgets({
     return `${y}-${m}-${d}`;
   }, []);
 
-  // Fetch today's follow-up schedule
+  // Fetch today's follow-up schedule (only for non-team/personal scope)
   const { data: followUpsData = [], isFetching: isFollowUpsFetching } =
-    useGetLeadFollowUpCalendarQuery({
-      from_date: todayYmd,
-      to_date: todayYmd,
-      ...(effectiveAssignedTo ? { assigned_to: effectiveAssignedTo } : {}),
-    });
+    useGetLeadFollowUpCalendarQuery(
+      {
+        from_date: todayYmd,
+        to_date: todayYmd,
+        ...(effectiveAssignedTo ? { assigned_to: effectiveAssignedTo } : {}),
+      },
+      { skip: isTeamScope }
+    );
 
   const followUps = useMemo(() => {
     if (!Array.isArray(followUpsData)) return [];
@@ -177,13 +265,12 @@ export default function LeadManagerStatsWidgets({
     return followUpsData;
   }, [followUpsData, isExecutive, currentUserId]);
 
-  const isTodayPeriod = !hasPeriod || dateFilter === "today";
   const overdueCount = data?.overdueFollowUps ?? 0;
 
   const cards: StatCard[] = [
     {
       key: "total",
-      label: isTodayPeriod ? "Today's Inquiries" : "Total Leads",
+      label: dateFilter === "today" ? "Today's Inquiries" : "Total Inquiries",
       value: data?.totalLeads ?? 0,
       href: `${portalHome}/leads`,
       accent: "bg-sky-500",
@@ -192,65 +279,29 @@ export default function LeadManagerStatsWidgets({
       Icon: Users,
     },
     {
-      key: "new",
-      label: "New Leads",
-      value: data?.newLeads ?? 0,
-      href: `${portalHome}/leads?status=new`,
-      accent: "bg-blue-500",
-      iconWrap: "bg-blue-50 dark:bg-blue-950/30",
-      iconTone: "text-blue-600 dark:text-blue-400",
-      Icon: UserCheck,
-    },
-    {
-      key: "assigned",
-      label: "Assigned Leads",
-      value: data?.assignedLeads ?? 0,
-      href: `${portalHome}/leads?status=assigned`,
-      accent: "bg-indigo-500",
-      iconWrap: "bg-indigo-50 dark:bg-indigo-950/30",
-      iconTone: "text-indigo-600 dark:text-indigo-400",
-      Icon: UserCheck,
-    },
-    {
-      key: "follow_up",
-      label: "Follow Up Leads",
-      value: data?.followUpLeads ?? 0,
-      href: `${portalHome}/leads?status=follow_up`,
+      key: "in_progress",
+      label: "In Progress Leads",
+      value:
+        (data?.newLeads ?? 0) +
+        (data?.assignedLeads ?? 0) +
+        (data?.followUpLeads ?? 0) +
+        (data?.quotationLeads ?? 0),
+      subValue: `${data?.newLeads ?? 0} new · ${data?.assignedLeads ?? 0} assigned · ${data?.followUpLeads ?? 0} follow-up · ${data?.quotationLeads ?? 0} quote`,
+      href: `${portalHome}/leads`,
       accent: "bg-amber-500",
       iconWrap: "bg-amber-50 dark:bg-amber-950/30",
       iconTone: "text-amber-600 dark:text-amber-400",
-      Icon: CheckCircle2,
+      Icon: Clock,
     },
     {
-      key: "quotation",
-      label: showQuotationsModule ? "Quotation Stage" : "Quotations",
-      value: data?.quotationLeads ?? 0,
-      href: showQuotationsModule
-        ? `${portalHome}/quotations`
-        : `${portalHome}/leads?status=quotation`,
-      accent: "bg-purple-500",
-      iconWrap: "bg-purple-50 dark:bg-purple-950/30",
-      iconTone: "text-purple-600 dark:text-purple-400",
-      Icon: FileText,
-    },
-    {
-      key: "won",
-      label: "Won Leads",
-      value: data?.wonLeads ?? 0,
+      key: "won_converted",
+      label: "Won & Converted Leads",
+      value: (data?.wonLeads ?? 0) + (data?.convertedLeads ?? 0),
+      subValue: `${data?.wonLeads ?? 0} won · ${data?.convertedLeads ?? 0} converted`,
       href: `${portalHome}/leads?status=won`,
       accent: "bg-emerald-500",
       iconWrap: "bg-emerald-50 dark:bg-emerald-950/30",
       iconTone: "text-emerald-600 dark:text-emerald-400",
-      Icon: Trophy,
-    },
-    {
-      key: "converted",
-      label: "Converted Leads",
-      value: data?.convertedLeads ?? 0,
-      href: `${portalHome}/leads?status=converted`,
-      accent: "bg-teal-500",
-      iconWrap: "bg-teal-50 dark:bg-teal-950/30",
-      iconTone: "text-teal-600 dark:text-teal-400",
       Icon: Trophy,
     },
     {
@@ -312,9 +363,9 @@ export default function LeadManagerStatsWidgets({
   ];
 
   return (
-    <div className="space-y-4 font-sans w-full">
+    <div className="space-y-2.5 font-sans w-full">
       {/* Header and Filter Info */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             {isExecutive ? "My leads & follow-ups" : isTeamScope ? "Team pipeline KPIs" : "Leads & inquiries"}
@@ -342,8 +393,8 @@ export default function LeadManagerStatsWidgets({
         </Link>
       </div>
 
-      {/* 8-Card Stat Grid */}
-      <div className={`grid grid-cols-2 sm:grid-cols-4 ${showPricing ? "lg:grid-cols-5" : "lg:grid-cols-8"} gap-3`}>
+      {/* Full-width KPI List (4 per row) */}
+      <div className="rounded-2xl border border-border bg-card shadow-2xs overflow-hidden grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
         {cards.map(
           ({
             key,
@@ -359,47 +410,84 @@ export default function LeadManagerStatsWidgets({
             <Link
               key={key}
               href={href}
-              className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border bg-card p-3.5 shadow-2xs transition-all hover:border-border/80 hover:bg-surface-muted/30 hover:shadow-xs"
+              className="group relative flex items-center justify-between gap-2 bg-card px-3 py-2 border-b border-r border-border/60 transition-colors hover:bg-surface-muted/40"
             >
               <div
-                className={`absolute inset-x-0 top-0 h-0.5 ${accent} transition-opacity opacity-70 group-hover:opacity-100`}
+                className={`absolute inset-y-0 left-0 w-1 ${accent} opacity-70 transition-opacity group-hover:opacity-100`}
               />
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-semibold text-muted-foreground line-clamp-1">
-                  {label}
-                </span>
+              <div className="flex items-center gap-2 min-w-0 pl-1">
                 <div
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-105 ${iconWrap}`}
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-transform group-hover:scale-105 ${iconWrap}`}
                 >
                   <Icon className={`h-3.5 w-3.5 ${iconTone}`} />
                 </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-foreground truncate">
+                    {label}
+                  </p>
+                  {subValue && (
+                    <p
+                      className={`text-[10px] font-medium truncate ${
+                        key === "followups" && overdueCount > 0
+                          ? "text-rose-600 dark:text-rose-400 font-semibold"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {subValue}
+                    </p>
+                  )}
+                </div>
               </div>
-              <div className="mt-2.5 flex flex-col">
-                <span
-                  className={`text-xl font-bold tracking-tight text-foreground ${
-                    isFetching ? "opacity-40" : ""
-                  }`}
-                >
-                  {value}
-                </span>
-                {subValue && (
-                  <span
-                    className={`text-[10px] font-medium mt-0.5 ${
-                      key === "followups" && overdueCount > 0
-                        ? "text-rose-600 dark:text-rose-400 font-semibold"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {subValue}
-                  </span>
-                )}
-              </div>
+              <span
+                className={`text-base font-bold tracking-tight text-foreground shrink-0 tabular-nums ${
+                  isFetching ? "opacity-40" : ""
+                }`}
+              >
+                {value}
+              </span>
             </Link>
           )
         )}
       </div>
 
-      {/* Today's Follow-up Schedule Table */}
+      {/* Below KPIs: Leads Linked by Department, Monthly Lead Trends & Commercials & Quotations */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
+        <div className={showQuotationsModule ? "lg:col-span-3" : "lg:col-span-5"}>
+          <DepartmentBarChart
+            data={departmentBreakdown}
+            totalLeads={data?.totalLeads ?? leadsListData?.total}
+            sharedLeadsCount={sharedDepartmentLeads}
+            isLoading={isFetching || isLeadsListFetching}
+            showPricing={showPricing}
+          />
+        </div>
+
+        <div className={showQuotationsModule ? "lg:col-span-5" : "lg:col-span-7"}>
+          <LeadTrendsLineChart
+            assigned_to={effectiveAssignedTo}
+            queryParams={reportQueryParams}
+          />
+        </div>
+
+        {showQuotationsModule && (
+          <div className="lg:col-span-4">
+            <CommercialsQuotationsList
+              portalHome={portalHome}
+              queryParams={
+                reportQueryParams || effectiveAssignedTo
+                  ? {
+                      ...(reportQueryParams || {}),
+                      ...(effectiveAssignedTo ? { assigned_to: effectiveAssignedTo } : {}),
+                    }
+                  : undefined
+              }
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Today's Follow-up Schedule Table (hidden for Organization & My Team variants) */}
+      {!isTeamScope && (
       <div className="rounded-2xl border border-border bg-card p-4 shadow-2xs">
         <div className="flex items-center justify-between border-b border-border/70 pb-3">
           <div className="flex items-center gap-2.5">
@@ -683,6 +771,7 @@ export default function LeadManagerStatsWidgets({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

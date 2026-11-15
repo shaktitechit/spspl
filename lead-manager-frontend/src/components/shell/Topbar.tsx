@@ -76,7 +76,7 @@ export function Topbar({
   return (
     <>
       <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b border-border/80 bg-card/85 backdrop-blur-md px-3 sm:px-6 transition-colors">
-        {/* Left Section: Mobile Nav Trigger & Dynamic Breadcrumbs */}
+        {/* Left Section: Mobile Nav Trigger, Dynamic Breadcrumbs & Greeting Segment */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
             type="button"
@@ -89,6 +89,37 @@ export function Topbar({
 
           <div className="min-w-0 flex items-center">
             <Breadcrumbs />
+          </div>
+
+          <div className="hidden lg:flex items-center gap-2 pl-3 border-l border-border/80 min-w-0">
+            <span className="text-xs font-semibold text-foreground truncate max-w-[220px]">
+              Welcome back,{" "}
+              <span className="text-primary">{user?.name || "User"}</span>
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide shrink-0 ${
+                adminRole
+                  ? "border-purple-500/20 bg-purple-500/10 text-purple-700 dark:text-purple-300"
+                  : managerRole
+                  ? "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                  : coordinatorRole
+                  ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300"
+                  : "border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-300"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  adminRole
+                    ? "bg-purple-500"
+                    : managerRole
+                    ? "bg-amber-500"
+                    : coordinatorRole
+                    ? "bg-indigo-500"
+                    : "bg-blue-500"
+                } animate-pulse`}
+              />
+              {userRoleBadge}
+            </span>
           </div>
         </div>
 

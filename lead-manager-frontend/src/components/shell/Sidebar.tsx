@@ -71,7 +71,11 @@ export function Sidebar({
   const isTeamManagerActive = pathname.startsWith("/dashboard/team-manager");
 
   const showLeadReports = isAdmin || isManager || isCoordinator || isExecutive;
-  const leadReportsLabel = isAdmin || isManager || isCoordinator ? "Team Reports" : "My Reports";
+  const leadReportsLabel = isAdmin
+    ? "Organization Report"
+    : isManager || isCoordinator
+    ? "Team Reports"
+    : "My Reports";
   const canAccessQuotes = isAdmin || isManager || isCoordinator || isExecutive;
   const canAccessCommercialMasters = isAdmin || isManager || isCoordinator;
 

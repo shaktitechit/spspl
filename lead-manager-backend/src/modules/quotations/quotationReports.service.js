@@ -135,7 +135,8 @@ async function getQuotationSummaryReport(query = {}, user) {
   const filter = await buildReportFilter(query, user);
 
   const quotes = await LeadQuotation.find(filter)
-    .select('quotation_no version status approval_status grand_total subtotal total_discount total_gst items valid_until quotation_date customer_name created_by conversion sales_person_user sales_person_name')
+    .select('quotation_no version status approval_status grand_total subtotal total_discount total_gst items valid_until quotation_date customer_name created_by conversion sales_person_user sales_person_name lead')
+    .populate('lead', 'status')
     .lean();
 
   let totalCount = quotes.length;
@@ -173,20 +174,29 @@ async function getQuotationSummaryReport(query = {}, user) {
     totalDiscountValue += disc;
     totalGrossValue += gTotal + disc;
 
-    if (statusSummary[st]) {
-      statusSummary[st].count += 1;
-      statusSummary[st].value += gTotal;
+    const leadStatus = q.lead && typeof q.lead === 'object' ? q.lead.status : null;
+    const isWonOrConvertedLead = leadStatus === 'won' || leadStatus === 'converted';
+    const effectiveStatus =
+      st === 'expired' && isWonOrConvertedLead
+        ? leadStatus === 'converted'
+          ? 'converted'
+          : 'accepted'
+        : st;
+
+    if (statusSummary[effectiveStatus]) {
+      statusSummary[effectiveStatus].count += 1;
+      statusSummary[effectiveStatus].value += gTotal;
     }
 
-    if (st === 'accepted') {
+    if (effectiveStatus === 'accepted') {
       totalWonCount += 1;
       totalWonValue += gTotal;
-    } else if (st === 'converted') {
+    } else if (effectiveStatus === 'converted') {
       totalWonCount += 1;
       totalWonValue += gTotal;
       totalConvertedCount += 1;
       totalConvertedValue += gTotal;
-    } else if (st === 'sent' || st === 'in_negotiation' || st === 'approved') {
+    } else if (effectiveStatus === 'sent' || effectiveStatus === 'in_negotiation' || effectiveStatus === 'approved') {
       activeNegotiationCount += 1;
       activeNegotiationValue += gTotal;
     }
@@ -252,6 +262,7 @@ async function getQuotationSalesPerformance(query = {}, user) {
   const filter = await buildReportFilter(query, user);
 
   const quotes = await LeadQuotation.find(filter)
+    .populate('lead', 'status')
     .populate('sales_person_user', 'name email department phone designation')
     .populate('created_by', 'name email department phone designation')
     .lean();
@@ -316,6 +327,7 @@ async function getQuotationSalesPerformance(query = {}, user) {
         rejected_value: 0,
         pending_count: 0,
         in_negotiation_count: 0,
+        pipeline_value: 0,
         win_rate: 0,
         avg_discount_percent: 0,
       });
@@ -325,30 +337,39 @@ async function getQuotationSalesPerformance(query = {}, user) {
     const gTotal = Number(q.grand_total) || 0;
     const disc = Number(q.total_discount) || 0;
     const st = q.status;
+    const leadStatus = q.lead && typeof q.lead === 'object' ? q.lead.status : null;
+    const isWonOrConvertedLead = leadStatus === 'won' || leadStatus === 'converted';
+    const effectiveStatus =
+      st === 'expired' && isWonOrConvertedLead
+        ? leadStatus === 'converted'
+          ? 'converted'
+          : 'accepted'
+        : st;
 
     rep.total_quotations += 1;
     rep.total_quoted_value += gTotal;
     rep.total_discount_value += disc;
     rep.total_gross_value += gTotal + disc;
 
-    if (st === 'accepted') {
+    if (effectiveStatus === 'accepted') {
       rep.won_count += 1;
       rep.won_value += gTotal;
-    } else if (st === 'converted') {
+    } else if (effectiveStatus === 'converted') {
       rep.won_count += 1;
       rep.won_value += gTotal;
       rep.converted_count += 1;
       rep.converted_value += gTotal;
-    } else if (st === 'expired') {
+    } else if (effectiveStatus === 'expired') {
       rep.expired_count += 1;
       rep.expired_value += gTotal;
-    } else if (st === 'rejected') {
+    } else if (effectiveStatus === 'rejected') {
       rep.rejected_count += 1;
       rep.rejected_value += gTotal;
-    } else if (st === 'in_negotiation' || st === 'sent' || st === 'approved') {
-      rep.in_negotiation_count += 1;
-    } else if (st === 'pending_approval' || q.approval_status === 'pending_approval') {
+    } else if (effectiveStatus === 'pending_approval' || q.approval_status === 'pending_approval') {
       rep.pending_count += 1;
+    } else if (['approved', 'sent', 'in_negotiation', 'on_hold'].includes(effectiveStatus)) {
+      rep.in_negotiation_count += 1;
+      rep.pipeline_value += gTotal;
     }
   }
 

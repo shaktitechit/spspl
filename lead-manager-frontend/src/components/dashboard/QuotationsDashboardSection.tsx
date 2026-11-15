@@ -34,7 +34,7 @@ import {
   canManageQuotations,
   canViewQuotations,
 } from "@/components/quotations/quotationUtils";
-import { QuotationFormModal } from "@/components/quotations/QuotationFormModal";
+import { QuotationFormModal } from "@/components/quotations/shared/modals/QuotationFormModal";
 import { useLeadManagerRole } from "@/hooks/useLeadManagerRole";
 import { readSessionFromStorage } from "@/utils/authStorage";
 
@@ -83,9 +83,9 @@ export function QuotationsDashboardSection({ portalHome = "/dashboard" }: Props)
   if (!canView) return null;
 
   return (
-    <section className="space-y-4 rounded-3xl border border-border bg-card p-5 sm:p-6 shadow-2xs transition-all">
+    <section className="space-y-3 rounded-2xl border border-border bg-card p-3.5 sm:p-4 shadow-2xs transition-all">
       {/* Section Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border/70">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-border/70">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-indigo-500/20 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shadow-2xs">
             <FileText className="h-5 w-5" />

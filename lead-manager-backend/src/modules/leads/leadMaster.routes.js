@@ -23,4 +23,10 @@ router.post('/lost-reasons', requireLeadManagerRole('admin'), controller.createL
 router.put('/lost-reasons/:id', requireLeadManagerRole('admin'), controller.updateLostReason);
 router.delete('/lost-reasons/:id', requireLeadManagerRole('admin'), controller.deleteLostReason);
 
+/* --- Lead Departments --- */
+router.get('/departments', controller.listDepartments);
+router.post('/departments', controller.createDepartment);
+router.put('/departments/:id', requireLeadManagerRole('admin'), controller.updateDepartment);
+router.delete('/departments/:id', requireLeadManagerRole('admin'), controller.deleteDepartment);
+
 module.exports = router;

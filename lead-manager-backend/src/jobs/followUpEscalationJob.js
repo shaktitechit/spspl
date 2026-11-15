@@ -107,20 +107,18 @@ async function runOverdueEscalationCheck(options = {}) {
     deletedAt: null,
     status: 'pending',
     follow_up_date: { $lt: startOfToday },
+    quotation: null,
+    lead: { $ne: null },
   })
     .populate({
       path: 'lead',
-      select: 'lead_no name company_name phone email status priority assigned_to requirement products party_id',
+      select: 'lead_no name company_name phone email status priority assigned_to assigned_users created_by requirement products party_id',
       populate: [
         { path: 'party_id', select: 'party_name' },
         { path: 'assigned_to', select: 'name email' },
+        { path: 'assigned_users', select: 'name email' },
+        { path: 'created_by', select: 'name email' },
       ],
-    })
-    .populate({
-      path: 'quotation',
-      select:
-        'quotation_no version grand_total status customer_name phone email created_by sales_person_name sales_person_user',
-      populate: { path: 'sales_person_user', select: 'name email' },
     })
     .populate('created_by', 'name email portals')
     .sort({ follow_up_date: 1 })

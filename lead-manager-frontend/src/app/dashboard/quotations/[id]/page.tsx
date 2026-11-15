@@ -3,7 +3,7 @@
  * @module app/dashboard/quotations/[id]/page
  */
 import React from "react";
-import QuotationDetailPage from "@/components/quotations/QuotationDetailPage";
+import QuotationDetailPage from "@/components/quotations/shared/QuotationDetailPage";
 
 type Props = {
   params: Promise<{ id: string }>;

@@ -54,3 +54,28 @@ exports.deleteLostReason = asyncHandler(async (req, res) => {
     data: await masterService.deleteLostReason(req.params.id, req.user),
   });
 });
+
+exports.listDepartments = asyncHandler(async (_req, res) => {
+  res.json({ success: true, data: await masterService.listDepartments() });
+});
+
+exports.createDepartment = asyncHandler(async (req, res) => {
+  res.status(201).json({
+    success: true,
+    data: await masterService.createDepartment(req.body || {}, req.user),
+  });
+});
+
+exports.updateDepartment = asyncHandler(async (req, res) => {
+  res.json({
+    success: true,
+    data: await masterService.updateDepartment(req.params.id, req.body || {}, req.user),
+  });
+});
+
+exports.deleteDepartment = asyncHandler(async (req, res) => {
+  res.json({
+    success: true,
+    data: await masterService.deleteDepartment(req.params.id, req.user),
+  });
+});

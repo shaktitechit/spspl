@@ -24,7 +24,7 @@ import {
   Plus,
 } from "lucide-react";
 import type { LeadFollowUpRecord } from "@/store/api";
-import { formatLeadDate, formatCurrencyINR } from "../leadUtils";
+import { formatLeadDate, getFollowUpRoleBreakdown } from "../leadUtils";
 
 export type CalendarMonthGridProps = {
   followUps: LeadFollowUpRecord[];
@@ -33,6 +33,7 @@ export type CalendarMonthGridProps = {
   onSelectEvent: (fu: LeadFollowUpRecord) => void;
   onDayClick?: (dayStr: string) => void;
   hasQuotationAccess: boolean;
+  currentUserId?: string;
 };
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -44,12 +45,8 @@ export function CalendarMonthGrid({
   onSelectEvent,
   onDayClick,
   hasQuotationAccess,
+  currentUserId,
 }: CalendarMonthGridProps) {
-  const [selectedDayEvents, setSelectedDayEvents] = useState<{
-    dateStr: string;
-    events: LeadFollowUpRecord[];
-  } | null>(null);
-
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
@@ -57,6 +54,8 @@ export function CalendarMonthGrid({
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().split("T")[0];
   }, []);
+
+  const [selectedDateStr, setSelectedDateStr] = useState<string>(todayStr);
 
   // Compute month matrix (7 columns x N weeks)
   const calendarCells = useMemo(() => {
@@ -148,6 +147,7 @@ export function CalendarMonthGrid({
 
   const handleToday = () => {
     onDateChange(new Date());
+    setSelectedDateStr(todayStr);
   };
 
   const getChannelIcon = (type: string) => {
@@ -174,10 +174,12 @@ export function CalendarMonthGrid({
     year: "numeric",
   });
 
+  const selectedEvents = eventsByDate[selectedDateStr] || [];
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5">
       {/* Month Navigation Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-3 shadow-xs dark:border-white/10 dark:bg-slate-900">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-slate-200 bg-white px-4 py-2 shadow-xs dark:border-white/10 dark:bg-slate-900">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1">
             <button
@@ -198,7 +200,7 @@ export function CalendarMonthGrid({
             </button>
           </div>
 
-          <h2 className="text-base font-bold text-slate-900 dark:text-white">
+          <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
             {monthLabel}
           </h2>
 
@@ -234,65 +236,74 @@ export function CalendarMonthGrid({
         </div>
       </div>
 
-      {/* Calendar Grid Table */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs dark:border-white/10 dark:bg-slate-900">
-        {/* Weekday Header */}
-        <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-xs font-bold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-400">
-          {WEEKDAYS.map((wd) => (
-            <div key={wd} className="py-2.5 border-r border-slate-100 last:border-r-0 dark:border-white/5">
-              {wd}
-            </div>
-          ))}
-        </div>
+      {/* Calendar + Right Side Panel */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-start">
+        {/* Calendar Grid Table */}
+        <div className="lg:col-span-8 xl:col-span-9 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs dark:border-white/10 dark:bg-slate-900">
+          {/* Weekday Header */}
+          <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-400">
+            {WEEKDAYS.map((wd) => (
+              <div key={wd} className="py-1.5 border-r border-slate-100 last:border-r-0 dark:border-white/5">
+                {wd}
+              </div>
+            ))}
+          </div>
 
-        {/* Day Cells Grid */}
-        <div className="grid grid-cols-7 divide-x divide-y divide-slate-100 dark:divide-white/5">
-          {calendarCells.map((cell) => {
-            const dayEvents = eventsByDate[cell.dateStr] || [];
-            const maxVisible = 3;
-            const visibleEvents = dayEvents.slice(0, maxVisible);
-            const extraCount = dayEvents.length - maxVisible;
+          {/* Day Cells Grid */}
+          <div className="grid grid-cols-7 divide-x divide-y divide-slate-100 dark:divide-white/5">
+            {calendarCells.map((cell) => {
+              const dayEvents = eventsByDate[cell.dateStr] || [];
+              const maxVisible = 2;
+              const visibleEvents = dayEvents.slice(0, maxVisible);
+              const extraCount = dayEvents.length - maxVisible;
+              const isSelected = selectedDateStr === cell.dateStr;
 
-            const overdueCount = dayEvents.filter(
-              (e) => e.status !== "completed" && cell.dateStr < todayStr
-            ).length;
-            const completedCount = dayEvents.filter((e) => e.status === "completed").length;
+              const overdueCount = dayEvents.filter(
+                (e) => e.status !== "completed" && cell.dateStr < todayStr
+              ).length;
 
-            return (
-              <div
-                key={cell.dateStr}
-                onClick={() => onDayClick && onDayClick(cell.dateStr)}
-                className={`group relative min-h-[115px] p-1.5 transition select-none ${
-                  !cell.isCurrentMonth
-                    ? "bg-slate-50/40 text-slate-300 dark:bg-slate-950/20 dark:text-slate-600"
-                    : cell.isToday
-                    ? "bg-teal-50/20 dark:bg-teal-950/10"
-                    : "bg-white hover:bg-slate-50/60 dark:bg-slate-900 dark:hover:bg-white/[0.02]"
-                }`}
-              >
-                {/* Date Header Strip */}
-                <div className="mb-1 flex items-center justify-between">
-                  <span
-                    className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold transition ${
-                      cell.isToday
-                        ? "bg-teal-600 text-white shadow-xs"
-                        : cell.isCurrentMonth
-                        ? "text-slate-800 group-hover:text-slate-950 dark:text-slate-200 dark:group-hover:text-white"
-                        : "text-slate-300 dark:text-slate-600"
-                    }`}
-                  >
-                    {cell.dayNumber}
-                  </span>
+              return (
+                <div
+                  key={cell.dateStr}
+                  onClick={() => {
+                    setSelectedDateStr(cell.dateStr);
+                    onDayClick?.(cell.dateStr);
+                  }}
+                  className={`group relative min-h-[76px] p-1 transition select-none cursor-pointer ${
+                    isSelected
+                      ? "ring-2 ring-inset ring-primary/70 bg-primary/[0.04] dark:bg-primary/10"
+                      : !cell.isCurrentMonth
+                      ? "bg-slate-50/40 text-slate-300 dark:bg-slate-950/20 dark:text-slate-600"
+                      : cell.isToday
+                      ? "bg-teal-50/20 dark:bg-teal-950/10"
+                      : "bg-white hover:bg-slate-50/60 dark:bg-slate-900 dark:hover:bg-white/[0.02]"
+                  }`}
+                >
+                  {/* Date Header Strip */}
+                  <div className="mb-0.5 flex items-center justify-between">
+                    <span
+                      className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold transition ${
+                        cell.isToday
+                          ? "bg-teal-600 text-white shadow-xs"
+                          : isSelected
+                          ? "bg-primary text-white shadow-xs"
+                          : cell.isCurrentMonth
+                          ? "text-slate-800 group-hover:text-slate-950 dark:text-slate-200 dark:group-hover:text-white"
+                          : "text-slate-300 dark:text-slate-600"
+                      }`}
+                    >
+                      {cell.dayNumber}
+                    </span>
 
-                  <div className="flex items-center gap-1">
-                    {overdueCount > 0 && (
-                      <span className="flex h-4 items-center rounded-full bg-rose-100 px-1 text-[9px] font-bold text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
-                        {overdueCount}
-                      </span>
-                    )}
-                    {dayEvents.length > 0 && (
-                      <span className="text-[10px] font-semibold text-slate-400">
-                        {dayEvents.length}
+                    <div className="flex items-center gap-1">
+                      {overdueCount > 0 && (
+                        <span className="flex h-3.5 items-center rounded-full bg-rose-100 px-1 text-[9px] font-bold text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
+                          {overdueCount}
+                        </span>
+                      )}
+                      {dayEvents.length > 0 && (
+                        <span className="text-[10px] font-semibold text-slate-400">
+                          {dayEvents.length}
                       </span>
                     )}
                   </div>
@@ -309,10 +320,14 @@ export function CalendarMonthGrid({
                     const isDueToday = !isDone && cell.dateStr === todayStr;
 
                     const title =
-                      (isQuotation ? quoteObj?.customer_name : leadObj?.name) ||
-                      (leadObj?.company_name) ||
+                      (isQuotation ? quoteObj?.customer_name : leadObj?.company_name) ||
+                      (isQuotation ? quoteObj?.kind_attn : leadObj?.name) ||
                       (isQuotation ? quoteObj?.quotation_no : leadObj?.lead_no) ||
                       "Follow-up";
+                    const { roles } = getFollowUpRoleBreakdown(ev, currentUserId);
+                    const roleLabelText = roles
+                      .map((r) => (r === "primary" ? "Primary" : r === "secondary" ? "Secondary" : "Creator"))
+                      .join(", ");
 
                     return (
                       <button
@@ -333,7 +348,7 @@ export function CalendarMonthGrid({
                             ? "border-purple-200 bg-purple-50 text-purple-800 dark:border-purple-800/40 dark:bg-purple-950/30 dark:text-purple-300"
                             : "border-slate-200 bg-slate-50 text-slate-800 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200"
                         }`}
-                        title={`${title} (${ev.type.toUpperCase()}) - ${ev.notes || "No notes"}`}
+                        title={`${title} (${ev.type.toUpperCase()})${roleLabelText ? ` [${roleLabelText}]` : ""} - ${ev.notes || "No notes"}`}
                       >
                         {getChannelIcon(ev.type)}
                         {hasQuotationAccess && isQuotation && (
@@ -342,6 +357,24 @@ export function CalendarMonthGrid({
                           </span>
                         )}
                         <span className="truncate flex-1">{title}</span>
+                        {roles.length > 0 && (
+                          <span className="shrink-0 flex items-center gap-0.5">
+                            {roles.map((r) => (
+                              <span
+                                key={r}
+                                className={`rounded-xs px-1 text-[8px] font-black uppercase ${
+                                  r === "primary"
+                                    ? "bg-blue-600 text-white"
+                                    : r === "secondary"
+                                    ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-200"
+                                    : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+                                }`}
+                              >
+                                {r === "primary" ? "P" : r === "secondary" ? "S" : "C"}
+                              </span>
+                            ))}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
@@ -352,10 +385,7 @@ export function CalendarMonthGrid({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setSelectedDayEvents({
-                          dateStr: cell.dateStr,
-                          events: dayEvents,
-                        });
+                        setSelectedDateStr(cell.dateStr);
                       }}
                       className="w-full text-left rounded-md bg-slate-100/80 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 transition hover:bg-slate-200 dark:bg-slate-800/80 dark:text-slate-300 dark:hover:bg-slate-700"
                     >
@@ -369,42 +399,37 @@ export function CalendarMonthGrid({
         </div>
       </div>
 
-      {/* Day Overflow Popover / Modal */}
-      {selectedDayEvents && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4"
-          onClick={() => setSelectedDayEvents(null)}
-        >
-          <div
-            className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-white/10 dark:bg-slate-900"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3 dark:border-white/10">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <CalendarIcon className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-                  Follow-ups for {formatLeadDate(selectedDayEvents.dateStr)}
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {selectedDayEvents.events.length} touchpoint{selectedDayEvents.events.length === 1 ? "" : "s"} scheduled
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedDayEvents(null)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-              >
-                ✕
-              </button>
+        {/* Right Side Panel: Selected Day Follow-ups */}
+        <aside className="lg:col-span-4 xl:col-span-3 rounded-2xl border border-slate-200 bg-white shadow-xs dark:border-white/10 dark:bg-slate-900 flex flex-col">
+          <div className="flex items-center justify-between border-b border-slate-100 px-3.5 py-2.5 dark:border-white/10">
+            <div>
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <CalendarIcon className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+                <span>{formatLeadDate(selectedDateStr)}</span>
+                {selectedDateStr === todayStr && (
+                  <span className="rounded-full bg-teal-50 px-1.5 py-0.5 text-[9px] font-bold text-teal-700 dark:bg-teal-950/60 dark:text-teal-300">
+                    Today
+                  </span>
+                )}
+              </h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                {selectedEvents.length} follow-up{selectedEvents.length === 1 ? "" : "s"} scheduled
+              </p>
             </div>
+          </div>
 
-            <div className="max-h-[60vh] overflow-y-auto space-y-2.5">
-              {selectedDayEvents.events.map((ev) => {
+          <div className="max-h-[470px] overflow-y-auto p-2.5 space-y-2">
+            {selectedEvents.length === 0 ? (
+              <div className="py-10 text-center text-xs text-slate-400 dark:text-slate-500">
+                No follow-ups scheduled for this date.
+              </div>
+            ) : (
+              selectedEvents.map((ev) => {
                 const leadObj = typeof ev.lead === "object" && ev.lead !== null ? ev.lead : null;
                 const quoteObj = typeof ev.quotation === "object" && ev.quotation !== null ? ev.quotation : null;
                 const isQuotation = Boolean(quoteObj);
                 const isDone = ev.status === "completed";
-                const isOverdue = !isDone && selectedDayEvents.dateStr < todayStr;
+                const isOverdue = !isDone && selectedDateStr < todayStr;
 
                 const contactName = isQuotation ? quoteObj?.customer_name : leadObj?.name;
                 const company = isQuotation ? quoteObj?.customer_name : leadObj?.company_name;
@@ -412,25 +437,26 @@ export function CalendarMonthGrid({
                 const targetLink = isQuotation
                   ? `/dashboard/quotations/${quoteObj?._id || ""}`
                   : `/dashboard/leads/${leadObj?._id || ""}`;
+                const { roles } = getFollowUpRoleBreakdown(ev, currentUserId);
 
                 return (
                   <div
                     key={ev._id}
-                    className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-xs dark:border-white/5 dark:bg-slate-950/40"
+                    className="flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-slate-50/60 p-2.5 text-xs dark:border-white/5 dark:bg-slate-950/40"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1 font-bold text-slate-900 dark:text-white">
                         {getChannelIcon(ev.type)}
-                        <span className="capitalize">{ev.type}</span>
+                        <span className="capitalize text-[11px]">{ev.type}</span>
                         {ev.follow_up_time && ev.follow_up_time !== "—" && (
-                          <span className="text-slate-400 font-normal">
-                            at {ev.follow_up_time}
+                          <span className="text-[10px] text-slate-400 font-normal">
+                            · {ev.follow_up_time}
                           </span>
                         )}
                       </div>
 
                       <span
-                        className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                        className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-bold ${
                           isDone
                             ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
                             : isOverdue
@@ -442,19 +468,40 @@ export function CalendarMonthGrid({
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                      <div>
-                        <p className="font-semibold text-slate-900 dark:text-white">
-                          {contactName}
+                    {roles.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {roles.map((r) => (
+                          <span
+                            key={r}
+                            className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${
+                              r === "primary"
+                                ? "bg-blue-600 text-white"
+                                : r === "secondary"
+                                ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-200"
+                                : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+                            }`}
+                          >
+                            {r === "primary" ? "Primary" : r === "secondary" ? "Secondary" : "Creator"}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex items-start justify-between gap-2 text-slate-600 dark:text-slate-300">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900 dark:text-white truncate">
+                          {company || contactName}
                         </p>
-                        <p className="text-[11px] text-slate-400">{company}</p>
+                        {company && contactName && company !== contactName && (
+                          <p className="text-[11px] text-slate-400 truncate">{contactName}</p>
+                        )}
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-1.5">
                         {refNo && (
                           <Link
                             href={targetLink}
-                            className="inline-flex items-center gap-1 font-mono font-bold text-primary hover:underline"
+                            className="inline-flex items-center gap-0.5 font-mono text-[10px] font-bold text-primary hover:underline"
                           >
                             {refNo}
                             <ExternalLink className="h-2.5 w-2.5 opacity-60" />
@@ -462,29 +509,26 @@ export function CalendarMonthGrid({
                         )}
                         <button
                           type="button"
-                          onClick={() => {
-                            setSelectedDayEvents(null);
-                            onSelectEvent(ev);
-                          }}
-                          className="rounded-lg bg-teal-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs hover:bg-teal-700 dark:bg-teal-500"
+                          onClick={() => onSelectEvent(ev)}
+                          className="rounded-lg bg-teal-600 px-2 py-1 text-[10px] font-bold text-white shadow-xs hover:bg-teal-700 dark:bg-teal-500"
                         >
-                          {isDone ? "View Log" : "Complete"}
+                          {isDone ? "View" : "Complete"}
                         </button>
                       </div>
                     </div>
 
                     {ev.notes && (
-                      <p className="rounded-md bg-white p-2 text-[11px] text-slate-600 dark:bg-slate-900 dark:text-slate-300 border border-slate-100 dark:border-white/5">
+                      <p className="rounded-md bg-white p-1.5 text-[11px] text-slate-600 dark:bg-slate-900 dark:text-slate-300 border border-slate-100 dark:border-white/5 line-clamp-2">
                         {ev.notes}
                       </p>
                     )}
                   </div>
                 );
-              })}
-            </div>
+              })
+            )}
           </div>
-        </div>
-      )}
+        </aside>
+      </div>
     </div>
   );
 }

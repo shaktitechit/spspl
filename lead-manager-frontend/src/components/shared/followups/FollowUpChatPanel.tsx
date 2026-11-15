@@ -46,10 +46,10 @@ import {
 } from "@/store/api";
 import { useAppSelector } from "@/store/hooks";
 import { toast } from "@/lib/toast";
-import { ScheduleQuotationFollowUpModal } from "@/components/quotations/ScheduleQuotationFollowUpModal";
-import { CompleteQuotationFollowUpModal } from "@/components/quotations/CompleteQuotationFollowUpModal";
-import { FollowUpModal } from "@/components/leads/FollowUpModal";
-import { CompleteFollowUpModal } from "@/components/leads/CompleteFollowUpModal";
+import { ScheduleQuotationFollowUpModal } from "@/components/quotations/shared/modals/ScheduleQuotationFollowUpModal";
+import { CompleteQuotationFollowUpModal } from "@/components/quotations/shared/modals/CompleteQuotationFollowUpModal";
+import { FollowUpModal } from "@/components/leads/shared/modals/FollowUpModal";
+import { CompleteFollowUpModal } from "@/components/leads/shared/modals/CompleteFollowUpModal";
 
 export type FollowUpChatPanelProps = {
   context: "quotation" | "lead";

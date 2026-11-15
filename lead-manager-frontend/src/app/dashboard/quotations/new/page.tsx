@@ -2,7 +2,7 @@
 
 import React, { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { QuotationFormPage } from "@/components/quotations/QuotationFormPage";
+import { QuotationFormPage } from "@/components/quotations/shared/QuotationFormPage";
 
 function CreateQuotationContent() {
   const searchParams = useSearchParams();

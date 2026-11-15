@@ -129,46 +129,6 @@ exports.reject = asyncHandler(async (req, res) => {
   });
 });
 
-exports.scheduleFollowUp = asyncHandler(async (req, res) => {
-  const quotationId = req.params.quotationId || req.params.id;
-  const data = await quotationService.scheduleFollowUp(quotationId, req.body, req.user);
-  res.status(201).json({
-    success: true,
-    message: 'Follow-up scheduled successfully',
-    data,
-  });
-});
-
-exports.listFollowUps = asyncHandler(async (req, res) => {
-  const quotationId = req.params.quotationId || req.params.id;
-  const data = await quotationService.listFollowUps(quotationId, req.user);
-  res.json({
-    success: true,
-    data,
-  });
-});
-
-exports.completeFollowUp = asyncHandler(async (req, res) => {
-  const followUpId = req.params.followUpId || req.params.id;
-  const data = await quotationService.completeFollowUp(followUpId, req.body, req.user);
-  res.json({
-    success: true,
-    message: 'Follow-up completed successfully',
-    data,
-  });
-});
-
-exports.addFollowUpAction = asyncHandler(async (req, res) => {
-  const followUpId = req.params.followUpId || req.params.id;
-  const followUpService = require('../leads/leadFollowUp.service');
-  const data = await followUpService.addAction(followUpId, req.body, req.user);
-  res.status(201).json({
-    success: true,
-    message: 'Action recorded successfully',
-    data,
-  });
-});
-
 exports.reviseQuotation = asyncHandler(async (req, res) => {
   const quotationId = req.params.quotationId || req.params.id;
   const data = await quotationService.reviseQuotation(quotationId, req.user);

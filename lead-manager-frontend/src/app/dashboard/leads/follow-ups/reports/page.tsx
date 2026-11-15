@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { useLeadManagerRole } from "@/hooks/useLeadManagerRole";
-import { FollowUpReportsDashboard } from "@/components/leads/FollowUpReportsDashboard";
+import { FollowUpReportsDashboard } from "@/components/leads/shared/FollowUpReportsDashboard";
 import { ShieldAlert, ArrowLeft } from "lucide-react";
 
 export default function FollowUpReportsPage() {

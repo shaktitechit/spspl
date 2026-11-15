@@ -89,6 +89,15 @@ const leadQuotationSchema = new mongoose.Schema(
     sales_person_email: { type: String, trim: true, default: "" },
     sales_person_designation: { type: String, trim: true, default: "Sales Executive" },
     sales_person_user: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
+    secondary_sales_persons: [
+      {
+        user: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+        name: { type: String, trim: true, default: "" },
+        phone: { type: String, trim: true, default: "" },
+        email: { type: String, trim: true, default: "" },
+        designation: { type: String, trim: true, default: "Sales Executive" },
+      },
+    ],
     department: { type: String, trim: true, default: "UPS/Batteries", index: true },
     departments: [{ type: String, trim: true }],
     approval_status: {
@@ -160,6 +169,7 @@ const leadQuotationSchema = new mongoose.Schema(
         sales_person_email: { type: String, default: "" },
         sales_person_designation: { type: String, default: "" },
         sales_person_user: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+        secondary_sales_persons: { type: Array, default: [] },
         department: { type: String, default: "" },
         departments: [{ type: String }],
         status: { type: String, default: "" },

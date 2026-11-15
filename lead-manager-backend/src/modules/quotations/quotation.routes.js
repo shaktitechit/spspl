@@ -32,6 +32,8 @@ router.get('/dashboard-stats', allSalesRoles, controller.getDashboardStats);
 router.get('/party-orders', allSalesRoles, controller.listPartyOrders);
 router.put('/orders/:orderId/performa', allSalesRoles, controller.saveConvertedOrderPerforma);
 router.post('/auto-expire', elevatedRoles, controller.triggerAutoExpiry);
+router.get('/lead/:id', allSalesRoles, controller.list);
+router.post('/lead/:id', elevatedRoles, controller.create);
 router.get('/', allSalesRoles, controller.list);
 router.post('/', elevatedRoles, controller.create);
 router.get('/:id', allSalesRoles, controller.getById);
@@ -48,11 +50,7 @@ router.post('/:id/proforma', elevatedRoles, controller.saveProforma);
 router.post('/:id/proforma-issued', elevatedRoles, controller.markProformaIssued);
 router.delete('/:id', elevatedRoles, controller.remove);
 
-// Quotation Follow-ups & Revisions
-router.get('/:id/follow-ups', allSalesRoles, controller.listFollowUps);
-router.post('/:id/follow-ups', allSalesRoles, controller.scheduleFollowUp);
-router.patch('/follow-ups/:id/complete', allSalesRoles, controller.completeFollowUp);
-router.post('/follow-ups/:id/actions', allSalesRoles, controller.addFollowUpAction);
+// Quotation Revisions
 router.post('/:id/revise', elevatedRoles, controller.reviseQuotation);
 
 module.exports = router;

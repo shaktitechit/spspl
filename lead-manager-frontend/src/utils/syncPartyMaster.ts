@@ -1,4 +1,4 @@
-import type { PartyItem } from "@/components/leads/PartySearchAutocomplete";
+import type { PartyItem } from "@/components/leads/shared/PartySearchAutocomplete";
 import type { PartyWriteBody } from "@/store/api/slices/partiesApi";
 
 export interface SyncPartyMasterInput {

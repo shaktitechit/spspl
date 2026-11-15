@@ -29,6 +29,19 @@ export type LeadLostReasonRecord = {
   updatedAt?: string;
 };
 
+export type LeadDepartmentRecord = {
+  _id: string;
+  id?: string;
+  name: string;
+  code?: string;
+  description?: string;
+  sort_order?: number;
+  is_active: boolean;
+  is_system: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export const leadMastersApi = medicaApi.injectEndpoints({
   overrideExisting: false,
   endpoints: (build) => ({
@@ -107,6 +120,44 @@ export const leadMastersApi = medicaApi.injectEndpoints({
       transformResponse: (res: ApiEnvelope<{ _id: string }>) => unwrapEnvelope(res),
       invalidatesTags: [{ type: "LeadMaster", id: "LOST_REASONS" }],
     }),
+
+    listLeadDepartments: build.query<LeadDepartmentRecord[], void>({
+      query: () => "/lead-masters/departments",
+      transformResponse: (res: ApiEnvelope<LeadDepartmentRecord[]>) => unwrapEnvelope(res),
+      providesTags: [{ type: "LeadMaster" as const, id: "DEPARTMENTS" }],
+    }),
+
+    createLeadDepartment: build.mutation<LeadDepartmentRecord, Partial<LeadDepartmentRecord>>({
+      query: (body) => ({
+        url: "/lead-masters/departments",
+        method: "POST",
+        body,
+      }),
+      transformResponse: (res: ApiEnvelope<LeadDepartmentRecord>) => unwrapEnvelope(res),
+      invalidatesTags: [{ type: "LeadMaster", id: "DEPARTMENTS" }],
+    }),
+
+    updateLeadDepartment: build.mutation<
+      LeadDepartmentRecord,
+      { id: string; body: Partial<LeadDepartmentRecord> }
+    >({
+      query: ({ id, body }) => ({
+        url: `/lead-masters/departments/${id}`,
+        method: "PUT",
+        body,
+      }),
+      transformResponse: (res: ApiEnvelope<LeadDepartmentRecord>) => unwrapEnvelope(res),
+      invalidatesTags: [{ type: "LeadMaster", id: "DEPARTMENTS" }],
+    }),
+
+    deleteLeadDepartment: build.mutation<{ _id: string }, string>({
+      query: (id) => ({
+        url: `/lead-masters/departments/${id}`,
+        method: "DELETE",
+      }),
+      transformResponse: (res: ApiEnvelope<{ _id: string }>) => unwrapEnvelope(res),
+      invalidatesTags: [{ type: "LeadMaster", id: "DEPARTMENTS" }],
+    }),
   }),
 });
 
@@ -119,4 +170,8 @@ export const {
   useCreateLeadLostReasonMutation,
   useUpdateLeadLostReasonMutation,
   useDeleteLeadLostReasonMutation,
+  useListLeadDepartmentsQuery,
+  useCreateLeadDepartmentMutation,
+  useUpdateLeadDepartmentMutation,
+  useDeleteLeadDepartmentMutation,
 } = leadMastersApi;

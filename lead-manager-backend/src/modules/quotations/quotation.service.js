@@ -6,9 +6,8 @@ const mongoose = require('mongoose');
 const { getModels } = require('../../data/mongoRegistry');
 const { ApiError } = require('../../utils/ApiError');
 const activityService = require('../activity/activity.service');
-const emailHelper = require('../messages/helpers/email.helper');
+const autoEmailService = require('../auto_emails/autoEmail.service');
 const notificationHelper = require('../../utils/notificationHelper');
-const microsoftGraph = require('../../config/microsoftGraph');
 const { logger } = require('../../utils/logger');
 const {
   isAdmin,
@@ -111,20 +110,11 @@ async function notifyQuotationStakeholders({
   const skipSelf = actorId && notifyUserId && actorId === notifyUserId;
 
   if (recipientEmail && !skipSelf) {
-    try {
-      await emailHelper.sendTemplateEmail(
-        recipientEmail,
-        templateName,
-        templateParams,
-        [],
-        [],
-        microsoftGraph.senderEmail || null
-      );
-    } catch (err) {
-      logger.error(
-        `[Quotation Service] template email (${templateName}) failed for ${recipientEmail}: ${err.message}`
-      );
-    }
+    await autoEmailService.sendQuotationStakeholderEmail({
+      recipientEmail,
+      templateName,
+      templateParams,
+    });
   }
 
   if (notifyUserId && !skipSelf) {
@@ -622,12 +612,17 @@ async function buildQuotationVisibilityFilter(user) {
     const assignedLeads = await Lead.find({ assigned_to: uid, deletedAt: null }).select('_id').lean();
     const leadIds = assignedLeads.map((l) => l._id);
     const userEmail = (user.email || '').toLowerCase().trim();
-    const emailClause = userEmail
-      ? [{ signatory_email: new RegExp(`^${userEmail.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')}$`, 'i') }]
+    const escapedEmail = userEmail ? userEmail.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&') : '';
+    const emailClause = escapedEmail
+      ? [
+          { signatory_email: new RegExp(`^${escapedEmail}$`, 'i') },
+          { 'secondary_sales_persons.email': new RegExp(`^${escapedEmail}$`, 'i') },
+        ]
       : [];
     const orClause = [
       { created_by: uid },
       { sales_person_user: uid },
+      { 'secondary_sales_persons.user': uid },
       { signatory_user: uid },
       ...emailClause,
     ];
@@ -640,8 +635,12 @@ async function buildQuotationVisibilityFilter(user) {
   if (isManager(user) || isCoordinator(user)) {
     const visibleIds = await getVisibleLeadUserIds(user);
     const userEmail = (user.email || '').toLowerCase().trim();
-    const emailClause = userEmail
-      ? [{ signatory_email: new RegExp(`^${userEmail.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')}$`, 'i') }]
+    const escapedEmail = userEmail ? userEmail.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&') : '';
+    const emailClause = escapedEmail
+      ? [
+          { signatory_email: new RegExp(`^${escapedEmail}$`, 'i') },
+          { 'secondary_sales_persons.email': new RegExp(`^${escapedEmail}$`, 'i') },
+        ]
       : [];
 
     if (visibleIds && visibleIds.length > 0) {
@@ -650,6 +649,7 @@ async function buildQuotationVisibilityFilter(user) {
         $or: [
           { created_by: { $in: objIds } },
           { sales_person_user: { $in: objIds } },
+          { 'secondary_sales_persons.user': { $in: objIds } },
           { signatory_user: { $in: objIds } },
           ...emailClause,
         ],
@@ -660,6 +660,7 @@ async function buildQuotationVisibilityFilter(user) {
       $or: [
         { created_by: user._id },
         { sales_person_user: user._id },
+        { 'secondary_sales_persons.user': user._id },
         { signatory_user: user._id },
         ...emailClause,
       ],
@@ -691,15 +692,50 @@ async function assertQuotationVisible(quotationId, user) {
 }
 
 /**
+ * Return IDs of leads that are already won or converted (their quotations must never expire).
+ */
+async function getWonOrConvertedLeadIds() {
+  const { Lead } = getModels();
+  return Lead.find({
+    deletedAt: null,
+    status: { $in: ['won', 'converted'] },
+  }).distinct('_id');
+}
+
+/**
  * Automatically expire all active quotations that have passed their valid_until date.
  */
 async function autoExpireQuotations() {
-  const { LeadQuotation } = getModels();
+  const { Lead, LeadQuotation } = getModels();
   const now = new Date();
+  const wonOrConvertedLeadIds = await getWonOrConvertedLeadIds();
+
+  // Restore any legacy 'expired' quotations belonging to won/converted leads
+  if (wonOrConvertedLeadIds.length > 0) {
+    const wonOrConvertedLeads = await Lead.find({ _id: { $in: wonOrConvertedLeadIds } })
+      .select('_id status')
+      .lean();
+    const convertedLeadIds = wonOrConvertedLeads.filter((l) => l.status === 'converted').map((l) => l._id);
+    const wonLeadIds = wonOrConvertedLeads.filter((l) => l.status === 'won').map((l) => l._id);
+    if (convertedLeadIds.length > 0) {
+      await LeadQuotation.updateMany(
+        { deletedAt: null, status: 'expired', lead: { $in: convertedLeadIds } },
+        { $set: { status: 'converted' } }
+      ).catch(() => {});
+    }
+    if (wonLeadIds.length > 0) {
+      await LeadQuotation.updateMany(
+        { deletedAt: null, status: 'expired', lead: { $in: wonLeadIds } },
+        { $set: { status: 'accepted' } }
+      ).catch(() => {});
+    }
+  }
+
   const filter = {
     deletedAt: null,
     valid_until: { $lt: now },
     status: { $in: ['draft', 'pending_approval', 'approved', 'sent', 'in_negotiation', 'on_hold'] },
+    ...(wonOrConvertedLeadIds.length > 0 ? { lead: { $nin: wonOrConvertedLeadIds } } : {}),
   };
 
   try {
@@ -745,11 +781,13 @@ async function checkAndSendPreExpiryAlerts() {
   const in48Hours = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
   try {
+    const wonOrConvertedLeadIds = await getWonOrConvertedLeadIds();
     const filter = {
       deletedAt: null,
       valid_until: { $gt: now, $lte: in48Hours },
       status: { $in: ['approved', 'sent', 'in_negotiation'] },
       expiry_alert_sent_at: null,
+      ...(wonOrConvertedLeadIds.length > 0 ? { lead: { $nin: wonOrConvertedLeadIds } } : {}),
     };
 
     const upcomingQuotes = await LeadQuotation.find(filter)
@@ -836,6 +874,19 @@ async function listAll(query = {}, user) {
     const statusParam = String(query.status).trim();
     if (statusParam === 'in_negotiation' || statusParam === 'active_pipeline' || statusParam === 'quoted') {
       filter.status = { $in: ACTIVE_PIPELINE_STATUSES };
+      conditions.push({ approval_status: { $ne: 'pending_approval' } });
+    } else if (statusParam === 'pending_approval') {
+      conditions.push({
+        $or: [{ status: 'pending_approval' }, { approval_status: 'pending_approval' }],
+      });
+    } else if (statusParam === 'accepted') {
+      filter.status = { $in: ['accepted', 'converted'] };
+    } else if (statusParam === 'expired') {
+      filter.status = 'expired';
+      const wonOrConvertedLeadIds = await getWonOrConvertedLeadIds();
+      if (wonOrConvertedLeadIds.length > 0) {
+        conditions.push({ lead: { $nin: wonOrConvertedLeadIds } });
+      }
     } else {
       filter.status = statusParam;
     }
@@ -866,6 +917,7 @@ async function listAll(query = {}, user) {
       .populate('lead', 'lead_no organization_name first_name last_name status assigned_to')
       .populate('created_by', 'name email department')
       .populate('sales_person_user', 'name email department phone designation')
+      .populate('secondary_sales_persons.user', 'name email department phone designation')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -908,6 +960,29 @@ async function listByLead(leadId, user) {
     .lean();
 
   return quotations;
+}
+
+function normalizeSecondarySalesPersons(list, primaryUserId) {
+  if (!Array.isArray(list)) return [];
+  const primaryId = primaryUserId ? String(primaryUserId._id || primaryUserId) : '';
+  const seen = new Set(primaryId ? [primaryId] : []);
+  const result = [];
+  for (const item of list) {
+    if (!item) continue;
+    const rawUser = item.user || item._id || (typeof item === 'string' ? item : null);
+    const uid = rawUser ? String(rawUser._id || rawUser) : '';
+    if (uid && seen.has(uid)) continue;
+    if (uid) seen.add(uid);
+    const userObj = typeof rawUser === 'object' && rawUser !== null ? rawUser : null;
+    result.push({
+      user: uid || null,
+      name: String(item.name || userObj?.name || '').trim(),
+      phone: String(item.phone || userObj?.phone || '').trim(),
+      email: String(item.email || userObj?.email || '').trim(),
+      designation: String(item.designation || userObj?.designation || 'Sales Executive').trim() || 'Sales Executive',
+    });
+  }
+  return result;
 }
 
 /**
@@ -966,6 +1041,39 @@ async function create(leadIdOrBody, bodyOrUser, userParam) {
     assignedUser = await User.findOne({ department: { $in: ['admin', 'finance'] }, is_active: true }).lean();
   }
   const defaultSignatory = assignedUser || user;
+
+  // Auto-fill primary & secondary sales representatives from lead if not explicitly provided
+  let leadPrimarySalesUser = null;
+  let resolvedSalesPersonUserId = body.sales_person_user || null;
+  if (!resolvedSalesPersonUserId && !body.sales_person_name && lead && lead.assigned_to) {
+    leadPrimarySalesUser = await User.findById(lead.assigned_to)
+      .select('name phone email designation')
+      .lean();
+    if (leadPrimarySalesUser) {
+      resolvedSalesPersonUserId = leadPrimarySalesUser._id;
+    }
+  }
+
+  let resolvedSecondarySalesPersons = [];
+  if (Array.isArray(body.secondary_sales_persons)) {
+    resolvedSecondarySalesPersons = normalizeSecondarySalesPersons(
+      body.secondary_sales_persons,
+      resolvedSalesPersonUserId
+    );
+  } else if (lead && Array.isArray(lead.assigned_users) && lead.assigned_users.length > 0) {
+    const secondaryIds = lead.assigned_users
+      .map((u) => String(u?._id || u))
+      .filter((id) => id && id !== String(resolvedSalesPersonUserId || ''));
+    if (secondaryIds.length > 0) {
+      const secUsers = await User.find({ _id: { $in: secondaryIds } })
+        .select('name phone email designation')
+        .lean();
+      resolvedSecondarySalesPersons = normalizeSecondarySalesPersons(
+        secUsers.map((u) => ({ user: u })),
+        resolvedSalesPersonUserId
+      );
+    }
+  }
 
   const company = await authService.getCompanyInfo();
 
@@ -1069,11 +1177,12 @@ async function create(leadIdOrBody, bodyOrUser, userParam) {
     signatory_email: body.signatory_email || defaultSignatory?.email || '',
     signatory_designation: body.signatory_designation || (defaultSignatory?.department ? (defaultSignatory.department.charAt(0).toUpperCase() + defaultSignatory.department.slice(1)) : 'Authorized Signatory'),
     signatory_user: body.signatory_user || defaultSignatory?._id || null,
-    sales_person_name: body.sales_person_name || '',
-    sales_person_phone: body.sales_person_phone || '',
-    sales_person_email: body.sales_person_email || '',
-    sales_person_designation: body.sales_person_designation || 'Sales Executive',
-    sales_person_user: body.sales_person_user || null,
+    sales_person_name: body.sales_person_name || (leadPrimarySalesUser?.name || ''),
+    sales_person_phone: body.sales_person_phone || (leadPrimarySalesUser?.phone || ''),
+    sales_person_email: body.sales_person_email || (leadPrimarySalesUser?.email || ''),
+    sales_person_designation: body.sales_person_designation || (leadPrimarySalesUser?.designation || 'Sales Executive'),
+    sales_person_user: resolvedSalesPersonUserId || null,
+    secondary_sales_persons: resolvedSecondarySalesPersons,
     gst_enabled: gstEnabled,
     approval_status: body.approval_status || 'pending_approval',
     status: body.status || 'draft',
@@ -1130,13 +1239,15 @@ async function create(leadIdOrBody, bodyOrUser, userParam) {
 async function getById(id, user) {
   const { LeadQuotation } = getModels();
 
-  // Lazy auto-expiry check for this quotation if past valid_until
+  // Lazy auto-expiry check for this quotation if past valid_until (skip for won/converted leads)
   const now = new Date();
-  const raw = await LeadQuotation.findOne({ _id: id, deletedAt: null });
+  const raw = await LeadQuotation.findOne({ _id: id, deletedAt: null }).populate('lead', 'status');
+  const leadStatus = raw?.lead && typeof raw.lead === 'object' ? raw.lead.status : null;
   if (
     raw &&
     raw.valid_until &&
     new Date(raw.valid_until) < now &&
+    !['won', 'converted'].includes(leadStatus) &&
     ['draft', 'pending_approval', 'approved', 'sent', 'in_negotiation', 'on_hold'].includes(raw.status)
   ) {
     raw.status = 'expired';
@@ -1148,6 +1259,7 @@ async function getById(id, user) {
     .populate('created_by', 'name email department')
     .populate('signatory_user', 'name email department phone designation')
     .populate('sales_person_user', 'name email department phone designation')
+    .populate('secondary_sales_persons.user', 'name email department phone designation')
     .populate('conversion.converted_by', 'name email department')
     .populate('conversion.party_id')
     .populate('conversion.order_id', 'order_no status grand_total total_amount')
@@ -1220,6 +1332,15 @@ function buildRevisionSnapshot(quotation, user, changeSummary) {
     sales_person_email: quotation.sales_person_email || '',
     sales_person_designation: quotation.sales_person_designation || '',
     sales_person_user: quotation.sales_person_user ? (quotation.sales_person_user._id || quotation.sales_person_user) : null,
+    secondary_sales_persons: Array.isArray(quotation.secondary_sales_persons)
+      ? quotation.secondary_sales_persons.map((s) => ({
+          user: s.user ? (s.user._id || s.user) : null,
+          name: s.name || '',
+          phone: s.phone || '',
+          email: s.email || '',
+          designation: s.designation || '',
+        }))
+      : [],
     status: quotation.status,
     department: quotation.department || '',
     departments: Array.isArray(quotation.departments) ? [...quotation.departments] : [],
@@ -1257,6 +1378,7 @@ async function update(id, body, user) {
     body.address ||
     body.signatory_user ||
     body.sales_person_user ||
+    body.secondary_sales_persons !== undefined ||
     body.validity_days ||
     body.valid_until ||
     body.ref_no
@@ -1370,6 +1492,15 @@ async function update(id, body, user) {
     }
   }
 
+  if (body.secondary_sales_persons !== undefined) {
+    const effectivePrimary =
+      body.sales_person_user !== undefined ? body.sales_person_user : quotation.sales_person_user;
+    quotation.secondary_sales_persons = normalizeSecondarySalesPersons(
+      body.secondary_sales_persons,
+      effectivePrimary
+    );
+  }
+
   if (body.departments !== undefined) {
     const rawDepts = Array.isArray(body.departments)
       ? body.departments.map((d) => String(d).trim()).filter(Boolean)
@@ -1402,30 +1533,80 @@ async function update(id, body, user) {
     ? await Lead.findOne({ _id: quotation.lead, deletedAt: null })
     : null;
 
-  if (lead && !['won', 'lost', 'converted'].includes(lead.status)) {
+  if (lead && !['won', 'converted'].includes(lead.status)) {
     if (body.items) {
       applyQuotationPricingToLead(lead, quotation.items);
     }
     const previousLeadStatus = lead.status;
-    leadAdvancedToQuotation = advanceLeadToQuotationStatus(lead);
-    lead.last_activity_at = new Date();
-    await lead.save();
 
-    // When quotation is marked sent, record lead pipeline advance if status changed.
-    if (body.status === 'sent' && leadAdvancedToQuotation) {
-      await activityService.create({
-        entity_type: 'lead',
-        entity_id: lead._id,
-        action: 'status_changed',
-        actor: user._id,
-        message: `Quotation #${quotation.quotation_no} sent — lead moved from '${previousLeadStatus}' to 'quotation'`,
-        old_value: { status: previousLeadStatus },
-        new_value: {
-          status: 'quotation',
-          quotation_id: quotation._id,
-          quotation_no: quotation.quotation_no,
-        },
-      });
+    if (body.status === 'accepted') {
+      lead.status = 'won';
+      lead.last_activity_at = new Date();
+      await lead.save();
+
+      if (previousLeadStatus !== 'won') {
+        await activityService.create({
+          entity_type: 'lead',
+          entity_id: lead._id,
+          action: 'status_changed',
+          actor: user._id,
+          message: `Quotation #${quotation.quotation_no} accepted — lead marked as 'won'`,
+          old_value: { status: previousLeadStatus },
+          new_value: {
+            status: 'won',
+            quotation_id: quotation._id,
+            quotation_no: quotation.quotation_no,
+          },
+        });
+      }
+    } else if (body.status === 'rejected') {
+      lead.status = 'lost';
+      if (body.lost_reason) {
+        lead.lost_reason = String(body.lost_reason).trim();
+      }
+      lead.last_activity_at = new Date();
+      await lead.save();
+
+      if (previousLeadStatus !== 'lost') {
+        await activityService.create({
+          entity_type: 'lead',
+          entity_id: lead._id,
+          action: 'status_changed',
+          actor: user._id,
+          message: `Quotation #${quotation.quotation_no} rejected by customer — lead marked as 'lost'`,
+          old_value: { status: previousLeadStatus },
+          new_value: {
+            status: 'lost',
+            quotation_id: quotation._id,
+            quotation_no: quotation.quotation_no,
+            ...(lead.lost_reason ? { lost_reason: lead.lost_reason } : {}),
+          },
+        });
+      }
+    } else if (lead.status !== 'lost') {
+      leadAdvancedToQuotation = advanceLeadToQuotationStatus(lead);
+      lead.last_activity_at = new Date();
+      await lead.save();
+
+      // When quotation is marked sent, record lead pipeline advance if status changed.
+      if (body.status === 'sent' && leadAdvancedToQuotation) {
+        await activityService.create({
+          entity_type: 'lead',
+          entity_id: lead._id,
+          action: 'status_changed',
+          actor: user._id,
+          message: `Quotation #${quotation.quotation_no} sent — lead moved from '${previousLeadStatus}' to 'quotation'`,
+          old_value: { status: previousLeadStatus },
+          new_value: {
+            status: 'quotation',
+            quotation_id: quotation._id,
+            quotation_no: quotation.quotation_no,
+          },
+        });
+      }
+    } else {
+      lead.last_activity_at = new Date();
+      await lead.save();
     }
   }
 
@@ -1930,6 +2111,7 @@ async function reviseQuotation(quotationId, user) {
  */
 async function getDashboardStats(query = {}, user) {
   const { LeadQuotation } = getModels();
+  await autoExpireQuotations().catch(() => {});
   const andConditions = [{ deletedAt: null }];
 
   const visibilityFilter = user ? await buildQuotationVisibilityFilter(user) : {};
@@ -1955,7 +2137,8 @@ async function getDashboardStats(query = {}, user) {
   const q = andConditions.length > 1 ? { $and: andConditions } : andConditions[0];
 
   const allQuotes = await LeadQuotation.find(q)
-    .select('quotation_no version status approval_status grand_total total_discount items valid_until quotation_date customer_name')
+    .select('quotation_no version status approval_status grand_total total_discount items valid_until quotation_date customer_name lead')
+    .populate('lead', 'status')
     .lean();
 
   let totalQuotations = allQuotes.length;
@@ -1984,9 +2167,17 @@ async function getDashboardStats(query = {}, user) {
     totalDiscountValue += disc;
     totalGrossValue += gTotal + disc;
 
+    const leadStatus = quote.lead && typeof quote.lead === 'object' ? quote.lead.status : null;
+    const isWonOrConvertedLead = leadStatus === 'won' || leadStatus === 'converted';
+
     if (st === 'expired') {
-      expiredCount += 1;
-      totalExpiredValue += gTotal;
+      if (isWonOrConvertedLead) {
+        acceptedCount += 1;
+        totalWonValue += gTotal;
+      } else {
+        expiredCount += 1;
+        totalExpiredValue += gTotal;
+      }
     } else if (appSt === 'pending_approval' || st === 'pending_approval') {
       pendingApprovalCount += 1;
     } else if (st === 'approved') {
@@ -1995,7 +2186,7 @@ async function getDashboardStats(query = {}, user) {
       sentCount += 1;
     } else if (st === 'in_negotiation') {
       inNegotiationCount += 1;
-    } else if (st === 'accepted') {
+    } else if (st === 'accepted' || st === 'converted') {
       acceptedCount += 1;
       totalWonValue += gTotal;
     } else if (st === 'rejected') {
@@ -2004,7 +2195,7 @@ async function getDashboardStats(query = {}, user) {
       draftCount += 1;
     }
 
-    if (isActivePipelineStatus(st)) {
+    if (appSt !== 'pending_approval' && isActivePipelineStatus(st)) {
       activePipelineCount += 1;
       totalQuotedValue += gTotal;
     }
@@ -2055,7 +2246,7 @@ async function convert(id, body = {}, user) {
     throw new ApiError(400, 'No further actions allowed: this quotation has already been converted to an order');
   }
 
-  if (quotation.status === 'expired' || (quotation.valid_until && new Date(quotation.valid_until) < new Date())) {
+  if (quotation.status === 'expired') {
     throw new ApiError(400, 'This quotation has expired. Please extend its validity before converting to an order.');
   }
 
@@ -2780,6 +2971,9 @@ async function getVersionDetails(id, versionNumber, user) {
     sales_person_email: historical.sales_person_email || quotation.sales_person_email,
     sales_person_designation: historical.sales_person_designation || quotation.sales_person_designation,
     sales_person_user: historical.sales_person_user || quotation.sales_person_user,
+    secondary_sales_persons: Array.isArray(historical.secondary_sales_persons)
+      ? historical.secondary_sales_persons
+      : quotation.secondary_sales_persons || [],
     status: historical.status || quotation.status,
     approval_status: historical.approval_status || quotation.approval_status,
     approved_by: historical.approved_by || null,
@@ -2975,9 +3169,6 @@ module.exports = {
   submitForApproval,
   approve,
   reject,
-  scheduleFollowUp,
-  listFollowUps,
-  completeFollowUp,
   reviseQuotation,
   getDefaultTerms,
   getDashboardStats,

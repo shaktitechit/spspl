@@ -164,43 +164,11 @@ exports.getFollowUpCalendar = asyncHandler(async (req, res) => {
 
 exports.getUrgentFollowUpsSummary = asyncHandler(async (req, res) => {
   const timeZone = req.query.tz || 'Asia/Kolkata';
+  const scope = req.query.scope || '';
   res.json({
     success: true,
-    data: await followUpService.getUrgentSummary(req.user, timeZone),
+    data: await followUpService.getUrgentSummary(req.user, timeZone, scope),
   });
-});
-
-exports.runTodaysFollowUpReminders = asyncHandler(async (req, res) => {
-  const { runTodaysFollowUpReminders } = require('../../jobs/followUpDailyReminder');
-  const { isLeadAdmin } = require('./lead.service');
-  if (!isLeadAdmin(req.user)) {
-    return res.status(403).json({ success: false, message: 'Administrators only' });
-  }
-  const force = req.query.force === '1' || req.query.force === 'true' || req.body?.force === true;
-  const data = await runTodaysFollowUpReminders({ force });
-  res.json({ success: true, data });
-});
-
-exports.runOverdueFollowUpReminders = asyncHandler(async (req, res) => {
-  const { runOverdueFollowUpReminders } = require('../../jobs/followUpDailyReminder');
-  const { isLeadAdmin } = require('./lead.service');
-  if (!isLeadAdmin(req.user)) {
-    return res.status(403).json({ success: false, message: 'Administrators only' });
-  }
-  const force = req.query.force === '1' || req.query.force === 'true' || req.body?.force === true;
-  const data = await runOverdueFollowUpReminders({ force });
-  res.json({ success: true, data });
-});
-
-exports.runAllFollowUpReminders = asyncHandler(async (req, res) => {
-  const { runAllFollowUpReminders } = require('../../jobs/followUpDailyReminder');
-  const { isLeadAdmin } = require('./lead.service');
-  if (!isLeadAdmin(req.user)) {
-    return res.status(403).json({ success: false, message: 'Administrators only' });
-  }
-  const force = req.query.force === '1' || req.query.force === 'true' || req.body?.force === true;
-  const data = await runAllFollowUpReminders({ force });
-  res.json({ success: true, data });
 });
 
 /* ----------------------------------------------------

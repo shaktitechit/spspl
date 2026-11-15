@@ -10,6 +10,7 @@ const notificationHelper = require('../utils/notificationHelper');
 const emailHelper = require('../modules/messages/helpers/email.helper');
 const { logger } = require('../utils/logger');
 const {
+  refId,
   resolveSalesRepFromFollowUp,
   resolveFollowUpOwnerUserId,
   resolveFollowUpAllUserIds,
@@ -267,7 +268,7 @@ function getUserRole(user) {
   return 'executive';
 }
 
-function groupByAssignee(rows) {
+function groupByAssignee(rows, { primaryAssigneeOnly = false } = {}) {
   /** @type {Map<string, typeof rows>} */
   const byUser = new Map();
   for (const fu of rows) {
@@ -280,7 +281,9 @@ function groupByAssignee(rows) {
       if (qStatus && CLOSED_QUOTATION_STATUSES.has(qStatus)) continue;
     }
 
-    const userIds = resolveFollowUpAllUserIds(fu);
+    const userIds = primaryAssigneeOnly
+      ? [fu.lead?.assigned_to ? refId(fu.lead.assigned_to) : null].filter(Boolean)
+      : resolveFollowUpAllUserIds(fu);
     for (const userId of userIds) {
       if (!userId) continue;
       if (!byUser.has(userId)) byUser.set(userId, []);
@@ -290,8 +293,59 @@ function groupByAssignee(rows) {
   return byUser;
 }
 
+async function resolveScopeUserSet(scope, actorUser) {
+  const normalized = String(scope || 'organization').toLowerCase().trim();
+  if (normalized === 'organization' || normalized === 'all' || !actorUser) {
+    return null; // organization-wide (no restriction)
+  }
+
+  const actorId = String(actorUser._id || actorUser.id || '');
+  if (!actorId) return new Set();
+
+  if (normalized === 'mine' || normalized === 'me') {
+    return new Set([actorId]);
+  }
+
+  if (normalized === 'team') {
+    const { isLeadAdmin, isLeadManager, isLeadCoordinator } = require('../modules/leads/lead.service');
+    const { getVisibleLeadUserIds } = require('../modules/team/teamVisibility.service');
+    if (isLeadManager(actorUser) || isLeadCoordinator(actorUser)) {
+      const teamIds = await getVisibleLeadUserIds(actorUser);
+      return new Set([actorId, ...(teamIds || []).map(String)]);
+    }
+    if (isLeadAdmin(actorUser)) {
+      const { LeadReportingEdge } = getModels();
+      const visited = new Set([actorId]);
+      let currentLevel = [actorUser._id].filter(Boolean);
+      let depth = 0;
+      while (currentLevel.length > 0 && depth < 10) {
+        const edges = await LeadReportingEdge.find({
+          manager: { $in: currentLevel },
+          is_active: true,
+        })
+          .select('subordinate')
+          .lean();
+        const nextLevel = [];
+        for (const e of edges) {
+          const sid = String(e.subordinate || '');
+          if (sid && !visited.has(sid)) {
+            visited.add(sid);
+            nextLevel.push(e.subordinate);
+          }
+        }
+        currentLevel = nextLevel;
+        depth++;
+      }
+      return visited;
+    }
+    return new Set([actorId]);
+  }
+
+  return null;
+}
+
 /**
- * Send grouped digests scoped by user and role.
+ * Send grouped digests scoped by user, role, and optional scope (organization | team | mine).
  */
 async function sendGroupedDigest({
   kind,
@@ -300,6 +354,8 @@ async function sendGroupedDigest({
   query,
   isOverdue,
   includeDateInLines = false,
+  scope = 'organization',
+  actorUser = null,
 }) {
   const { LeadFollowUp, User, FollowUpDigestLog, FollowUpReminderLog } = getModels();
 
@@ -317,23 +373,29 @@ async function sendGroupedDigest({
     .populate({
       path: 'lead',
       select:
-        'lead_no name company_name phone email status priority assigned_to requirement products party_id contacts billing_address',
+        'lead_no name company_name phone email status priority assigned_to assigned_users created_by requirement products party_id contacts billing_address',
       populate: [
         { path: 'party_id', select: 'party_name legal_name' },
         { path: 'assigned_to', select: 'name email' },
+        { path: 'assigned_users', select: 'name email' },
+        { path: 'created_by', select: 'name email' },
       ],
-    })
-    .populate({
-      path: 'quotation',
-      select:
-        'quotation_no version grand_total status customer_name kind_attn phone email subject party_id created_by lead sales_person_name sales_person_user',
-      populate: { path: 'sales_person_user', select: 'name email' },
     })
     .populate('created_by', 'name email')
     .sort({ follow_up_date: 1, follow_up_time: 1 })
     .lean();
 
-  const byUser = groupByAssignee(rows);
+  const normalizedScope = String(scope || 'organization').toLowerCase().trim();
+  const primaryAssigneeOnly = normalizedScope === 'mine' || normalizedScope === 'me';
+  const allowedUserSet = await resolveScopeUserSet(scope, actorUser);
+  const byUser = groupByAssignee(rows, { primaryAssigneeOnly });
+  if (allowedUserSet) {
+    for (const uid of [...byUser.keys()]) {
+      if (!allowedUserSet.has(uid)) {
+        byUser.delete(uid);
+      }
+    }
+  }
   const userIds = [...byUser.keys()];
   const users = userIds.length
     ? await User.find({ _id: { $in: userIds } }).select('name email portals').lean()
@@ -372,13 +434,10 @@ async function sendGroupedDigest({
       formatNotifLine(fu, { timeZone, includeDate: includeDateInLines })
     );
 
-    const quoteCount = followUps.filter((f) => f.quotation).length;
     const leadCount = followUps.filter((f) => f.lead && !f.quotation).length;
 
     const title = isOverdue
       ? `Overdue follow-ups (${count})`
-      : userRole === 'manager' && quoteCount > 0
-      ? `Today's Agenda (${quoteCount} Quotes, ${leadCount} Leads)`
       : `Today's follow-ups (${count})`;
 
     const message =
@@ -414,8 +473,8 @@ async function sendGroupedDigest({
               ? `Overdue Follow-up Reminder · ${dateLabel}`
               : `Today's Follow-up Agenda (${userRole.toUpperCase()}) · ${dateLabel}`,
             introText: isOverdue
-              ? `You have <strong>${count}</strong> overdue follow-up${count === 1 ? '' : 's'} (${quoteCount} Quotations, ${leadCount} Leads). Please complete or reschedule promptly.`
-              : `You have <strong>${count}</strong> follow-up${count === 1 ? '' : 's'} scheduled for today (${quoteCount} Quotation proposals, ${leadCount} Leads). Details and quick actions are listed below.`,
+              ? `You have <strong>${count}</strong> overdue lead follow-up${count === 1 ? '' : 's'} (${leadCount} Leads). Please complete or reschedule promptly.`
+              : `You have <strong>${count}</strong> lead follow-up${count === 1 ? '' : 's'} scheduled for today (${leadCount} Leads). Details and quick actions are listed below.`,
             tableTitle: isOverdue ? 'Overdue follow-ups' : "Today's follow-ups",
             badgeLabel: isOverdue ? 'OVERDUE' : 'TODAY',
             badgeClass: isOverdue ? 'badge-overdue' : 'badge-today',
@@ -505,10 +564,14 @@ async function runTodaysFollowUpReminders(options = {}) {
     force: Boolean(options.force),
     isOverdue: false,
     includeDateInLines: false,
+    scope: options.scope || 'organization',
+    actorUser: options.actorUser || null,
     query: {
       deletedAt: null,
       status: 'pending',
       follow_up_date: { $gte: start, $lt: endExclusive },
+      quotation: null,
+      lead: { $ne: null },
     },
   });
 }
@@ -526,10 +589,14 @@ async function runOverdueFollowUpReminders(options = {}) {
     force: Boolean(options.force),
     isOverdue: true,
     includeDateInLines: true,
+    scope: options.scope || 'organization',
+    actorUser: options.actorUser || null,
     query: {
       deletedAt: null,
       status: 'pending',
       follow_up_date: { $lt: start },
+      quotation: null,
+      lead: { $ne: null },
     },
   });
 }

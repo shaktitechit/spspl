@@ -15,14 +15,10 @@ const {
 } = require('../../utils/mongoSoftDelete');
 const activityService = require('../activity/activity.service');
 const notificationService = require('../notifications/notification.service');
-const emailHelper = require('../messages/helpers/email.helper');
-const { LEAD_MANAGER_URL } = require('../../config/env');
+const autoEmailService = require('../auto_emails/autoEmail.service');
 const { logger } = require('../../utils/logger');
 const { ALLOWED_STATUS_TRANSITIONS } = require('./lead.constants');
 const { getVisibleLeadUserIds, asObjectId } = require('../team/teamVisibility.service');
-const { resolveSalesRepFromLead } = require('../../utils/followUpSalesRep');
-
-const TEMPLATE_LEAD_ASSIGNED = 'lead_assigned';
 
 const LEAD_POPULATE = [
   { path: 'assigned_to', select: 'name email phone department' },
@@ -42,40 +38,6 @@ function refId(value) {
   if (!value) return null;
   if (typeof value === 'object' && value._id) return String(value._id);
   return String(value);
-}
-
-function escapeHtml(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function formatProductsSummary(products) {
-  if (!Array.isArray(products) || products.length === 0) return 'Not specified';
-  const names = products
-    .map((p) => {
-      const name = p.product_name || p.name || (p.product && p.product.product_name) || '';
-      const qty = p.quantity ? ` (Qty: ${p.quantity})` : '';
-      return name ? `${name}${qty}` : null;
-    })
-    .filter(Boolean);
-  return names.length > 0 ? names.join(', ') : 'Not specified';
-}
-
-function formatLeadLocation(lead) {
-  const b = lead.billing_address || {};
-  const parts = [b.city, b.state, b.country].filter(Boolean);
-  return parts.length > 0 ? parts.join(', ') : 'Not specified';
-}
-
-function getLeadPortalUrl(leadId) {
-  const base = LEAD_MANAGER_URL || 'http://localhost:7010/dashboard';
-  const cleanBase = String(base).replace(/\/$/, '');
-  return `${cleanBase}/leads/${leadId}`;
 }
 
 /**
@@ -106,12 +68,8 @@ async function notifyLeadAssignee({
   const leadNo = lead.lead_no || '';
   const leadName = lead.name || 'Lead';
   const partyCompany = lead.company_name || 'Individual';
-  const priority = (lead.priority || 'medium').toString().toUpperCase();
   const departmentName = (lead.department || 'sales').toString().toUpperCase();
   const actorName = actor?.name || actor?.email || 'Lead Manager';
-  const location = formatLeadLocation(lead);
-  const productsInterested = formatProductsSummary(lead.products);
-  const leadPortalUrl = getLeadPortalUrl(lead._id);
 
   let title = 'New Lead Assigned';
   let message = `You have been assigned Lead #${leadNo} (${leadName} - ${partyCompany})`;
@@ -160,48 +118,19 @@ async function notifyLeadAssignee({
     );
   }
 
-  if (!recipientEmail) return;
-
-  const handoverNotesRowHtml = notes
-    ? `<tr><td class="label">Notes / Instructions</td><td class="value" style="font-size:12px;font-style:italic;">${escapeHtml(notes)}</td></tr>`
-    : '';
-
-  const ctaButtonHtml = `<a href="${leadPortalUrl}" style="display:inline-block;padding:10px 22px;background-color:#2563eb;color:#ffffff;text-decoration:none;font-weight:600;font-size:13px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">View Lead in Portal &rarr;</a>`;
-
-  try {
-    await emailHelper.sendTemplateEmail(
-      recipientEmail,
-      TEMPLATE_LEAD_ASSIGNED,
-      {
-        subject,
-        recipientName: recipientName || 'Team Member',
-        leadNo,
-        leadName,
-        partyCompany,
-        department: departmentName,
-        contactPhone: lead.phone || '—',
-        location,
-        priority,
-        productsInterested,
-        salesRepName: recipientName || resolveSalesRepFromLead(lead),
-        actorName,
-        coAssignees: coAssigneeNames.length > 0 ? coAssigneeNames.join(', ') : 'None',
-        headerSubtitle,
-        badgeLabel,
-        introText,
-        portalHint,
-        handoverNotesRowHtml,
-        ctaButtonHtml,
-      },
-      [],
-      [],
-      microsoftGraph.senderEmail || null
-    );
-  } catch (err) {
-    logger.error(
-      `[Lead Service] assignment email failed for ${recipientEmail}: ${err.message}`
-    );
-  }
+  await autoEmailService.sendLeadAssignmentEmail({
+    lead,
+    recipientEmail,
+    recipientName,
+    actor,
+    subject,
+    badgeLabel,
+    headerSubtitle,
+    introText,
+    portalHint,
+    coAssigneeNames,
+    notes,
+  });
 }
 
 /**
@@ -448,21 +377,19 @@ async function list(query = {}, user) {
     : user._id;
 
   if (canManageAll) {
-    // Portal managers see ALL leads. Optionally filter by specific assignee.
-    if (query.assigned_to) {
-      if (query.assigned_to === 'unassigned') {
-        andConditions.push({ assigned_to: null });
-      } else if (query.assigned_to !== 'all') {
-        const assignedObjId = mongoose.Types.ObjectId.isValid(query.assigned_to)
-          ? new mongoose.Types.ObjectId(query.assigned_to)
-          : query.assigned_to;
-        andConditions.push({
-          $or: [
-            { assigned_to: assignedObjId },
-            { assigned_to: String(query.assigned_to) },
-          ],
-        });
+    // Portal managers see ALL leads. Optionally filter by specific assignee(s).
+    if (query.assigned_to && query.assigned_to !== 'all') {
+      const ids = String(query.assigned_to).split(',').map((s) => s.trim()).filter(Boolean);
+      const hasUnassigned = ids.includes('unassigned');
+      const userIds = ids.filter((id) => id !== 'unassigned' && id !== 'all');
+      const orClauses = [];
+      if (hasUnassigned) orClauses.push({ assigned_to: null });
+      if (userIds.length > 0) {
+        const oids = userIds.map(asObjectId).filter(Boolean);
+        orClauses.push({ assigned_to: { $in: [...oids, ...userIds] } });
       }
+      if (orClauses.length === 1) andConditions.push(orClauses[0]);
+      else if (orClauses.length > 1) andConditions.push({ $or: orClauses });
     }
   } else if (canSearchAssigneeAsWpManager) {
     // Work Planner managers planning for an executive: only that executive's leads.
@@ -481,24 +408,23 @@ async function list(query = {}, user) {
     const scope = String(query.scope || '').toLowerCase();
 
     if (query.assigned_to && query.assigned_to !== 'all') {
-      if (query.assigned_to === 'unassigned') {
-        andConditions.push({ assigned_to: null });
+      const ids = String(query.assigned_to).split(',').map((s) => s.trim()).filter(Boolean);
+      const hasUnassigned = ids.includes('unassigned');
+      const reqIds = ids.filter((id) => id !== 'unassigned' && id !== 'all');
+      const allowedIds = visibleIds ? reqIds.filter((id) => visibleIds.includes(id)) : reqIds;
+      const orClauses = [];
+      if (hasUnassigned) orClauses.push({ assigned_to: null });
+      if (allowedIds.length > 0) {
+        const oids = allowedIds.map(asObjectId).filter(Boolean);
+        orClauses.push({ assigned_to: { $in: [...oids, ...allowedIds] } });
+        orClauses.push({ assigned_users: { $in: [...oids, ...allowedIds] } });
+      }
+      if (orClauses.length === 0) {
+        andConditions.push({ assigned_to: { $in: [] } });
+      } else if (orClauses.length === 1) {
+        andConditions.push(orClauses[0]);
       } else {
-        const reqId = String(query.assigned_to);
-        if (visibleIds && !visibleIds.includes(reqId)) {
-          andConditions.push({ assigned_to: { $in: [] } });
-        } else {
-          const assignedObjId = mongoose.Types.ObjectId.isValid(reqId)
-            ? new mongoose.Types.ObjectId(reqId)
-            : reqId;
-          andConditions.push({
-            $or: [
-              { assigned_to: assignedObjId },
-              { assigned_to: reqId },
-              { assigned_users: assignedObjId },
-            ],
-          });
-        }
+        andConditions.push({ $or: orClauses });
       }
     } else if (scope === 'mine') {
       andConditions.push({
@@ -541,16 +467,20 @@ async function list(query = {}, user) {
     });
   }
 
+  if (query.secondary_assignees && query.secondary_assignees !== 'all') {
+    const ids = String(query.secondary_assignees).split(',').map((s) => s.trim()).filter(Boolean);
+    if (ids.length > 0) {
+      const oids = ids.map(asObjectId).filter(Boolean);
+      andConditions.push({ assigned_users: { $in: [...oids, ...ids] } });
+    }
+  }
+
   if (query.created_by && query.created_by !== 'all') {
-    const createdByObjId = mongoose.Types.ObjectId.isValid(query.created_by)
-      ? new mongoose.Types.ObjectId(query.created_by)
-      : query.created_by;
-    andConditions.push({
-      $or: [
-        { created_by: createdByObjId },
-        { created_by: String(query.created_by) },
-      ],
-    });
+    const ids = String(query.created_by).split(',').map((s) => s.trim()).filter(Boolean);
+    if (ids.length > 0) {
+      const oids = ids.map(asObjectId).filter(Boolean);
+      andConditions.push({ created_by: { $in: [...oids, ...ids] } });
+    }
   }
 
   if (query.department && query.department !== 'all') {
@@ -579,23 +509,71 @@ async function list(query = {}, user) {
   }
 
   if (query.status && query.status !== 'all') {
-    if (query.status.includes(',')) {
-      andConditions.push({ status: { $in: query.status.split(',').map((s) => s.trim()) } });
-    } else {
-      andConditions.push({ status: query.status });
+    const vals = String(query.status).split(',').map((s) => s.trim()).filter(Boolean);
+    if (vals.length > 1) {
+      andConditions.push({ status: { $in: vals } });
+    } else if (vals.length === 1) {
+      andConditions.push({ status: vals[0] });
     }
   }
 
   if (query.priority && query.priority !== 'all') {
-    andConditions.push({ priority: query.priority });
+    const vals = String(query.priority).split(',').map((s) => s.trim()).filter(Boolean);
+    if (vals.length > 1) {
+      andConditions.push({ priority: { $in: vals } });
+    } else if (vals.length === 1) {
+      andConditions.push({ priority: vals[0] });
+    }
   }
 
   if (query.source && query.source !== 'all') {
-    andConditions.push({ source: query.source });
+    const vals = String(query.source).split(',').map((s) => s.trim()).filter(Boolean);
+    if (vals.length > 1) {
+      andConditions.push({ source: { $in: vals } });
+    } else if (vals.length === 1) {
+      andConditions.push({ source: vals[0] });
+    }
   }
 
-  if (query.created_by && query.created_by !== 'all') {
-    andConditions.push({ created_by: asObjectId(query.created_by) || query.created_by });
+  if (query.contact_org) {
+    const vals = String(query.contact_org).split(',').map((s) => s.trim()).filter(Boolean);
+    if (vals.length > 0) {
+      const orClauses = [];
+      for (const v of vals) {
+        const escaped = v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const rx = new RegExp(escaped, 'i');
+        orClauses.push({ company_name: rx }, { name: rx });
+      }
+      andConditions.push({ $or: orClauses });
+    }
+  }
+
+  if (query.products) {
+    const vals = String(query.products).split(',').map((s) => s.trim()).filter(Boolean);
+    if (vals.length > 0) {
+      const orClauses = [];
+      const oids = vals.map(asObjectId).filter(Boolean);
+      if (oids.length > 0) {
+        orClauses.push({ 'products.product': { $in: oids } });
+      }
+      for (const v of vals) {
+        const escaped = v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        orClauses.push({ 'products.product_name': new RegExp(escaped, 'i') });
+      }
+      andConditions.push({ $or: orClauses });
+    }
+  }
+
+  if (query.min_qty !== undefined && query.min_qty !== '') {
+    andConditions.push({
+      $expr: { $gte: [{ $sum: '$products.quantity' }, Number(query.min_qty)] },
+    });
+  }
+
+  if (query.max_qty !== undefined && query.max_qty !== '') {
+    andConditions.push({
+      $expr: { $lte: [{ $sum: '$products.quantity' }, Number(query.max_qty)] },
+    });
   }
 
   if (query.city) {
@@ -612,6 +590,21 @@ async function list(query = {}, user) {
 
   if (query.max_value !== undefined && query.max_value !== '') {
     andConditions.push({ estimated_value: { $lte: Number(query.max_value) } });
+  }
+
+  if (query.follow_up_from || query.follow_up_to) {
+    const fuRange = {};
+    if (query.follow_up_from) {
+      const from = new Date(query.follow_up_from);
+      from.setHours(0, 0, 0, 0);
+      fuRange.$gte = from;
+    }
+    if (query.follow_up_to) {
+      const to = new Date(query.follow_up_to);
+      to.setHours(23, 59, 59, 999);
+      fuRange.$lte = to;
+    }
+    andConditions.push({ next_follow_up_at: fuRange });
   }
 
   if (query.from_date || query.to_date) {
@@ -675,11 +668,12 @@ async function list(query = {}, user) {
 
   if (!paginate) {
     const items = await Lead.find(q).populate(LEAD_POPULATE).sort(sort).lean();
+    const enriched = await attachLastActionToLeads(items.map(toPlain));
     return {
-      items: items.map(toPlain),
-      total: items.length,
+      items: enriched,
+      total: enriched.length,
       page: 1,
-      limit: items.length,
+      limit: enriched.length,
       totalPages: 1,
     };
   }
@@ -689,13 +683,72 @@ async function list(query = {}, user) {
     Lead.countDocuments(q),
   ]);
 
+  const enriched = await attachLastActionToLeads(items.map(toPlain));
+
   return {
-    items: items.map(toPlain),
+    items: enriched,
     total,
     page,
     limit,
     totalPages: Math.ceil(total / limit) || 1,
   };
+}
+
+/**
+ * Attach the most recent follow-up remark (with timestamp and user) to each lead in a list.
+ */
+async function attachLastActionToLeads(plainItems) {
+  if (!Array.isArray(plainItems) || plainItems.length === 0) return plainItems;
+  const { LeadFollowUp } = getModels();
+  const leadIds = plainItems.map((l) => l._id).filter(Boolean);
+  if (leadIds.length === 0) return plainItems;
+
+  const followUps = await LeadFollowUp.find({ lead: { $in: leadIds }, deletedAt: null })
+    .populate('created_by', 'name email')
+    .populate('completed_by', 'name email')
+    .populate('actions.author', 'name email')
+    .sort({ updatedAt: -1, createdAt: -1 })
+    .lean();
+
+  const latestByLead = new Map();
+  const consider = (leadId, candidate) => {
+    if (!candidate.remarks) return;
+    const key = String(leadId);
+    const prev = latestByLead.get(key);
+    const ts = candidate.timestamp ? new Date(candidate.timestamp).getTime() : 0;
+    const prevTs = prev?.timestamp ? new Date(prev.timestamp).getTime() : 0;
+    if (!prev || ts > prevTs) {
+      latestByLead.set(key, candidate);
+    }
+  };
+
+  for (const fu of followUps) {
+    if (Array.isArray(fu.actions)) {
+      for (const act of fu.actions) {
+        if (act?.message && String(act.message).trim()) {
+          consider(fu.lead, {
+            remarks: String(act.message).trim(),
+            timestamp: act.createdAt || fu.updatedAt || fu.createdAt,
+            by_user: act.author ? toPlain(act.author) : null,
+          });
+        }
+      }
+    }
+
+    const remarksParts = [fu.outcome, fu.notes].map((v) => (v ? String(v).trim() : '')).filter(Boolean);
+    if (remarksParts.length > 0) {
+      consider(fu.lead, {
+        remarks: remarksParts.join(' • '),
+        timestamp: fu.completed_at || fu.updatedAt || fu.createdAt,
+        by_user: fu.completed_by ? toPlain(fu.completed_by) : fu.created_by ? toPlain(fu.created_by) : null,
+      });
+    }
+  }
+
+  return plainItems.map((item) => ({
+    ...item,
+    last_action: latestByLead.get(String(item._id)) || null,
+  }));
 }
 
 /**
@@ -1002,17 +1055,21 @@ async function assign(id, body, user) {
   if (!lead) throw new ApiError(404, 'Lead not found');
 
   const notes = body?.notes;
-  const rawAssignedUsers = Array.isArray(body?.assigned_users) && body.assigned_users.length > 0
-    ? body.assigned_users.map(String)
-    : body?.assigned_to
-    ? [String(body.assigned_to)]
+  const incomingUsers = Array.isArray(body?.assigned_users)
+    ? body.assigned_users.filter(Boolean).map(String)
     : [];
+  const primaryUserId = body?.assigned_to
+    ? String(body.assigned_to)
+    : incomingUsers[0] || '';
 
-  if (rawAssignedUsers.length === 0) {
+  if (!primaryUserId) {
     throw new ApiError(400, 'assigned_to or assigned_users is required');
   }
 
-  const targetUserId = rawAssignedUsers[0];
+  const secondaryUserIds = [...new Set(incomingUsers.filter((uid) => uid !== primaryUserId))];
+  const rawAssignedUsers = [primaryUserId, ...secondaryUserIds];
+
+  const targetUserId = primaryUserId;
   const targetUser = await User.findById(targetUserId).lean();
   if (!targetUser) throw new ApiError(404, 'Target user not found');
 
@@ -1039,7 +1096,7 @@ async function assign(id, body, user) {
   await lead.save();
 
   const actionName = isReassignment ? 'reassigned' : 'assigned';
-  const actionMsg = `Lead #${lead.lead_no} ${actionName} to ${targetUser.name}${rawAssignedUsers.length > 1 ? ` (+${rawAssignedUsers.length - 1} more)` : ''}`;
+  const actionMsg = `Lead #${lead.lead_no} ${actionName} to ${targetUser.name} (Primary)${secondaryUserIds.length > 0 ? ` + ${secondaryUserIds.length} secondary assignee(s)` : ''}`;
 
   await activityService.create({
     actor: user._id,

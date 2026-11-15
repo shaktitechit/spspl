@@ -227,18 +227,47 @@ export function getLeadDepartments(lead: { department?: string; departments?: st
   return [];
 }
 
+/** Resolve a lead's single primary assignee and deduplicated secondary assignees. */
+export function splitLeadAssignees(lead: {
+  assigned_to?: LeadAssigneeLike;
+  assigned_users?: LeadAssigneeLike[];
+} | null | undefined): {
+  primary: Exclude<LeadAssigneeLike, null | undefined> | null;
+  secondary: Array<Exclude<LeadAssigneeLike, null | undefined>>;
+} {
+  if (!lead) return { primary: null, secondary: [] };
+  const usersList = Array.isArray(lead.assigned_users)
+    ? lead.assigned_users.filter((u): u is Exclude<LeadAssigneeLike, null | undefined> => Boolean(u && u._id))
+    : [];
+
+  const primaryObj =
+    lead.assigned_to && typeof lead.assigned_to === "object" && lead.assigned_to._id
+      ? lead.assigned_to
+      : usersList[0] || null;
+
+  const primaryId = primaryObj?._id ? String(primaryObj._id) : "";
+  const seen = new Set<string>(primaryId ? [primaryId] : []);
+  const secondary: Array<Exclude<LeadAssigneeLike, null | undefined>> = [];
+
+  for (const u of usersList) {
+    const uid = String(u._id);
+    if (!seen.has(uid)) {
+      seen.add(uid);
+      secondary.push(u);
+    }
+  }
+
+  return { primary: primaryObj, secondary };
+}
+
 /** Compact label for list/detail: "John Doe" or "John Doe, Jane Smith" or "Unassigned" */
 export function formatLeadAssignees(lead: {
   assigned_to?: LeadAssigneeLike;
   assigned_users?: LeadAssigneeLike[];
 } | null | undefined): string {
-  if (!lead) return "Unassigned";
-  if (Array.isArray(lead.assigned_users) && lead.assigned_users.length > 0) {
-    const names = lead.assigned_users.map((u) => u?.name).filter(Boolean);
-    if (names.length > 0) return names.join(", ");
-  }
-  if (lead.assigned_to?.name) return lead.assigned_to.name;
-  return "Unassigned";
+  const { primary, secondary } = splitLeadAssignees(lead);
+  const names = [primary?.name, ...secondary.map((u) => u.name)].filter(Boolean);
+  return names.length > 0 ? names.join(", ") : "Unassigned";
 }
 
 /** Returns true if user has a senior role on lead manager portal (admin, manager, coordinator) */
@@ -560,6 +589,89 @@ export function getFollowUpCreatorName(fu: {
     return quoteObj.created_by.name;
   }
   return "System / Unknown";
+}
+
+export type FollowUpUserRole = "primary" | "secondary" | "creator";
+
+export interface FollowUpRoleBreakdown {
+  primaryAssigneeId: string | null;
+  secondaryAssigneeIds: string[];
+  assigneeIds: string[];
+  creatorIds: string[];
+  isPrimary: boolean;
+  isSecondary: boolean;
+  isCreator: boolean;
+  roles: FollowUpUserRole[];
+}
+
+function extractUserId(ref: { _id?: string } | string | null | undefined): string | null {
+  if (!ref) return null;
+  if (typeof ref === "object") return ref._id ? String(ref._id) : null;
+  return String(ref);
+}
+
+/**
+ * Computes primary assignee, secondary assignees, and creator IDs for a follow-up,
+ * along with the given user's role flags.
+ */
+export function getFollowUpRoleBreakdown(
+  fu: {
+    created_by?: { _id?: string } | string | null;
+    lead?:
+      | {
+          assigned_to?: { _id?: string } | string | null;
+          assigned_users?: Array<{ _id?: string } | string>;
+          created_by?: { _id?: string } | string | null;
+        }
+      | string
+      | null;
+  },
+  userId?: string | null
+): FollowUpRoleBreakdown {
+  const leadObj = typeof fu.lead === "object" && fu.lead !== null ? fu.lead : null;
+  const primaryAssigneeId = extractUserId(leadObj?.assigned_to);
+
+  const secondarySet = new Set<string>();
+  if (Array.isArray(leadObj?.assigned_users)) {
+    for (const u of leadObj.assigned_users) {
+      const id = extractUserId(u);
+      if (id && id !== primaryAssigneeId) {
+        secondarySet.add(id);
+      }
+    }
+  }
+  const secondaryAssigneeIds = Array.from(secondarySet);
+  const assigneeIds = primaryAssigneeId
+    ? [primaryAssigneeId, ...secondaryAssigneeIds]
+    : secondaryAssigneeIds;
+
+  const creatorSet = new Set<string>();
+  const fuCreatorId = extractUserId(fu.created_by);
+  if (fuCreatorId) creatorSet.add(fuCreatorId);
+  const leadCreatorId = extractUserId(leadObj?.created_by);
+  if (leadCreatorId) creatorSet.add(leadCreatorId);
+  const creatorIds = Array.from(creatorSet);
+
+  const uid = userId ? String(userId) : "";
+  const isPrimary = Boolean(uid && primaryAssigneeId === uid);
+  const isSecondary = Boolean(uid && secondarySet.has(uid));
+  const isCreator = Boolean(uid && creatorSet.has(uid));
+
+  const roles: FollowUpUserRole[] = [];
+  if (isPrimary) roles.push("primary");
+  if (isSecondary) roles.push("secondary");
+  if (isCreator) roles.push("creator");
+
+  return {
+    primaryAssigneeId,
+    secondaryAssigneeIds,
+    assigneeIds,
+    creatorIds,
+    isPrimary,
+    isSecondary,
+    isCreator,
+    roles,
+  };
 }
 
 import { isAdmin, isCoordinator, isManager, isExecutive } from "@/utils/authStorage";

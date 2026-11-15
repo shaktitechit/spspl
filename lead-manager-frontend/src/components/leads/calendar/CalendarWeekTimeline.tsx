@@ -22,7 +22,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import type { LeadFollowUpRecord } from "@/store/api";
-import { formatLeadDate } from "../leadUtils";
+import { formatLeadDate, getFollowUpRoleBreakdown } from "../leadUtils";
 
 export type CalendarWeekTimelineProps = {
   followUps: LeadFollowUpRecord[];
@@ -30,6 +30,7 @@ export type CalendarWeekTimelineProps = {
   onDateChange: (newDate: Date) => void;
   onSelectEvent: (fu: LeadFollowUpRecord) => void;
   hasQuotationAccess: boolean;
+  currentUserId?: string;
 };
 
 export function CalendarWeekTimeline({
@@ -38,6 +39,7 @@ export function CalendarWeekTimeline({
   onDateChange,
   onSelectEvent,
   hasQuotationAccess,
+  currentUserId,
 }: CalendarWeekTimelineProps) {
   const todayStr = useMemo(() => {
     const now = new Date();
@@ -230,6 +232,7 @@ export function CalendarWeekTimeline({
                     const company =
                       (isQuotation ? quoteObj?.customer_name : leadObj?.company_name) || "";
                     const refNo = isQuotation ? quoteObj?.quotation_no : leadObj?.lead_no;
+                    const { roles } = getFollowUpRoleBreakdown(ev, currentUserId);
 
                     return (
                       <div
@@ -261,10 +264,29 @@ export function CalendarWeekTimeline({
                         </div>
 
                         <p className="font-semibold text-slate-900 dark:text-white truncate">
-                          {contactName}
+                          {company || contactName}
                         </p>
-                        {company && (
-                          <p className="text-[10px] text-slate-400 truncate">{company}</p>
+                        {company && contactName && company !== contactName && (
+                          <p className="text-[10px] text-slate-400 truncate">{contactName}</p>
+                        )}
+
+                        {roles.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {roles.map((r) => (
+                              <span
+                                key={r}
+                                className={`rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase ${
+                                  r === "primary"
+                                    ? "bg-blue-600 text-white"
+                                    : r === "secondary"
+                                    ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-200"
+                                    : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+                                }`}
+                              >
+                                {r === "primary" ? "Primary" : r === "secondary" ? "Secondary" : "Creator"}
+                              </span>
+                            ))}
+                          </div>
                         )}
 
                         {refNo && (

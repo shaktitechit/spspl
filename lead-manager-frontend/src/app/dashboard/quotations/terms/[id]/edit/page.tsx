@@ -1,7 +1,7 @@
 "use client";
 
 import { use } from "react";
-import { TermsFormPage } from "@/components/quotations/TermsFormPage";
+import { TermsFormPage } from "@/components/quotations/shared/TermsFormPage";
 
 export default function EditTermsRoutePage({
   params,

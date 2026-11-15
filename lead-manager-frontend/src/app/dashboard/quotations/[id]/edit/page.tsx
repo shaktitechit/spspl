@@ -1,7 +1,7 @@
 "use client";
 
 import { use } from "react";
-import { QuotationFormPage } from "@/components/quotations/QuotationFormPage";
+import { QuotationFormPage } from "@/components/quotations/shared/QuotationFormPage";
 
 export default function EditQuotationRoutePage({
   params,

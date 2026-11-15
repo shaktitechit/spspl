@@ -96,7 +96,9 @@ function resolveFollowUpOwnerUserId(fu = {}) {
 }
 
 /**
- * All assignee / owner user ids for routing follow-up reminders (including co-assignees).
+ * All assignee / owner user ids for routing follow-up reminders:
+ * primary assignee (`lead.assigned_to`), secondary assignees (`lead.assigned_users`),
+ * lead creator (`lead.created_by`), and follow-up creator (`fu.created_by`).
  * @param {object} fu
  * @returns {string[]}
  */
@@ -113,18 +115,11 @@ function resolveFollowUpAllUserIds(fu = {}) {
       if (id) set.add(id);
     }
   }
-
-  const quotation = fu.quotation && typeof fu.quotation === 'object' ? fu.quotation : null;
-  if (quotation?.sales_person_user) {
-    const id = refId(quotation.sales_person_user);
+  if (lead?.created_by) {
+    const id = refId(lead.created_by);
     if (id) set.add(id);
   }
-  if (quotation?.created_by) {
-    const id = refId(quotation.created_by);
-    if (id) set.add(id);
-  }
-
-  if (set.size === 0 && fu.created_by) {
+  if (fu.created_by) {
     const id = refId(fu.created_by);
     if (id) set.add(id);
   }
