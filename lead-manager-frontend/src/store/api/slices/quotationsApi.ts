@@ -20,8 +20,10 @@ export type ListQuotationsQueryParams = {
   status?: string;
   search?: string;
   department?: string;
+  scope?: string;
   page?: number;
-  limit?: number;
+  limit?: number | "all";
+  all?: boolean;
 };
 
 export type ListQuotationsResponse = {

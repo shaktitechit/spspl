@@ -197,13 +197,28 @@ export function ListQuotationsPage({
   const sessionUser = useMemo(() => readSessionFromStorage()?.user || null, []);
   const authUser = (reduxUser || sessionUser) as any;
 
-  // RTK Query API call
+  // Resolve effective scope: global for admin, team for manager & coordinator, my for executive
+  const effectiveScope: QuotationScope = useMemo(() => {
+    if (scope) return scope;
+    if (isAdmin(authUser as any)) return "organisation";
+    if (isManager(authUser as any)) return "manager";
+    if (isCoordinator(authUser as any)) return "coordinator";
+    return "my";
+  }, [scope, authUser]);
+
+  const apiScope = useMemo(() => {
+    if (effectiveScope === "organisation") return "global";
+    if (effectiveScope === "manager" || effectiveScope === "coordinator") return "team";
+    return "my";
+  }, [effectiveScope]);
+
+  // RTK Query API call — fetch all quotations within the active scope so listing, filtering, and export cover all records
   const { data: rawQuotations, isLoading, isFetching, refetch } = useListQuotationsQuery({
     search: searchTerm || undefined,
     status: statusFilter.length === 1 ? statusFilter[0] : undefined,
     department: departmentFilter.length === 1 ? departmentFilter[0] : undefined,
-    page,
-    limit,
+    scope: apiScope,
+    limit: "all",
   });
 
   const baseQuotations: QuotationRecord[] = useMemo(() => {
@@ -219,19 +234,34 @@ export function ListQuotationsPage({
     }
     const currentUser = authUser || (typeof window !== "undefined" ? readSessionFromStorage()?.user : null);
     if (!currentUser) return list;
-    if (scope === "my") {
-      return list.filter(
-        (q) =>
+    if (effectiveScope === "my") {
+      const currentUid = String(currentUser?._id || currentUser?.id || "");
+      return list.filter((q) => {
+        const leadObj = typeof q.lead === "object" && q.lead !== null ? (q.lead as any) : null;
+        const assignedTo =
+          leadObj && typeof leadObj.assigned_to === "object"
+            ? leadObj.assigned_to?._id
+            : leadObj?.assigned_to;
+        const isLeadAssigned =
+          Boolean(currentUid && assignedTo && String(assignedTo) === currentUid) ||
+          (Boolean(currentUid) &&
+            Array.isArray(leadObj?.assigned_users) &&
+            leadObj.assigned_users.some(
+              (u: any) => String(typeof u === "object" ? u?._id : u) === currentUid
+            ));
+        return (
           isQuotationCreator(currentUser as any, q as any) ||
           isQuotationSalesRepresentative(currentUser as any, q as any) ||
-          isStrictSignatory(currentUser as any, q as any)
-      );
+          isStrictSignatory(currentUser as any, q as any) ||
+          isLeadAssigned
+        );
+      });
     }
     if (canManageQuotations(currentUser) || canViewQuotations(currentUser)) {
       return list;
     }
     return list.filter((q) => isQuotationRosterVisible(currentUser as any, q as any));
-  }, [rawQuotations, authUser, scope]);
+  }, [rawQuotations, authUser, effectiveScope]);
 
   // Unique facet values from current data
   const {
@@ -568,18 +598,26 @@ export function ListQuotationsPage({
 
   const allVisibleSelected = quotations.length > 0 && selectedIds.size === quotations.length;
   const someVisibleSelected = selectedIds.size > 0 && !allVisibleSelected;
-  const totalCount =
-    rawQuotations && typeof rawQuotations === "object" && "total" in rawQuotations && typeof (rawQuotations as any).total === "number"
-      ? (rawQuotations as any).total
-      : quotations.length;
+  const totalCount = quotations.length;
+  const totalPages = Math.max(1, Math.ceil(quotations.length / limit));
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  const paginatedQuotations = useMemo(() => {
+    const start = (page - 1) * limit;
+    return quotations.slice(start, start + limit);
+  }, [quotations, page, limit]);
+
   const scopeBadgeLabel =
-    scope === "organisation" || (!scope && isAdmin(authUser as any))
+    effectiveScope === "organisation"
       ? "Global Scope"
-      : scope === "manager" ||
-        scope === "coordinator" ||
-        (!scope && (isManager(authUser as any) || isCoordinator(authUser as any)))
+      : effectiveScope === "manager" || effectiveScope === "coordinator"
       ? "Team Scope"
-      : "Personal Scope";
+      : "My Scope";
 
   return (
     <div className="relative min-h-screen space-y-5 pb-24 font-sans">
@@ -782,7 +820,7 @@ export function ListQuotationsPage({
                     </td>
                   </tr>
                 ) : (
-                  quotations.map((q) => {
+                  paginatedQuotations.map((q) => {
                     const leadInfo = typeof q.lead === "object" && q.lead !== null ? q.lead : null;
                     const salesRep = salesRepresentativeDisplay(q);
                     const isSelected = selectedIds.has(q._id);
@@ -1169,7 +1207,9 @@ export function ListQuotationsPage({
           {/* Pagination Bar */}
           <div className="flex items-center justify-between border-t border-border px-5 py-3 bg-surface-muted/30">
             <div className="text-xs text-muted">
-              Showing Page <span className="font-semibold text-foreground">{page}</span> ({quotations.length} records)
+              Showing Page <span className="font-semibold text-foreground">{page}</span> of{" "}
+              <span className="font-semibold text-foreground">{totalPages}</span> (
+              {paginatedQuotations.length} of {quotations.length} records)
             </div>
 
             <div className="flex items-center gap-2">
@@ -1183,8 +1223,8 @@ export function ListQuotationsPage({
               </button>
               <button
                 type="button"
-                disabled={quotations.length < limit}
-                onClick={() => setPage((p) => p + 1)}
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1 text-xs font-semibold text-foreground hover:bg-surface-muted disabled:opacity-40 cursor-pointer"
               >
                 Next <ChevronRight className="h-3.5 w-3.5" />
@@ -1214,7 +1254,7 @@ export function ListQuotationsPage({
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {quotations.map((q) => {
+              {paginatedQuotations.map((q) => {
                 const leadInfo = typeof q.lead === "object" && q.lead !== null ? q.lead : null;
                 const salesRep = salesRepresentativeDisplay(q);
                 const isSelected = selectedIds.has(q._id);
@@ -1820,6 +1860,7 @@ export function ListQuotationsPage({
             setExportOnlySelected(false);
           }}
           quotations={selectedQuotations}
+          scopeLabel={scopeBadgeLabel}
         />
       )}
     </div>

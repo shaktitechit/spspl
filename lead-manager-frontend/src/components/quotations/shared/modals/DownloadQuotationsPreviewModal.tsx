@@ -86,6 +86,7 @@ export type DownloadQuotationsPreviewModalProps = {
   open: boolean;
   onClose: () => void;
   quotations: QuotationRecord[];
+  scopeLabel?: string;
   title?: string;
   subtitle?: string;
 };
@@ -94,6 +95,7 @@ export function DownloadQuotationsPreviewModal({
   open,
   onClose,
   quotations,
+  scopeLabel,
   title = "Export Quotations Master Preview",
   subtitle = "Customize columns, preview formatted commercial figures, and export directly to Excel (.xlsx), CSV, or PDF.",
 }: DownloadQuotationsPreviewModalProps) {
@@ -271,7 +273,7 @@ export function DownloadQuotationsPreviewModal({
     downloadTableXlsx({
       filename: `${companyPrefix}_quotations_export_${new Date().toISOString().slice(0, 10)}.xlsx`,
       sheetName: "Quotations",
-      title: `${letterhead.companyName || "Quotations Master"} Export (${quotations.length} Quotations, Total Value: ${formatCurrencyINR(totalGrandVal)})`,
+      title: `${letterhead.companyName || "Quotations Master"} Export${scopeLabel ? ` [${scopeLabel}]` : ""} (${quotations.length} Quotations, Total Value: ${formatCurrencyINR(totalGrandVal)})`,
       columns: exportCols,
       rows: exportRows,
     });
@@ -370,7 +372,7 @@ export function DownloadQuotationsPreviewModal({
       await downloadTablePdf({
         filename: `${companyPrefix}_quotations_export_${new Date().toISOString().slice(0, 10)}.pdf`,
         title: "Quotations Master Commercial Register",
-        subtitle: `Total Quotations: ${tableRows.length} | Export Date: ${new Date().toLocaleDateString("en-IN")}`,
+        subtitle: `${scopeLabel ? `Scope: ${scopeLabel} | ` : ""}Total Quotations: ${tableRows.length} | Export Date: ${new Date().toLocaleDateString("en-IN")}`,
         columns: exportCols,
         rows: exportRows,
         letterhead,
@@ -406,8 +408,13 @@ export function DownloadQuotationsPreviewModal({
                 <FileSpreadsheet className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
                   {title}
+                  {scopeLabel && (
+                    <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">
+                      {scopeLabel}
+                    </span>
+                  )}
                   <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                     {tableRows.length} Proposals Selected
                   </span>

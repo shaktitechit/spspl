@@ -593,78 +593,105 @@ function advanceLeadToQuotationStatus(lead) {
   return false;
 }
 
+function buildEmailVisibilityClauses(user) {
+  const userEmail = (user?.email || '').toLowerCase().trim();
+  const escapedEmail = userEmail ? userEmail.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&') : '';
+  if (!escapedEmail) return [];
+  return [
+    { signatory_email: new RegExp(`^${escapedEmail}$`, 'i') },
+    { 'secondary_sales_persons.email': new RegExp(`^${escapedEmail}$`, 'i') },
+  ];
+}
+
+async function buildPersonalQuotationFilter(user) {
+  const { Lead } = getModels();
+  const uid = asObjectId(user._id) || user._id;
+  const assignedLeads = await Lead.find({
+    $or: [{ assigned_to: uid }, { assigned_users: uid }],
+    deletedAt: null,
+  })
+    .select('_id')
+    .lean();
+  const leadIds = assignedLeads.map((l) => l._id);
+  const emailClause = buildEmailVisibilityClauses(user);
+  const orClause = [
+    { created_by: uid },
+    { sales_person_user: uid },
+    { 'secondary_sales_persons.user': uid },
+    { signatory_user: uid },
+    ...emailClause,
+  ];
+  if (leadIds.length > 0) {
+    orClause.push({ lead: { $in: leadIds } });
+  }
+  return { $or: orClause };
+}
+
+async function buildTeamQuotationFilter(user) {
+  const { Lead } = getModels();
+  const visibleIds = await getVisibleLeadUserIds(user);
+  const emailClause = buildEmailVisibilityClauses(user);
+  const objIds =
+    visibleIds && visibleIds.length > 0
+      ? visibleIds.map((id) => asObjectId(id)).filter(Boolean)
+      : [asObjectId(user._id) || user._id].filter(Boolean);
+
+  const teamLeads = await Lead.find({
+    $or: [{ assigned_to: { $in: objIds } }, { assigned_users: { $in: objIds } }],
+    deletedAt: null,
+  })
+    .select('_id')
+    .lean();
+  const leadIds = teamLeads.map((l) => l._id);
+
+  const orClause = [
+    { created_by: { $in: objIds } },
+    { sales_person_user: { $in: objIds } },
+    { 'secondary_sales_persons.user': { $in: objIds } },
+    { signatory_user: { $in: objIds } },
+    ...emailClause,
+  ];
+  if (leadIds.length > 0) {
+    orClause.push({ lead: { $in: leadIds } });
+  }
+  return { $or: orClause };
+}
+
 /**
  * Build visibility filter for quotation queries.
- * - Admin: sees all quotations.
- * - Manager / Coordinator: quotations created by, sold by, or signed by anyone in their reporting downline (incl. self).
- * - Executive: own sales rep / creator / signatory quotes and quotes on leads assigned to them.
+ * - Admin: sees all quotations (global scope), or own quotations when scope === 'my'.
+ * - Manager / Coordinator: team scope (reporting downline incl. self + team leads), or own quotations when scope === 'my'.
+ * - Executive: my scope (own sales rep / creator / signatory quotes and quotes on leads assigned to them).
  */
-async function buildQuotationVisibilityFilter(user) {
+async function buildQuotationVisibilityFilter(user, requestedScope) {
   if (!user || !user._id) return { _id: null };
 
+  const rawScope = String(requestedScope || '').toLowerCase().trim();
+  const normalizedScope =
+    rawScope === 'my' || rawScope === 'mine' || rawScope === 'personal'
+      ? 'my'
+      : rawScope === 'team' || rawScope === 'manager' || rawScope === 'coordinator'
+        ? 'team'
+        : rawScope === 'organisation' || rawScope === 'organization' || rawScope === 'global'
+          ? 'global'
+          : '';
+
   if (isAdmin(user)) {
+    if (normalizedScope === 'my') {
+      return buildPersonalQuotationFilter(user);
+    }
     return {};
   }
 
-  if (isExecutive(user) && !isManager(user) && !isCoordinator(user)) {
-    const { Lead } = getModels();
-    const uid = asObjectId(user._id);
-    const assignedLeads = await Lead.find({ assigned_to: uid, deletedAt: null }).select('_id').lean();
-    const leadIds = assignedLeads.map((l) => l._id);
-    const userEmail = (user.email || '').toLowerCase().trim();
-    const escapedEmail = userEmail ? userEmail.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&') : '';
-    const emailClause = escapedEmail
-      ? [
-          { signatory_email: new RegExp(`^${escapedEmail}$`, 'i') },
-          { 'secondary_sales_persons.email': new RegExp(`^${escapedEmail}$`, 'i') },
-        ]
-      : [];
-    const orClause = [
-      { created_by: uid },
-      { sales_person_user: uid },
-      { 'secondary_sales_persons.user': uid },
-      { signatory_user: uid },
-      ...emailClause,
-    ];
-    if (leadIds.length > 0) {
-      orClause.push({ lead: { $in: leadIds } });
+  if (isManager(user) || isCoordinator(user)) {
+    if (normalizedScope === 'my') {
+      return buildPersonalQuotationFilter(user);
     }
-    return { $or: orClause };
+    return buildTeamQuotationFilter(user);
   }
 
-  if (isManager(user) || isCoordinator(user)) {
-    const visibleIds = await getVisibleLeadUserIds(user);
-    const userEmail = (user.email || '').toLowerCase().trim();
-    const escapedEmail = userEmail ? userEmail.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&') : '';
-    const emailClause = escapedEmail
-      ? [
-          { signatory_email: new RegExp(`^${escapedEmail}$`, 'i') },
-          { 'secondary_sales_persons.email': new RegExp(`^${escapedEmail}$`, 'i') },
-        ]
-      : [];
-
-    if (visibleIds && visibleIds.length > 0) {
-      const objIds = visibleIds.map((id) => asObjectId(id)).filter(Boolean);
-      return {
-        $or: [
-          { created_by: { $in: objIds } },
-          { sales_person_user: { $in: objIds } },
-          { 'secondary_sales_persons.user': { $in: objIds } },
-          { signatory_user: { $in: objIds } },
-          ...emailClause,
-        ],
-      };
-    }
-
-    return {
-      $or: [
-        { created_by: user._id },
-        { sales_person_user: user._id },
-        { 'secondary_sales_persons.user': user._id },
-        { signatory_user: user._id },
-        ...emailClause,
-      ],
-    };
+  if (isExecutive(user)) {
+    return buildPersonalQuotationFilter(user);
   }
 
   return { _id: null };
@@ -838,7 +865,7 @@ async function listAll(query = {}, user) {
   const filter = { deletedAt: null };
   const conditions = [];
 
-  const visibilityFilter = await buildQuotationVisibilityFilter(user);
+  const visibilityFilter = await buildQuotationVisibilityFilter(user, query.scope);
   if (Object.keys(visibilityFilter).length > 0) {
     conditions.push(visibilityFilter);
   }
@@ -907,21 +934,28 @@ async function listAll(query = {}, user) {
     filter.$and = conditions;
   }
 
-  const page = Math.max(1, parseInt(query.page, 10) || 1);
-  const limit = Math.max(1, parseInt(query.limit, 10) || 50);
-  const skip = (page - 1) * limit;
+  const fetchAll =
+    String(query.limit || '').toLowerCase() === 'all' ||
+    query.all === true ||
+    String(query.all || '').toLowerCase() === 'true';
+  const page = fetchAll ? 1 : Math.max(1, parseInt(query.page, 10) || 1);
+  const limit = fetchAll ? 0 : Math.max(1, parseInt(query.limit, 10) || 50);
+  const skip = fetchAll ? 0 : (page - 1) * limit;
+
+  let findQuery = LeadQuotation.find(filter)
+    .populate('lead', 'lead_no organization_name first_name last_name status assigned_to')
+    .populate('created_by', 'name email department')
+    .populate('sales_person_user', 'name email department phone designation')
+    .populate('secondary_sales_persons.user', 'name email department phone designation')
+    .sort({ createdAt: -1 });
+
+  if (!fetchAll) {
+    findQuery = findQuery.skip(skip).limit(limit);
+  }
 
   const [total, quotations] = await Promise.all([
     LeadQuotation.countDocuments(filter),
-    LeadQuotation.find(filter)
-      .populate('lead', 'lead_no organization_name first_name last_name status assigned_to')
-      .populate('created_by', 'name email department')
-      .populate('sales_person_user', 'name email department phone designation')
-      .populate('secondary_sales_persons.user', 'name email department phone designation')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean(),
+    findQuery.lean(),
   ]);
 
   return {
@@ -929,8 +963,8 @@ async function listAll(query = {}, user) {
     pagination: {
       total,
       page,
-      limit,
-      totalPages: Math.ceil(total / limit) || 1,
+      limit: fetchAll ? total : limit,
+      totalPages: fetchAll ? 1 : Math.ceil(total / limit) || 1,
     },
   };
 }
