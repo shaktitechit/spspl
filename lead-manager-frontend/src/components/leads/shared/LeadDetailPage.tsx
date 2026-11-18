@@ -47,6 +47,8 @@ import {
   User,
   ShieldCheck,
   Tag,
+  Link2,
+  Unlink,
 } from "lucide-react";
 import {
   useGetLeadQuery,
@@ -56,6 +58,7 @@ import {
   useDeleteAttachmentMutation,
   useListLeadFollowUpsQuery,
   useListLeadQuotationsQuery,
+  useUnlinkQuotationFromLeadMutation,
   type LeadRecord,
   type LeadFollowUpRecord,
   type LeadQuotationRecord,
@@ -89,6 +92,7 @@ import { MarkWonModal } from "./modals/MarkWonModal";
 import { MarkLostModal } from "./modals/MarkLostModal";
 import { FollowUpModal } from "./modals/FollowUpModal";
 import { CompleteFollowUpModal } from "./modals/CompleteFollowUpModal";
+import { LinkQuotationModal } from "./modals/LinkQuotationModal";
 import { LeadTimelineTab } from "./LeadTimelineTab";
 import { QuotationFormModal } from "@/components/quotations/shared/modals/QuotationFormModal";
 import { FollowUpChatPanel } from "@/components/shared/followups/FollowUpChatPanel";
@@ -119,6 +123,7 @@ export function LeadDetailPage({ leadId, portalHome = "/dashboard" }: Props) {
   const [lostOpen, setLostOpen] = useState(false);
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [quotationOpen, setQuotationOpen] = useState(false);
+  const [linkQuotationOpen, setLinkQuotationOpen] = useState(false);
   const [editingQuotation, setEditingQuotation] = useState<LeadQuotationRecord | null>(null);
   const openCreateQuotation = () => {
     setEditingQuotation(null);
@@ -154,6 +159,22 @@ export function LeadDetailPage({ leadId, portalHome = "/dashboard" }: Props) {
   const [createAttachment, { isLoading: uploading }] = useCreateAttachmentMutation();
   const [deleteAttachment] = useDeleteAttachmentMutation();
   const [changeStatus, { isLoading: isChangingStatus }] = useChangeLeadStatusMutation();
+  const [unlinkQuotation, { isLoading: isUnlinking }] = useUnlinkQuotationFromLeadMutation();
+
+  const handleUnlinkQuotation = async (q: LeadQuotationRecord) => {
+    const qNo = q.quotation_no || q.ref_no || "Quotation";
+    if (!window.confirm(`Are you sure you want to unlink ${qNo} from this lead?`)) {
+      return;
+    }
+    try {
+      await unlinkQuotation({ quotationId: q._id, leadId: leadId }).unwrap();
+      toast.success(`${qNo} unlinked from this lead`);
+      refetch();
+      refetchQuotations();
+    } catch (err) {
+      toast.error(mutationRejectedMessage(err) || "Failed to unlink quotation");
+    }
+  };
 
   if (isLoading || !lead) {
     return <DetailWorkspaceSkeleton />;
@@ -1002,29 +1023,49 @@ export function LeadDetailPage({ leadId, portalHome = "/dashboard" }: Props) {
                   </p>
                 </div>
                 {!isClosed && (
-                  <button
-                    type="button"
-                    onClick={openCreateQuotation}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-primary-hover transition cursor-pointer"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Create Quotation</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setLinkQuotationOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3.5 py-1.5 text-xs font-bold text-primary hover:bg-primary/20 transition cursor-pointer"
+                    >
+                      <Link2 className="h-3.5 w-3.5" />
+                      <span>Link Quotation</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openCreateQuotation}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-primary-hover transition cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Create Quotation</span>
+                    </button>
+                  </div>
                 )}
               </div>
 
               {!activeQuotation ? (
-                <div className="py-10 text-center space-y-2">
-                  <p className="text-xs text-muted">No quotation created for this lead yet.</p>
+                <div className="py-10 text-center space-y-3">
+                  <p className="text-xs text-muted">No quotation created or linked for this lead yet.</p>
                   {!isClosed && (
-                    <button
-                      type="button"
-                      onClick={openCreateQuotation}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-purple-500/30 bg-purple-500/10 px-3 py-1.5 text-xs font-bold text-purple-700 dark:text-purple-300 hover:bg-purple-500/20 transition cursor-pointer"
-                    >
-                      <FilePlus className="h-3.5 w-3.5" />
-                      <span>Create Quotation</span>
-                    </button>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={openCreateQuotation}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-primary-hover transition cursor-pointer"
+                      >
+                        <FilePlus className="h-3.5 w-3.5" />
+                        <span>Create Quotation</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLinkQuotationOpen(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3.5 py-1.5 text-xs font-bold text-primary hover:bg-primary/20 transition cursor-pointer"
+                      >
+                        <Link2 className="h-3.5 w-3.5" />
+                        <span>Link Quotation</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               ) : (
@@ -1084,6 +1125,18 @@ export function LeadDetailPage({ leadId, portalHome = "/dashboard" }: Props) {
                             <span>View</span>
                             <ExternalLink className="h-3 w-3" />
                           </Link>
+                          {!isClosed && q.status !== "converted" && (
+                            <button
+                              type="button"
+                              onClick={() => handleUnlinkQuotation(q)}
+                              disabled={isUnlinking}
+                              className="inline-flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition cursor-pointer"
+                              title="Unlink quotation from this lead"
+                            >
+                              <Unlink className="h-3 w-3" />
+                              <span>Unlink</span>
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -1479,6 +1532,20 @@ export function LeadDetailPage({ leadId, portalHome = "/dashboard" }: Props) {
             refetchQuotations();
             setActiveTab("quotations");
             setEditingQuotation(null);
+          }}
+        />
+      )}
+
+      {linkQuotationOpen && (
+        <LinkQuotationModal
+          isOpen={linkQuotationOpen}
+          lead={lead}
+          portalHome={portalHome}
+          onClose={() => setLinkQuotationOpen(false)}
+          onSuccess={() => {
+            refetch();
+            refetchQuotations();
+            setActiveTab("quotations");
           }}
         />
       )}

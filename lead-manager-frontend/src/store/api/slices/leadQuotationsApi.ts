@@ -726,6 +726,49 @@ export const leadQuotationsApi = medicaApi.injectEndpoints({
       ],
     }),
 
+    linkQuotationToLead: build.mutation<
+      { quotation: LeadQuotationRecord; lead: any },
+      { quotationId: string; leadId: string }
+    >({
+      query: ({ quotationId, leadId }) => ({
+        url: `/quotations/${quotationId}/link-lead`,
+        method: "POST",
+        body: { lead_id: leadId },
+      }),
+      transformResponse: (raw: ApiEnvelope<{ quotation: LeadQuotationRecord; lead: any }>) =>
+        unwrapEnvelope(raw),
+      invalidatesTags: (_res, _err, { quotationId, leadId }) => [
+        { type: "Quotation", id: quotationId },
+        { type: "Quotation", id: "LIST" },
+        { type: "LeadQuotation", id: quotationId },
+        { type: "LeadQuotation", id: `LEAD_${leadId}` },
+        { type: "Lead", id: leadId },
+        { type: "Lead", id: "LIST" },
+        "Activity",
+      ],
+    }),
+
+    unlinkQuotationFromLead: build.mutation<
+      { quotation: LeadQuotationRecord },
+      { quotationId: string; leadId?: string }
+    >({
+      query: ({ quotationId }) => ({
+        url: `/quotations/${quotationId}/unlink-lead`,
+        method: "POST",
+      }),
+      transformResponse: (raw: ApiEnvelope<{ quotation: LeadQuotationRecord }>) =>
+        unwrapEnvelope(raw),
+      invalidatesTags: (_res, _err, { quotationId, leadId }) => [
+        { type: "Quotation", id: quotationId },
+        { type: "Quotation", id: "LIST" },
+        { type: "LeadQuotation", id: quotationId },
+        ...(leadId ? [{ type: "LeadQuotation" as const, id: `LEAD_${leadId}` }] : []),
+        ...(leadId ? [{ type: "Lead" as const, id: leadId }] : []),
+        { type: "Lead", id: "LIST" },
+        "Activity",
+      ],
+    }),
+
     listQuotationFollowUps: build.query<LeadQuotationFollowUp[], string>({
       query: (quotationId) => ({
         url: `/quotations/${quotationId}/follow-ups`,
@@ -1085,6 +1128,8 @@ export const {
   useExtendQuotationValidityMutation,
   useConvertQuotationMutation,
   useDeleteLeadQuotationMutation,
+  useLinkQuotationToLeadMutation,
+  useUnlinkQuotationFromLeadMutation,
   useListQuotationFollowUpsQuery,
   useScheduleQuotationFollowUpMutation,
   useCompleteQuotationFollowUpMutation,

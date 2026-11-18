@@ -17,6 +17,7 @@ export type QuotationRecord = LeadQuotationRecord;
 
 export type ListQuotationsQueryParams = {
   lead?: string;
+  unlinked?: boolean;
   status?: string;
   search?: string;
   department?: string;
@@ -179,6 +180,49 @@ export const quotationsApi = medicaApi.injectEndpoints({
         "Activity",
       ],
     }),
+
+    linkQuotation: build.mutation<
+      { quotation: QuotationRecord; lead: any },
+      { quotationId: string; leadId: string }
+    >({
+      query: ({ quotationId, leadId }) => ({
+        url: `/quotations/${quotationId}/link-lead`,
+        method: "POST",
+        body: { lead_id: leadId },
+      }),
+      transformResponse: (raw: ApiEnvelope<{ quotation: QuotationRecord; lead: any }>) =>
+        unwrapEnvelope(raw),
+      invalidatesTags: (_res, _err, { quotationId, leadId }) => [
+        { type: "Quotation", id: quotationId },
+        { type: "Quotation", id: "LIST" },
+        { type: "LeadQuotation", id: quotationId },
+        { type: "LeadQuotation", id: `LEAD_${leadId}` },
+        { type: "Lead", id: leadId },
+        { type: "Lead", id: "LIST" },
+        "Activity",
+      ],
+    }),
+
+    unlinkQuotation: build.mutation<
+      { quotation: QuotationRecord },
+      { quotationId: string; leadId?: string }
+    >({
+      query: ({ quotationId }) => ({
+        url: `/quotations/${quotationId}/unlink-lead`,
+        method: "POST",
+      }),
+      transformResponse: (raw: ApiEnvelope<{ quotation: QuotationRecord }>) =>
+        unwrapEnvelope(raw),
+      invalidatesTags: (_res, _err, { quotationId, leadId }) => [
+        { type: "Quotation", id: quotationId },
+        { type: "Quotation", id: "LIST" },
+        { type: "LeadQuotation", id: quotationId },
+        ...(leadId ? [{ type: "LeadQuotation" as const, id: `LEAD_${leadId}` }] : []),
+        ...(leadId ? [{ type: "Lead" as const, id: leadId }] : []),
+        { type: "Lead", id: "LIST" },
+        "Activity",
+      ],
+    }),
   }),
 });
 
@@ -192,4 +236,6 @@ export const {
   useRejectQuotationMutation,
   useDeleteQuotationMutation,
   useGetQuotationsDefaultTermsQuery,
+  useLinkQuotationMutation,
+  useUnlinkQuotationMutation,
 } = quotationsApi;

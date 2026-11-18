@@ -46,6 +46,8 @@ router.post('/:id/approve', allSalesRoles, controller.approve);
 router.post('/:id/reject', allSalesRoles, controller.reject);
 router.post('/:id/convert', elevatedRoles, controller.convert);
 router.post('/:id/extend-validity', allSalesRoles, controller.extendValidity);
+router.post('/:id/link-lead', allSalesRoles, controller.linkLead);
+router.post('/:id/unlink-lead', allSalesRoles, controller.unlinkLead);
 router.post('/:id/proforma', elevatedRoles, controller.saveProforma);
 router.post('/:id/proforma-issued', elevatedRoles, controller.markProformaIssued);
 router.delete('/:id', elevatedRoles, controller.remove);

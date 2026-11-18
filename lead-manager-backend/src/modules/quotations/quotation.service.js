@@ -870,7 +870,17 @@ async function listAll(query = {}, user) {
     conditions.push(visibilityFilter);
   }
 
-  if (query.lead) {
+  if (
+    query.unlinked === 'true' ||
+    query.unlinked === true ||
+    query.lead === 'unlinked' ||
+    query.lead === 'none' ||
+    query.lead === 'null'
+  ) {
+    conditions.push({
+      $or: [{ lead: null }, { lead: { $exists: false } }],
+    });
+  } else if (query.lead) {
     filter.lead = query.lead;
   }
   if (query.department && query.department !== 'all') {
@@ -1736,6 +1746,128 @@ async function submitForApproval(id, user) {
   await notifySignatoryApprovalRequest(quotation, user, { isResubmit: false });
 
   return quotation;
+}
+
+/**
+ * Link an existing quotation to a lead (e.g. for quotations created directly).
+ */
+async function linkLead(quotationId, leadId, user) {
+  const { Lead, LeadQuotation } = getModels();
+
+  const quotation = await LeadQuotation.findOne({ _id: quotationId, deletedAt: null });
+  if (!quotation) throw new ApiError(404, 'Quotation not found');
+
+  if (quotation.status === 'converted') {
+    throw new ApiError(400, 'No further actions allowed: this quotation has already been converted to an order');
+  }
+
+  const lead = await Lead.findOne({ _id: leadId, deletedAt: null });
+  if (!lead) throw new ApiError(404, 'Lead not found');
+
+  if (['lost'].includes(lead.status)) {
+    throw new ApiError(400, `Cannot link quotation to a lead in '${lead.status}' status`);
+  }
+
+  const currentLeadId = quotation.lead ? String(quotation.lead._id || quotation.lead) : null;
+  if (currentLeadId === String(lead._id)) {
+    return { quotation, lead };
+  }
+
+  const prevLeadId = currentLeadId;
+
+  // Link quotation to lead
+  quotation.lead = lead._id;
+  if (!quotation.party_id && lead.party_id) {
+    quotation.party_id = lead.party_id;
+  }
+  quotation.updated_by = user._id;
+  await quotation.save();
+
+  // Advance lead status and update pricing if needed
+  if (!['won', 'converted'].includes(lead.status)) {
+    if (quotation.items && quotation.items.length > 0) {
+      applyQuotationPricingToLead(lead, quotation.items);
+    }
+    advanceLeadToQuotationStatus(lead);
+    lead.last_activity_at = new Date();
+    await lead.save();
+  }
+
+  // Activity log on lead
+  await activityService.create({
+    entity_type: 'lead',
+    entity_id: lead._id,
+    action: 'updated',
+    actor: user._id,
+    message: `Linked Quotation #${quotation.quotation_no} (Ref: ${quotation.ref_no || 'N/A'}) for ₹${formatGrandTotal(quotation.grand_total)}`,
+    new_value: {
+      quotation_id: quotation._id,
+      quotation_no: quotation.quotation_no,
+      grand_total: quotation.grand_total,
+      estimated_value: lead.estimated_value,
+    },
+  });
+
+  if (prevLeadId) {
+    try {
+      await activityService.create({
+        entity_type: 'lead',
+        entity_id: prevLeadId,
+        action: 'updated',
+        actor: user._id,
+        message: `Quotation #${quotation.quotation_no} re-linked to Lead #${lead.lead_no}`,
+        new_value: {
+          quotation_id: quotation._id,
+          relinked_to_lead_id: lead._id,
+        },
+      });
+    } catch (_err) {
+      // Non-blocking
+    }
+  }
+
+  return { quotation, lead };
+}
+
+/**
+ * Unlink a quotation from its lead.
+ */
+async function unlinkLead(quotationId, user) {
+  const { LeadQuotation } = getModels();
+
+  const quotation = await LeadQuotation.findOne({ _id: quotationId, deletedAt: null });
+  if (!quotation) throw new ApiError(404, 'Quotation not found');
+
+  if (quotation.status === 'converted') {
+    throw new ApiError(400, 'No further actions allowed: this quotation has already been converted to an order');
+  }
+
+  if (!quotation.lead) {
+    throw new ApiError(400, 'Quotation is not linked to any lead');
+  }
+
+  const prevLeadId = quotation.lead;
+  quotation.lead = null;
+  quotation.updated_by = user._id;
+  await quotation.save();
+
+  try {
+    await activityService.create({
+      entity_type: 'lead',
+      entity_id: prevLeadId,
+      action: 'updated',
+      actor: user._id,
+      message: `Unlinked Quotation #${quotation.quotation_no} from lead`,
+      new_value: {
+        quotation_id: quotation._id,
+        quotation_no: quotation.quotation_no,
+      },
+    });
+  } catch (_err) {
+    // Non-blocking
+  }
+
+  return { quotation };
 }
 
 /**
@@ -3203,6 +3335,8 @@ module.exports = {
   submitForApproval,
   approve,
   reject,
+  linkLead,
+  unlinkLead,
   reviseQuotation,
   getDefaultTerms,
   getDashboardStats,

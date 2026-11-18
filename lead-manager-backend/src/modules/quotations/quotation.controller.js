@@ -3,6 +3,7 @@
  * @module modules/quotations/quotation.controller
  */
 const asyncHandler = require('../../utils/asyncHandler');
+const { ApiError } = require('../../utils/ApiError');
 const quotationService = require('./quotation.service');
 const validation = require('./quotation.validation');
 
@@ -77,6 +78,33 @@ exports.update = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     message: 'Quotation updated successfully',
+    data,
+  });
+});
+
+exports.linkLead = asyncHandler(async (req, res) => {
+  const quotationId = req.params.quotationId || req.params.id;
+  const leadId = req.body.lead_id || req.body.lead || req.params.leadId;
+  if (!leadId) {
+    throw new ApiError(400, 'lead_id is required');
+  }
+  validation.assertObjectId(quotationId, 'quotationId');
+  validation.assertObjectId(leadId, 'lead_id');
+  const data = await quotationService.linkLead(quotationId, leadId, req.user);
+  res.json({
+    success: true,
+    message: 'Quotation linked to lead successfully',
+    data,
+  });
+});
+
+exports.unlinkLead = asyncHandler(async (req, res) => {
+  const quotationId = req.params.quotationId || req.params.id;
+  validation.assertObjectId(quotationId, 'quotationId');
+  const data = await quotationService.unlinkLead(quotationId, req.user);
+  res.json({
+    success: true,
+    message: 'Quotation unlinked from lead successfully',
     data,
   });
 });
