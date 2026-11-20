@@ -152,6 +152,17 @@ const leadSchema = new mongoose.Schema(
     next_follow_up_at: { type: Date, index: true },
     last_activity_at: { type: Date, default: Date.now, index: true },
 
+    indiamart_meta: {
+      unique_query_id: { type: String, trim: true },
+      query_type: { type: String, trim: true },
+      query_time: { type: Date },
+      subject: { type: String, trim: true },
+      mcat_name: { type: String, trim: true },
+      call_duration: { type: String, trim: true },
+      receiver_mobile: { type: String, trim: true },
+      raw_payload: { type: mongoose.Schema.Types.Mixed },
+    },
+
     created_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
     updated_by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     deletedAt: { type: Date, default: null, index: true },
@@ -164,5 +175,6 @@ leadSchema.index({ email: 1, deletedAt: 1 });
 leadSchema.index({ company_name: 1, deletedAt: 1 });
 leadSchema.index({ status: 1, assigned_to: 1, deletedAt: 1 });
 leadSchema.index({ next_follow_up_at: 1, assigned_to: 1, deletedAt: 1 });
+leadSchema.index({ 'indiamart_meta.unique_query_id': 1 }, { sparse: true });
 
 export default mongoose.models.Lead || mongoose.model("Lead", leadSchema);

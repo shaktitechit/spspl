@@ -97,6 +97,7 @@ type ItemState = {
   hsn_code: string;
   quantity: number;
   unit: string;
+  mrp?: number;
   rate: number;
   discount_percent?: number;
   discount_amount?: number;
@@ -151,6 +152,31 @@ export type PartyItem = {
   state?: string;
   sra?: boolean;
 };
+
+/**
+ * Generates the default professional introductory cover note for a quotation proposal.
+ * Dynamically references the quotation subject/title.
+ */
+export function buildDefaultIntroductoryNote(subjectTitle?: string): string {
+  const cleanSubject = (subjectTitle || "").trim();
+  if (cleanSubject) {
+    return `<p>Dear Sir/Madam,</p><p>We thank you for your valued enquiry regarding <strong>${cleanSubject}</strong> and are pleased to submit our best competitive quotation as detailed below:</p>`;
+  }
+  return `<p>Dear Sir/Madam,</p><p>We thank you for your valued enquiry and are pleased to submit our best competitive quotation as detailed below:</p>`;
+}
+
+/**
+ * Checks if a given message matches the standard default introductory note pattern.
+ */
+export function isDefaultIntroductoryNote(msg?: string): boolean {
+  if (!msg || !msg.trim()) return true;
+  const stripped = msg.replace(/<[^>]*>/g, "").trim().toLowerCase();
+  return (
+    stripped.includes("we thank you for your valued enquiry") &&
+    (stripped.includes("pleased to submit our best competitive quotation") ||
+      stripped.includes("pleased to submit our quotation"))
+  );
+}
 
 function pickParties(raw: unknown): PartyItem[] {
   if (Array.isArray(raw)) return raw as PartyItem[];
@@ -268,7 +294,7 @@ function PartySearchAutocomplete({
 
       {isOpen && (
         <div className="absolute left-0 right-0 z-50 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl dark:border-white/10 dark:bg-slate-900">
-          <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
+          <div className="px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
             <span>Party Master Directory ({filteredParties.length} found)</span>
             <span className="text-[9px] text-slate-400 lowercase">click to select & autofill</span>
           </div>
@@ -319,17 +345,17 @@ function PartySearchAutocomplete({
                           {p.party_name}
                         </span>
                         {p.party_code && (
-                          <span className="rounded bg-slate-100 px-1.5 py-0.2 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                          <span className="rounded bg-slate-100 px-1.5 py-0.2 font-mono text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                             {p.party_code}
                           </span>
                         )}
                         {p.party_type && (
-                          <span className="rounded-full bg-slate-100 px-1.5 py-0.2 text-[10px] font-semibold text-slate-600 capitalize dark:bg-slate-800 dark:text-slate-300">
+                          <span className="rounded-full bg-slate-100 px-1.5 py-0.2 text-xs font-semibold text-slate-600 capitalize dark:bg-slate-800 dark:text-slate-300">
                             {p.party_type}
                           </span>
                         )}
                         {p.sra === true && (
-                          <span className="rounded-full bg-emerald-100 px-1.5 py-0.2 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                          <span className="rounded-full bg-emerald-100 px-1.5 py-0.2 text-xs font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                             SRA
                           </span>
                         )}
@@ -337,7 +363,7 @@ function PartySearchAutocomplete({
                       {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
                     </div>
 
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
                       {(p.contact_person || (p.contacts && p.contacts[0]?.name)) && (
                         <span>👤 {p.contact_person || p.contacts?.[0]?.name}</span>
                       )}
@@ -345,7 +371,7 @@ function PartySearchAutocomplete({
                         <span>📞 {p.mobile || p.phone || p.contacts?.[0]?.phone}</span>
                       )}
                       {location && <span>📍 {location}</span>}
-                      {p.gst_no && <span className="font-mono text-[10px]">GST: {p.gst_no}</span>}
+                      {p.gst_no && <span className="font-mono text-xs">GST: {p.gst_no}</span>}
                     </div>
                   </button>
                 );
@@ -475,7 +501,7 @@ function QuickProductSearchAndAdd({
 
       {isOpen && search.trim().length > 0 && (
         <div className="absolute left-0 right-0 z-40 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl dark:border-white/10 dark:bg-slate-900">
-          <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
+          <div className="px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
             <span>Matching Catalog Products ({filteredProducts.length})</span>
             <span className="text-[9px] text-primary font-semibold">
               Click or press Enter to add
@@ -524,17 +550,17 @@ function QuickProductSearchAndAdd({
                           {prodName}
                         </span>
                         {skuStr && (
-                          <span className="rounded bg-slate-100 px-1.5 py-0.2 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                          <span className="rounded bg-slate-100 px-1.5 py-0.2 font-mono text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                             {skuStr}
                           </span>
                         )}
                         {brandStr && (
-                          <span className="rounded-full bg-blue-50 px-1.5 py-0.2 text-[10px] font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                          <span className="rounded-full bg-blue-50 px-1.5 py-0.2 text-xs font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
                             {brandStr}
                           </span>
                         )}
                       </div>
-                      <div className="mt-0.5 flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                      <div className="mt-0.5 flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
                         {hsnStr && <span>HSN: {hsnStr}</span>}
                         {unitStr && <span>Unit: {unitStr}</span>}
                         {groupStr && <span>Group: {groupStr}</span>}
@@ -545,7 +571,7 @@ function QuickProductSearchAndAdd({
                       <div className="font-bold text-blue-600 dark:text-blue-400">
                         ₹{price.toLocaleString("en-IN")}
                       </div>
-                      <div className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                      <div className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                         <Plus className="h-3 w-3" /> Add to Quote
                       </div>
                     </div>
@@ -651,7 +677,7 @@ function ProductRowAutocomplete({
               ? `Catalog: ${getFieldText(selectedProduct.product_name)} (${getFieldText(selectedProduct.sku) || "Linked"})`
               : "Search & link catalog product..."
           }
-          className="w-full rounded-lg border border-slate-200 bg-white py-1 pl-7 pr-6 text-[11px] text-slate-700 shadow-2xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-slate-200"
+          className="w-full rounded-lg border border-slate-200 bg-white py-1 pl-7 pr-6 text-xs text-slate-700 shadow-2xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-slate-200"
         />
         <div className="absolute inset-y-0 left-0 flex items-center pl-2 pointer-events-none text-slate-400">
           <Search className="h-3 w-3" />
@@ -678,7 +704,7 @@ function ProductRowAutocomplete({
             <span className="text-[9px] text-slate-400">scroll or type to search</span>
           </div>
           {filteredProducts.length === 0 ? (
-            <div className="px-3 py-2.5 text-center text-[11px] text-slate-400 space-y-1.5">
+            <div className="px-3 py-2.5 text-center text-xs text-slate-400 space-y-1.5">
               <div>No catalog products found</div>
               {onQuickAdd && (
                 <button
@@ -689,7 +715,7 @@ function ProductRowAutocomplete({
                     setSearch("");
                     onQuickAdd(nameToUse);
                   }}
-                  className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-[11px] font-bold text-white hover:bg-primary-hover transition cursor-pointer"
+                  className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-bold text-white hover:bg-primary-hover transition cursor-pointer"
                 >
                   <Plus className="h-3 w-3" />
                   + Quick Add Product {search.trim() ? `"${search.trim()}"` : ""}
@@ -712,12 +738,12 @@ function ProductRowAutocomplete({
                       setSearch("");
                       setIsOpen(false);
                     }}
-                    className={`flex w-full items-center justify-between px-2.5 py-1.5 text-left text-[11px] transition hover:bg-blue-50/70 dark:hover:bg-blue-950/40 cursor-pointer ${isSelected ? "bg-blue-50 text-blue-700 font-bold dark:bg-blue-950 dark:text-blue-300" : "text-slate-700 dark:text-slate-200"
+                    className={`flex w-full items-center justify-between px-2.5 py-1.5 text-left text-xs transition hover:bg-blue-50/70 dark:hover:bg-blue-950/40 cursor-pointer ${isSelected ? "bg-blue-50 text-blue-700 font-bold dark:bg-blue-950 dark:text-blue-300" : "text-slate-700 dark:text-slate-200"
                       }`}
                   >
                     <span className="truncate pr-2">
                       {prodName}
-                      {skuStr && <span className="text-[10px] text-slate-400 ml-1 font-mono">({skuStr})</span>}
+                      {skuStr && <span className="text-xs text-slate-400 ml-1 font-mono">({skuStr})</span>}
                     </span>
                     <span className="shrink-0 font-semibold text-slate-600 dark:text-slate-300">
                       ₹{price.toLocaleString("en-IN")}
@@ -735,7 +761,7 @@ function ProductRowAutocomplete({
                       setSearch("");
                       onQuickAdd(nameToUse);
                     }}
-                    className="flex w-full items-center justify-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary hover:bg-primary/20 transition cursor-pointer"
+                    className="flex w-full items-center justify-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary hover:bg-primary/20 transition cursor-pointer"
                   >
                     <Plus className="h-3 w-3" />
                     + Quick Add New Product {search.trim() ? `"${search.trim()}"` : ""}
@@ -885,13 +911,12 @@ export function QuotationFormModal({
   const resolveProductMasterFields = (
     productId?: string,
     productName?: string,
-    populatedObj?: { sku?: unknown; description?: unknown } | null
-  ): { sku: string; description: string } => {
+    populatedObj?: { sku?: unknown; description?: unknown; mrp?: unknown } | null
+  ): { sku: string; description: string; mrp?: number } => {
     const directSku = populatedObj?.sku ? getFieldText(populatedObj.sku) : "";
     const directDesc = populatedObj?.description ? getFieldText(populatedObj.description) : "";
-    if (directSku && directDesc) {
-      return { sku: directSku, description: directDesc };
-    }
+    const directMrp =
+      populatedObj && populatedObj.mrp != null && populatedObj.mrp !== "" ? Number(populatedObj.mrp) : undefined;
     const normId = productId ? String(productId) : "";
     const normName = (productName || "").trim().toLowerCase();
     const matched = productMasterList.find(
@@ -902,6 +927,7 @@ export function QuotationFormModal({
     return {
       sku: directSku || (matched?.sku ? getFieldText(matched.sku) : ""),
       description: directDesc || (matched?.description ? getFieldText(matched.description) : ""),
+      mrp: directMrp ?? (matched?.mrp != null ? Number(matched.mrp) : undefined),
     };
   };
 
@@ -1075,10 +1101,18 @@ export function QuotationFormModal({
           };
         })
       );
-      setSubject(`Offer For ${targetLead.products[0]?.product_name || "Item / Product"}`);
+      const nextSub = `Offer For ${targetLead.products[0]?.product_name || "Item / Product"}`;
+      setSubject(nextSub);
+      if (!userClearedMessageRef.current && (!isMessageCustomizedRef.current || isDefaultIntroductoryNote(messageRef.current))) {
+        setMessage(buildDefaultIntroductoryNote(nextSub));
+      }
     } else {
       setItems([]);
-      setSubject(targetLead.requirement ? `Offer For ${targetLead.requirement}` : "Quotation Proposal");
+      const nextSub = targetLead.requirement ? `Offer For ${targetLead.requirement}` : "Quotation Proposal";
+      setSubject(nextSub);
+      if (!userClearedMessageRef.current && (!isMessageCustomizedRef.current || isDefaultIntroductoryNote(messageRef.current))) {
+        setMessage(buildDefaultIntroductoryNote(nextSub));
+      }
     }
   };
 
@@ -1122,11 +1156,37 @@ export function QuotationFormModal({
   const [cell, setCell] = useState("");
   const [email, setEmail] = useState("");
   const [gstin, setGstin] = useState("");
+  // Visibility toggles for PDF
+  const [showKindAttn, setShowKindAttn] = useState(true);
+  const [showCustomerRef, setShowCustomerRef] = useState(true);
+  const [showCell, setShowCell] = useState(true);
+  const [showPhone, setShowPhone] = useState(true);
+  const [showEmail, setShowEmail] = useState(true);
+  const [showGstin, setShowGstin] = useState(true);
   const [addressLine, setAddressLine] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [pincode, setPincode] = useState("");
   const [message, setMessage] = useState("");
+
+  const isMessageCustomizedRef = useRef(false);
+  const userClearedMessageRef = useRef(false);
+  const messageRef = useRef(message);
+  messageRef.current = message;
+
+  const handleSubjectChange = (newSubject: string) => {
+    setSubject(newSubject);
+    if (!userClearedMessageRef.current && (!isMessageCustomizedRef.current || isDefaultIntroductoryNote(messageRef.current))) {
+      setMessage(buildDefaultIntroductoryNote(newSubject));
+    }
+  };
+
+  useEffect(() => {
+    if (userClearedMessageRef.current) return;
+    if (!isMessageCustomizedRef.current || isDefaultIntroductoryNote(messageRef.current)) {
+      setMessage(buildDefaultIntroductoryNote(subject));
+    }
+  }, [subject]);
 
   // Company Branch & Letterhead State
   const [selectedBranchId, setSelectedBranchId] = useState("");
@@ -1244,6 +1304,7 @@ export function QuotationFormModal({
   const [terms, setTerms] = useState<string[]>([]);
   const [showTerms, setShowTerms] = useState(true);
   const [gstEnabled, setGstEnabled] = useState<boolean>(true);
+  const [showMrp, setShowMrp] = useState<boolean>(false);
 
   // Rich editor modal state for line item specifications
   const [richDescModalItemIdx, setRichDescModalItemIdx] = useState<number | null>(null);
@@ -1277,6 +1338,12 @@ export function QuotationFormModal({
       setCell(quotation.cell || "");
       setEmail(quotation.email || "");
       setGstin(quotation.gstin || "");
+      setShowKindAttn(quotation.show_kind_attn !== false);
+      setShowCustomerRef(quotation.show_customer_ref !== false);
+      setShowCell(quotation.show_cell !== false);
+      setShowPhone(quotation.show_phone !== false);
+      setShowEmail(quotation.show_email !== false);
+      setShowGstin(quotation.show_gstin !== false);
       setAddressLine(quotation.address?.address_line_1 || "");
       setCity(quotation.address?.city || "");
       setState(quotation.address?.state || "");
@@ -1308,6 +1375,7 @@ export function QuotationFormModal({
       setSignatoryEmail(quotation.signatory_email || "");
       setSignatoryDesignation(quotation.signatory_designation || "");
       setGstEnabled((quotation as any).gst_enabled !== false);
+      setShowMrp(Boolean((quotation as any).show_mrp));
 
       // Sales Person from quotation
       const qSalesPersonId =
@@ -1353,6 +1421,7 @@ export function QuotationFormModal({
               hsn_code: i.hsn_code || masterFields.sku,
               quantity: i.quantity || 1,
               unit: i.unit || "Nos",
+              mrp: (i as any).mrp != null ? Number((i as any).mrp) : masterFields.mrp,
               rate: i.rate || 0,
               discount_percent: Number(i.discount_percent) || 0,
               discount_amount: Number(i.discount_amount) || 0,
@@ -1369,7 +1438,16 @@ export function QuotationFormModal({
           ? quotation.terms_and_conditions
           : []
       );
-      setMessage((quotation as any).message || (quotation as any).quotation_message || "");
+      const existingMsg = (quotation as any).message || (quotation as any).quotation_message || "";
+      if (existingMsg) {
+        setMessage(existingMsg);
+        isMessageCustomizedRef.current = !isDefaultIntroductoryNote(existingMsg);
+        userClearedMessageRef.current = false;
+      } else {
+        setMessage(buildDefaultIntroductoryNote(quotation.subject || ""));
+        isMessageCustomizedRef.current = false;
+        userClearedMessageRef.current = false;
+      }
     } else if (lead) {
       // New quotation from Lead
       setSelectedLeadId(lead._id);
@@ -1399,6 +1477,12 @@ export function QuotationFormModal({
       setCell(lead.alternate_phone || lead.phone || lead.contacts?.[0]?.phone || "");
       setEmail(lead.email || lead.contacts?.[0]?.email || "");
       setGstin("");
+      setShowKindAttn(true);
+      setShowCustomerRef(true);
+      setShowCell(true);
+      setShowPhone(true);
+      setShowEmail(true);
+      setShowGstin(true);
       setAddressLine(
         lead.billing_address?.address_line_1 ||
         lead.party_id?.billing_address?.address_line_1 ||
@@ -1418,6 +1502,7 @@ export function QuotationFormModal({
       applyLeadSalesPersons(lead);
 
       // Initial line items from lead products if available
+      let initSubject = "";
       if (lead.products && lead.products.length > 0) {
         setItems(
           lead.products.map((p) => {
@@ -1432,19 +1517,25 @@ export function QuotationFormModal({
               hsn_code: masterFields.sku,
               quantity: p.quantity || 1,
               unit: p.unit || pObj?.unit || "Nos",
+              mrp: pObj?.mrp != null ? Number(pObj.mrp) : masterFields.mrp,
               rate: p.target_price || pObj?.base_price || 0,
               gst_rate: 18,
             };
           })
         );
-        setSubject(`Offer For ${lead.products[0]?.product_name || "Item / Product"}`);
+        initSubject = `Offer For ${lead.products[0]?.product_name || "Item / Product"}`;
+        setSubject(initSubject);
       } else {
         setItems([]);
-        setSubject(lead.requirement ? `Offer For ${lead.requirement}` : "Quotation Proposal");
+        initSubject = lead.requirement ? `Offer For ${lead.requirement}` : "Quotation Proposal";
+        setSubject(initSubject);
       }
       setGstEnabled(true);
+      setShowMrp(false);
       setTerms([]);
-      setMessage("");
+      setMessage(buildDefaultIntroductoryNote(initSubject));
+      isMessageCustomizedRef.current = false;
+      userClearedMessageRef.current = false;
     } else {
       setSelectedLeadId("");
       setSelectedPartyId("");
@@ -1458,6 +1549,12 @@ export function QuotationFormModal({
       setCell("");
       setEmail("");
       setGstin("");
+      setShowKindAttn(true);
+      setShowCustomerRef(true);
+      setShowCell(true);
+      setShowPhone(true);
+      setShowEmail(true);
+      setShowGstin(true);
       setAddressLine("");
       setCity("");
       setState("");
@@ -1473,9 +1570,12 @@ export function QuotationFormModal({
 
       setItems([]);
       setGstEnabled(true);
+      setShowMrp(false);
       setSubject("");
       setTerms([]);
-      setMessage("");
+      setMessage(buildDefaultIntroductoryNote(""));
+      isMessageCustomizedRef.current = false;
+      userClearedMessageRef.current = false;
     }
   }, [open, quotation, lead, autoNextRefNo, authUser]);
 
@@ -1578,13 +1678,14 @@ export function QuotationFormModal({
       const next = prev.map((it) => {
         const needsSku = !it.hsn_code || !it.hsn_code.trim();
         const needsDesc = !it.description || !it.description.trim();
-        if (!needsSku && !needsDesc) return it;
+        const needsMrp = (it.mrp == null || it.mrp === 0);
         const masterFields = resolveProductMasterFields(it.product, it.product_name);
         const nextSku = needsSku && masterFields.sku ? masterFields.sku : it.hsn_code;
         const nextDesc = needsDesc && masterFields.description ? masterFields.description : it.description;
-        if (nextSku === it.hsn_code && nextDesc === it.description) return it;
+        const nextMrp = needsMrp && masterFields.mrp != null ? masterFields.mrp : it.mrp;
+        if (nextSku === it.hsn_code && nextDesc === it.description && nextMrp === it.mrp) return it;
         updated = true;
-        return { ...it, hsn_code: nextSku, description: nextDesc };
+        return { ...it, hsn_code: nextSku, description: nextDesc, mrp: nextMrp };
       });
       return updated ? next : prev;
     });
@@ -1872,6 +1973,7 @@ export function QuotationFormModal({
       quotation_no: refNo.trim() || autoNextRefNo || "Q-PREVIEW",
       ref_no: refNo.trim() || autoNextRefNo || "Q-PREVIEW",
       customer_ref: customerRef.trim() || undefined,
+      show_customer_ref: showCustomerRef,
       lead: selectedLeadId || lead?._id || "",
       party_id: selectedPartyId || undefined,
       quotation_date: quotationDate ? new Date(quotationDate).toISOString() : new Date().toISOString(),
@@ -1880,10 +1982,15 @@ export function QuotationFormModal({
       subject: subject.trim() || "Quotation Proposal",
       customer_name: customerName.trim() || "Customer / Organization",
       kind_attn: kindAttn.trim() || undefined,
+      show_kind_attn: showKindAttn,
       phone: phone.trim() || undefined,
+      show_phone: showPhone,
       cell: cell.trim() || undefined,
+      show_cell: showCell,
       email: email.trim() || undefined,
+      show_email: showEmail,
       gstin: gstin.trim() || undefined,
+      show_gstin: showGstin,
       address: {
         address_line_1: addressLine.trim() || undefined,
         city: city.trim() || undefined,
@@ -1900,6 +2007,7 @@ export function QuotationFormModal({
           hsn_code: i.hsn_code || "",
           quantity: parseQuotationLineQuantity(i.quantity, 1),
           unit: i.unit || "Nos",
+          mrp: i.mrp ?? resolveProductMasterFields(i.product, i.product_name).mrp,
           rate: Number(i.rate) || 0,
           discount_percent: Number(i.discount_percent) || 0,
           discount_amount: Number(i.discount_amount) || 0,
@@ -1949,6 +2057,7 @@ export function QuotationFormModal({
       status: "draft",
       approval_status: "pending_approval",
       gst_enabled: gstEnabled,
+      show_mrp: showMrp,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1957,6 +2066,7 @@ export function QuotationFormModal({
     refNo,
     autoNextRefNo,
     customerRef,
+    showCustomerRef,
     selectedLeadId,
     lead?._id,
     selectedPartyId,
@@ -1966,16 +2076,22 @@ export function QuotationFormModal({
     subject,
     customerName,
     kindAttn,
+    showKindAttn,
     phone,
+    showPhone,
     cell,
+    showCell,
     email,
+    showEmail,
     gstin,
+    showGstin,
     addressLine,
     city,
     state,
     pincode,
     items,
     gstEnabled,
+    showMrp,
     calculations,
     terms,
     message,
@@ -2201,7 +2317,7 @@ export function QuotationFormModal({
     e.preventDefault();
 
     if (!canManageQuotations(authUser)) {
-      toast.error("Only administrators can create or edit quotations");
+      toast.error("Only administrators, managers, and coordinators are authorized to create or edit quotations");
       return;
     }
 
@@ -2240,16 +2356,22 @@ export function QuotationFormModal({
     const payload: CreateQuotationPayload = {
       ref_no: refNo.trim() || undefined,
       customer_ref: customerRef.trim() || undefined,
+      show_customer_ref: showCustomerRef,
       party_id: selectedPartyId || undefined,
       quotation_date: quotationDate ? new Date(quotationDate).toISOString() : new Date().toISOString(),
       validity_days: Number(validityDays) || 15,
       subject: subject.trim() || undefined,
       customer_name: customerName.trim(),
       kind_attn: kindAttn.trim(),
+      show_kind_attn: showKindAttn,
       phone: phone.trim(),
+      show_phone: showPhone,
       cell: cell.trim(),
+      show_cell: showCell,
       email: email.trim(),
+      show_email: showEmail,
       gstin: gstin.trim(),
+      show_gstin: showGstin,
       address: {
         address_line_1: addressLine.trim(),
         city: city.trim(),
@@ -2264,6 +2386,7 @@ export function QuotationFormModal({
         hsn_code: i.hsn_code.trim() || "",
         quantity: parseQuotationLineQuantity(i.quantity, 1),
         unit: i.unit.trim() || "Nos",
+        mrp: i.mrp != null ? Number(i.mrp) : resolveProductMasterFields(i.product, i.product_name).mrp,
         rate: Number(i.rate) || 0,
         discount_percent: Number(i.discount_percent) || 0,
         discount_amount: Number(i.discount_amount) || 0,
@@ -2271,6 +2394,7 @@ export function QuotationFormModal({
         gst_rate: Number(i.gst_rate) || 0,
       })),
       gst_enabled: gstEnabled,
+      show_mrp: showMrp,
       terms_and_conditions: cleanedTerms,
       message: message.trim() || undefined,
       quotation_message: message.trim() || undefined,
@@ -2346,7 +2470,7 @@ export function QuotationFormModal({
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 mb-4">
             <ShieldAlert className="h-6 w-6" />
           </div>
-          <h3 className="text-base font-bold text-slate-900 dark:text-white">
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white">
             Administrator Access Required
           </h3>
           <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
@@ -2383,7 +2507,7 @@ export function QuotationFormModal({
                     ? `Copy Quotation (from #${quotation?.quotation_no || quotation?.ref_no})`
                     : "Generate Quotation"}
               </h3>
-              <p className="text-xs text-slate-500">
+              <p className="text-sm text-slate-500">
                 {isCopyMode
                   ? `Creating a new quotation copied from #${quotation?.quotation_no || quotation?.ref_no || "previous quotation"}`
                   : `Official Letterhead format quotation for ${customerName || lead?.name || "Customer"}`}
@@ -2396,7 +2520,7 @@ export function QuotationFormModal({
                 type="button"
                 onClick={handleSyncFromLead}
                 disabled={isSyncingLead || isFetchingParentLead}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/80 px-3.5 py-2 text-xs font-bold text-indigo-700 shadow-2xs transition hover:bg-indigo-100 disabled:opacity-50 dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-900/50 cursor-pointer"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/80 px-3.5 py-2 text-sm font-bold text-indigo-700 shadow-2xs transition hover:bg-indigo-100 disabled:opacity-50 dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-900/50 cursor-pointer"
                 title="Re-fetch and sync latest Customer, Products, Sales Representatives & Departments from parent Lead"
               >
                 <RefreshCw
@@ -2409,7 +2533,7 @@ export function QuotationFormModal({
             <button
               type="button"
               onClick={() => setShowLivePreviewModal(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3.5 py-2 text-xs font-bold text-emerald-700 shadow-2xs transition hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/50 cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3.5 py-2 text-sm font-bold text-emerald-700 shadow-2xs transition hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/50 cursor-pointer"
               title="View real-time A4 letterhead preview with PREVIEW watermark"
             >
               <Eye className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
@@ -2438,7 +2562,7 @@ export function QuotationFormModal({
                     <button
                       type="button"
                       onClick={() => setCurrentStep(step.id)}
-                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${isActive
+                      className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition cursor-pointer ${isActive
                         ? "bg-primary text-white shadow-sm"
                         : isCompleted
                           ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/50"
@@ -2446,7 +2570,7 @@ export function QuotationFormModal({
                         }`}
                     >
                       <span
-                        className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${isActive
+                        className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${isActive
                           ? "bg-white/20 text-white"
                           : isCompleted
                             ? "bg-emerald-600 text-white"
@@ -2464,12 +2588,12 @@ export function QuotationFormModal({
                 );
               })}
             </div>
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
               Step {currentStep} of {QUOTATION_FORM_STEPS.length}
             </span>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
             {isCopyMode && quotation && (
               <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-3 text-xs text-indigo-900 dark:border-indigo-900/40 dark:bg-indigo-950/40 dark:text-indigo-200 flex items-center gap-2.5">
                 <Copy className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
@@ -2496,480 +2620,513 @@ export function QuotationFormModal({
             )}
 
             {currentStep === 1 && (
-              <>
+              <div className="space-y-4">
                 {/* Lead Link / Direct Selection Banner */}
                 {!isEditing && !lead && (
-                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-primary mb-1.5 flex items-center gap-2">
-                      <Building2 className="h-4 w-4" />
-                      Quotation Type &amp; Lead Link Source
-                    </label>
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                      <select
-                        value={selectedLeadId}
-                        onChange={(e) => handleLeadSelect(e.target.value)}
-                        className="flex-1 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white cursor-pointer"
-                      >
-                        <option value="">-- Direct Quotation (Standalone Proposal) --</option>
-                        {leadsList.map((l) => (
-                          <option key={l._id} value={l._id}>
-                            Link to Lead: {l.company_name || l.name || "Lead"} ({l.organization_name || l.lead_no || "Active"})
-                          </option>
-                        ))}
-                      </select>
-                      <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
-                        {selectedLeadId ? "✓ Linked to Lead" : "• Standalone Proposal"}
-                      </span>
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 sm:p-3.5">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                      <label className="text-sm font-bold uppercase tracking-wider text-primary flex items-center gap-2 shrink-0">
+                        <Building2 className="h-4 w-4" />
+                        Quotation Type &amp; Lead Link Source
+                      </label>
+                      <div className="flex flex-1 sm:justify-end items-center gap-3">
+                        <select
+                          value={selectedLeadId}
+                          onChange={(e) => handleLeadSelect(e.target.value)}
+                          className="flex-1 max-w-md rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white cursor-pointer"
+                        >
+                          <option value="">-- Direct Quotation (Standalone Proposal) --</option>
+                          {leadsList.map((l) => (
+                            <option key={l._id} value={l._id}>
+                              Link to Lead: {l.company_name || l.name || "Lead"} ({l.organization_name || l.lead_no || "Active"})
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-xs text-blue-600 dark:text-blue-400 font-medium shrink-0">
+                          {selectedLeadId ? "✓ Linked to Lead" : "• Standalone Proposal"}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}
 
-                {/* Company Branch & Letterhead Profile */}
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs dark:border-white/10 dark:bg-slate-900">
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3 border-b border-slate-100 pb-2.5 dark:border-white/10">
-                    <div className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-2">
-                      <Building2 className="h-4 w-4" />
-                      <span>Company Branch / Billing &amp; Letterhead Entity</span>
-                    </div>
-                    {selectedBranch && (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary border border-primary/20">
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                        {selectedBranch.is_head_office ? "Head Office" : "Branch Office"} • Code: {selectedBranch.branch_code}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="md:col-span-1 space-y-1.5">
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                        Opt Company Branch <span className="text-rose-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <select
-                          value={selectedBranchId}
-                          onChange={(e) => handleBranchSelect(e.target.value)}
-                          className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 py-2 pr-8 text-xs font-bold text-slate-900 shadow-2xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white cursor-pointer"
-                        >
-                          <option value="" disabled>-- Select Company Branch --</option>
-                          {branches.map((b) => (
-                            <option key={b._id} value={b._id}>
-                              {b.branch_name} ({b.address?.city || b.branch_code}){b.is_head_office ? " [HQ]" : ""}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-slate-400" />
-                      </div>
-                      <p className="text-[10.5px] text-slate-400">
-                        Autofills letterhead address, phone, email, GSTIN, and company banking coordinates.
-                      </p>
-                    </div>
-
-                    <div className="md:col-span-2 rounded-xl bg-slate-50/90 p-3 border border-slate-200/80 dark:bg-slate-800/60 dark:border-white/10 text-[11px]">
-                      <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 text-xs">
-                          <MapPin className="h-3.5 w-3.5 text-primary" />
-                          <span>{companyName || "No Branch Selected"}</span>
+                {/* 2-Column Side-by-Side: Left = Proposal & Entity, Right = Customer */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+                  {/* Left Column: Proposal & Letterhead Entity */}
+                  <div className="space-y-4">
+                    {/* Company Branch & Letterhead Profile */}
+                    <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs dark:border-white/10 dark:bg-slate-900">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-3 border-b border-slate-100 pb-2 dark:border-white/10">
+                        <div className="text-sm font-bold uppercase tracking-wider text-primary flex items-center gap-2">
+                          <Building2 className="h-4 w-4" />
+                          <span>Letterhead &amp; Billing Branch</span>
                         </div>
-                        {companyGstin && (
-                          <span className="font-mono text-[10px] font-bold text-slate-600 bg-white dark:bg-slate-700 dark:text-slate-200 px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/10">
-                            GSTIN: {companyGstin}
+                        {selectedBranch && (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/20">
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                            {selectedBranch.is_head_office ? "Head Office" : "Branch Office"} • Code: {selectedBranch.branch_code}
                           </span>
                         )}
                       </div>
-                      <div className="text-slate-600 dark:text-slate-300 space-y-1">
+
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            Opt Company Branch <span className="text-rose-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <select
+                              value={selectedBranchId}
+                              onChange={(e) => handleBranchSelect(e.target.value)}
+                              className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 pr-8 text-sm font-bold text-slate-900 shadow-2xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white cursor-pointer"
+                            >
+                              <option value="" disabled>-- Select Company Branch --</option>
+                              {branches.map((b) => (
+                                <option key={b._id} value={b._id}>
+                                  {b.branch_name} ({b.address?.city || b.branch_code}){b.is_head_office ? " [HQ]" : ""}
+                                </option>
+                              ))}
+                            </select>
+                            <ChevronDown className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-slate-400" />
+                          </div>
+                          <p className="text-xs text-slate-400">
+                            Autofills letterhead address, phone, email, GSTIN, and company banking coordinates.
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl bg-slate-50/90 p-3 border border-slate-200/80 dark:bg-slate-800/60 dark:border-white/10 text-xs space-y-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                            <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 text-xs">
+                              <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+                              <span>{companyName || "No Branch Selected"}</span>
+                            </div>
+                            {companyGstin && (
+                              <span className="font-mono text-xs font-bold text-slate-600 bg-white dark:bg-slate-700 dark:text-slate-200 px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/10">
+                                GSTIN: {companyGstin}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-slate-600 dark:text-slate-300">
+                            <span className="font-semibold text-slate-700 dark:text-slate-200">Address: </span>
+                            <span>{companyRegdAddress || "Not configured"}</span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs pt-1.5 border-t border-slate-200/60 dark:border-white/10">
+                            <span><strong>Bank:</strong> {bankName || "N/A"}</span>
+                            <span><strong>A/c No:</strong> <span className="font-mono text-blue-600 dark:text-blue-400">{accountNumber || "N/A"}</span></span>
+                            <span><strong>IFSC:</strong> <span className="font-mono text-blue-600 dark:text-blue-400">{ifscCode || "N/A"}</span></span>
+                            {bankBranchName && <span><strong>Branch:</strong> {bankBranchName}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Proposal & Reference Details */}
+                    <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs dark:border-white/10 dark:bg-slate-900 space-y-3">
+                      <div className="text-sm font-bold uppercase tracking-wider text-primary flex items-center gap-2 border-b border-slate-100 pb-2 dark:border-white/10">
+                        <Building2 className="h-4 w-4 text-primary" />
+                        Proposal &amp; Reference Details
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
-                          <span className="font-semibold text-slate-700 dark:text-slate-200">Address: </span>
-                          <span>{companyRegdAddress || "Not configured"}</span>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                              Ref. No.
+                            </label>
+                            {!isEditing && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  refetchQuotations();
+                                  setRefNo(autoNextRefNo);
+                                  toast.info(`Next sequential reference number: ${autoNextRefNo}`);
+                                }}
+                                className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+                                title="Recalculate next sequential reference number"
+                              >
+                                <RefreshCw className="h-3 w-3" />
+                                Auto Pick
+                              </button>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            value={refNo}
+                            onChange={(e) => setRefNo(e.target.value)}
+                            placeholder="e.g. Q-1001"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-mono font-bold text-primary"
+                          />
                         </div>
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-[10px] pt-1 border-t border-slate-200/60 dark:border-white/10">
-                          <span><strong>Bank:</strong> {bankName || "N/A"}</span>
-                          <span><strong>A/c No:</strong> <span className="font-mono text-blue-600 dark:text-blue-400">{accountNumber || "N/A"}</span></span>
-                          <span><strong>IFSC:</strong> <span className="font-mono text-blue-600 dark:text-blue-400">{ifscCode || "N/A"}</span></span>
-                          {bankBranchName && <span><strong>Branch:</strong> {bankBranchName}</span>}
+
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Quotation Date
+                          </label>
+                          <input
+                            type="date"
+                            value={quotationDate}
+                            onChange={(e) => setQuotationDate(e.target.value)}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Validity (Days)
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="180"
+                            value={validityDays}
+                            onChange={(e) => setValidityDays(Number(e.target.value))}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-bold"
+                          />
+                          <p className="mt-0.5 text-xs text-slate-400">Defaults to 15 days validity</p>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                            <span>Validity Date</span>
+                            <span className="text-xs text-blue-600 font-bold dark:text-blue-400">Valid Until</span>
+                          </label>
+                          <input
+                            type="date"
+                            value={validityEndDate}
+                            onChange={(e) => handleValidityEndDateChange(e.target.value)}
+                            className="w-full rounded-xl border border-blue-200 bg-blue-50/40 px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-semibold"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Subject / Title
+                          </label>
+                          <input
+                            type="text"
+                            value={subject}
+                            onChange={(e) => handleSubjectChange(e.target.value)}
+                            placeholder="e.g. Offer For Medical Equipment"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-semibold"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Customer Details */}
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs dark:border-white/10 dark:bg-slate-900 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 dark:border-white/10">
+                        <div className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400 flex items-center gap-2">
+                          <UserCheck className="h-4 w-4 text-blue-600" />
+                          <span>Customer / Recipient Information</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {(selectedPartyId ||
+                            (resolvedLead?.party_id &&
+                              typeof resolvedLead.party_id === "object" &&
+                              (resolvedLead.party_id as any)._id) ||
+                            (typeof resolvedLead?.party_id === "string" && resolvedLead.party_id)) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const pId =
+                                    selectedPartyId ||
+                                    (typeof resolvedLead?.party_id === "object" && resolvedLead?.party_id !== null
+                                      ? String((resolvedLead.party_id as any)._id || "")
+                                      : typeof resolvedLead?.party_id === "string"
+                                        ? resolvedLead.party_id
+                                        : "");
+                                  if (pId) setEditingPartyId(pId);
+                                }}
+                                title="Update Party in Master"
+                                className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-300 cursor-pointer"
+                              >
+                                <Pencil className="h-3 w-3" />
+                                Update Party
+                              </button>
+                            )}
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                            <Building2 className="h-3 w-3" />
+                            Auto-fetched from Lead
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Customer Name / M/s. <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={customerName}
+                            onChange={(e) => setCustomerName(e.target.value)}
+                            placeholder="e.g. M/s. Apex Super Specialty Hospital"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-bold"
+                          />
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                              Customer Ref <span className="text-xs text-slate-400 font-normal">(Enquiry / PO Ref)</span>
+                            </label>
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
+                              <input
+                                type="checkbox"
+                                checked={showCustomerRef}
+                                onChange={(e) => setShowCustomerRef(e.target.checked)}
+                                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                              />
+                              <span className={showCustomerRef ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                                {showCustomerRef ? "Show in PDF" : "Hidden in PDF"}
+                              </span>
+                            </label>
+                          </div>
+                          <input
+                            type="text"
+                            value={customerRef}
+                            onChange={(e) => setCustomerRef(e.target.value)}
+                            placeholder="e.g. PO-9876 / ENQ-123"
+                            className={`w-full rounded-xl border ${!showCustomerRef ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-sm font-bold text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white font-mono`}
+                          />
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                              Kind Attn (Contact Person)
+                            </label>
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
+                              <input
+                                type="checkbox"
+                                checked={showKindAttn}
+                                onChange={(e) => setShowKindAttn(e.target.checked)}
+                                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                              />
+                              <span className={showKindAttn ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                                {showKindAttn ? "Show in PDF" : "Hidden in PDF"}
+                              </span>
+                            </label>
+                          </div>
+                          <input
+                            type="text"
+                            value={kindAttn}
+                            onChange={(e) => setKindAttn(e.target.value)}
+                            placeholder="e.g. Dr. Rajesh Sharma"
+                            className={`w-full rounded-xl border ${!showKindAttn ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white`}
+                          />
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                              Mobile / Cell
+                            </label>
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
+                              <input
+                                type="checkbox"
+                                checked={showCell}
+                                onChange={(e) => setShowCell(e.target.checked)}
+                                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                              />
+                              <span className={showCell ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                                {showCell ? "Show in PDF" : "Hidden in PDF"}
+                              </span>
+                            </label>
+                          </div>
+                          <input
+                            type="text"
+                            value={cell}
+                            onChange={(e) => setCell(e.target.value)}
+                            placeholder="Mobile Number"
+                            className={`w-full rounded-xl border ${!showCell ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white`}
+                          />
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                              Phone / Tel.
+                            </label>
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
+                              <input
+                                type="checkbox"
+                                checked={showPhone}
+                                onChange={(e) => setShowPhone(e.target.checked)}
+                                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                              />
+                              <span className={showPhone ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                                {showPhone ? "Show in PDF" : "Hidden in PDF"}
+                              </span>
+                            </label>
+                          </div>
+                          <input
+                            type="text"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            placeholder="Office Landline / Phone"
+                            className={`w-full rounded-xl border ${!showPhone ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white`}
+                          />
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                              Email Address
+                            </label>
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
+                              <input
+                                type="checkbox"
+                                checked={showEmail}
+                                onChange={(e) => setShowEmail(e.target.checked)}
+                                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                              />
+                              <span className={showEmail ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                                {showEmail ? "Show in PDF" : "Hidden in PDF"}
+                              </span>
+                            </label>
+                          </div>
+                          <input
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="customer@email.com"
+                            className={`w-full rounded-xl border ${!showEmail ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white`}
+                          />
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                              GSTIN
+                            </label>
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
+                              <input
+                                type="checkbox"
+                                checked={showGstin}
+                                onChange={(e) => setShowGstin(e.target.checked)}
+                                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                              />
+                              <span className={showGstin ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                                {showGstin ? "Show in PDF" : "Hidden in PDF"}
+                              </span>
+                            </label>
+                          </div>
+                          <input
+                            type="text"
+                            value={gstin}
+                            onChange={(e) => setGstin(e.target.value.toUpperCase())}
+                            placeholder="e.g. 03ABCDE1234F1Z5"
+                            className={`w-full rounded-xl border ${!showGstin ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white font-mono uppercase`}
+                          />
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Street Address
+                          </label>
+                          <input
+                            type="text"
+                            value={addressLine}
+                            onChange={(e) => setAddressLine(e.target.value)}
+                            placeholder="Building / Street Address"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 sm:col-span-2">
+                          <div>
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                              City
+                            </label>
+                            <input
+                              type="text"
+                              value={city}
+                              onChange={(e) => setCity(e.target.value)}
+                              placeholder="City"
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                              State
+                            </label>
+                            <input
+                              type="text"
+                              value={state}
+                              onChange={(e) => setState(e.target.value)}
+                              placeholder="State"
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                              Pincode
+                            </label>
+                            <input
+                              type="text"
+                              value={pincode}
+                              onChange={(e) => setPincode(e.target.value)}
+                              placeholder="Pincode"
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
-
-                {/* Proposal & Reference Details */}
-                <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10">
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3 flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-primary" />
-                    Quotation Reference &amp; Proposal Subject
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                          Ref. No.
-                        </label>
-                        {!isEditing && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              refetchQuotations();
-                              setRefNo(autoNextRefNo);
-                              toast.info(`Next sequential reference number: ${autoNextRefNo}`);
-                            }}
-                            className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
-                            title="Recalculate next sequential reference number"
-                          >
-                            <RefreshCw className="h-3 w-3" />
-                            Auto Pick
-                          </button>
-                        )}
-                      </div>
-                      <input
-                        type="text"
-                        value={refNo}
-                        onChange={(e) => setRefNo(e.target.value)}
-                        placeholder="e.g. Q-1001"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-mono font-bold text-primary"
-                      />
-                    </div>
-
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          Quotation Date
-                        </label>
-                        <input
-                          type="date"
-                          value={quotationDate}
-                          onChange={(e) => setQuotationDate(e.target.value)}
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                          <span>Validity Date (Valid Until)</span>
-                          <span className="text-[10px] text-blue-600 font-bold dark:text-blue-400">Below Date</span>
-                        </label>
-                        <input
-                          type="date"
-                          value={validityEndDate}
-                          onChange={(e) => handleValidityEndDateChange(e.target.value)}
-                          className="w-full rounded-xl border border-blue-200 bg-blue-50/40 px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-semibold"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Validity (Days)
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="180"
-                        value={validityDays}
-                        onChange={(e) => setValidityDays(Number(e.target.value))}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-bold"
-                      />
-                      <p className="mt-1 text-[10px] text-slate-400">Defaults to 15 days validity</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Subject / Title
-                      </label>
-                      <input
-                        type="text"
-                        value={subject}
-                        onChange={(e) => setSubject(e.target.value)}
-                        placeholder="e.g. Offer For Medical Equipment"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-semibold"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Customer Details */}
-                <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10">
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                    <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                      <UserCheck className="h-4 w-4 text-blue-600" />
-                      Customer / Recipient Information
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {(selectedPartyId ||
-                        (resolvedLead?.party_id &&
-                          typeof resolvedLead.party_id === "object" &&
-                          (resolvedLead.party_id as any)._id) ||
-                        (typeof resolvedLead?.party_id === "string" && resolvedLead.party_id)) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const pId =
-                                selectedPartyId ||
-                                (typeof resolvedLead?.party_id === "object" && resolvedLead?.party_id !== null
-                                  ? String((resolvedLead.party_id as any)._id || "")
-                                  : typeof resolvedLead?.party_id === "string"
-                                    ? resolvedLead.party_id
-                                    : "");
-                              if (pId) setEditingPartyId(pId);
-                            }}
-                            title="Update Party in Master"
-                            className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-300 cursor-pointer"
-                          >
-                            <Pencil className="h-3 w-3" />
-                            Update Party
-                          </button>
-                        )}
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
-                        <Building2 className="h-3 w-3" />
-                        Auto-fetched from Lead
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="sm:col-span-2">
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Customer Name / M/s. <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
-                        placeholder="e.g. M/s. Apex Super Specialty Hospital"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-bold"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Customer Ref <span className="text-[10px] text-slate-400 font-normal">(Enquiry / PO Ref)</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={customerRef}
-                        onChange={(e) => setCustomerRef(e.target.value)}
-                        placeholder="e.g. PO-9876 / ENQ-123"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-mono"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Kind Attn (Contact Person)
-                      </label>
-                      <input
-                        type="text"
-                        value={kindAttn}
-                        onChange={(e) => setKindAttn(e.target.value)}
-                        placeholder="e.g. Dr. Rajesh Sharma"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Phone / Tel.
-                      </label>
-                      <input
-                        type="text"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="Office Landline / Phone"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Mobile / Cell
-                      </label>
-                      <input
-                        type="text"
-                        value={cell}
-                        onChange={(e) => setCell(e.target.value)}
-                        placeholder="Mobile Number"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Email Address
-                      </label>
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="customer@email.com"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        GSTIN
-                      </label>
-                      <input
-                        type="text"
-                        value={gstin}
-                        onChange={(e) => setGstin(e.target.value.toUpperCase())}
-                        placeholder="e.g. 03ABCDE1234F1Z5"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-mono uppercase"
-                      />
-                    </div>
-
-                    <div className="sm:col-span-2 md:col-span-2">
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Street Address
-                      </label>
-                      <input
-                        type="text"
-                        value={addressLine}
-                        onChange={(e) => setAddressLine(e.target.value)}
-                        placeholder="Building / Street Address"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2 sm:col-span-3 md:col-span-3">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          City
-                        </label>
-                        <input
-                          type="text"
-                          value={city}
-                          onChange={(e) => setCity(e.target.value)}
-                          placeholder="City"
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          State
-                        </label>
-                        <input
-                          type="text"
-                          value={state}
-                          onChange={(e) => setState(e.target.value)}
-                          placeholder="State"
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          Pincode
-                        </label>
-                        <input
-                          type="text"
-                          value={pincode}
-                          onChange={(e) => setPincode(e.target.value)}
-                          placeholder="Pincode"
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </>
+              </div>
             )}
 
             {currentStep === 2 && (
-              <>
-                {/* Cover / Introductory Message (Above Requirements) */}
-                <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10 bg-slate-50/50 dark:bg-slate-900/50">
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
-                        <FileText className="h-3.5 w-3.5" />
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+                {/* Left Column: Line Items (Wide) */}
+                <div className="lg:col-span-7 xl:col-span-8 space-y-4">
+                  {/* Line Items Table */}
+                  <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs dark:border-white/10 dark:bg-slate-900 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5 dark:border-white/10">
+                      <div className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400 flex items-center gap-1.5">
+                        <Calculator className="h-4 w-4 text-blue-600" />
+                        <span>Line Items &amp; Products ({items.length})</span>
                       </div>
-                      <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                          Introductory Message / Cover Note
-                        </h4>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          Optional cover note displayed directly above requirements &amp; pricing. If left blank, nothing is printed.
-                        </p>
-                      </div>
-                    </div>
-                    {message && (
-                      <button
-                        type="button"
-                        onClick={() => setMessage("")}
-                        className="text-xs font-medium text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:underline"
-                      >
-                        Clear Message
-                      </button>
-                    )}
-                  </div>
-                  <RichTextEditor
-                    value={message}
-                    onChange={(val) => setMessage(val)}
-                    placeholder="Write your introductory message or cover note here (e.g. 'Dear Sir, We thank you for your valued enquiry...')..."
-                    minHeight="95px"
-                  />
-                </div>
-
-                {/* Line Items Table */}
-                <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10">
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                    <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                      <Calculator className="h-4 w-4 text-blue-600" />
-                      Line Items &amp; Products ({items.length})
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <label className="inline-flex items-center gap-2 cursor-pointer select-none rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
-                        <input
-                          type="checkbox"
-                          checked={gstEnabled}
-                          onChange={(e) => setGstEnabled(e.target.checked)}
-                          className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                        />
-                        <span>Calculate GST</span>
-                        {!gstEnabled && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400">
-                            Exempt / Off
-                          </span>
-                        )}
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setItems((prev) => [
-                            ...prev,
-                            {
-                              product_name: "",
-                              description: "",
-                              hsn_code: "",
-                              quantity: 1,
-                              unit: "Nos",
-                              rate: 0,
-                              discount_percent: 0,
-                              discount_amount: 0,
-                              gst_enabled: true,
-                              gst_rate: 18,
-                            },
-                          ])
-                        }
-                        className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-xs font-bold text-white shadow-2xs hover:bg-primary-hover transition cursor-pointer"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        <span>Add Item</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    {items.length === 0 && (
-                      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-6 text-center text-xs text-slate-500 dark:border-white/10 dark:bg-slate-800/40 dark:text-slate-400 space-y-2.5">
-                        <p>
-                          No line items yet. Click <strong>Add Item</strong> to add products or{" "}
-                          <strong>Sync from Lead</strong> to pull from the parent Lead.
-                        </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer select-none rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700 dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+                          <input
+                            type="checkbox"
+                            checked={showMrp}
+                            onChange={(e) => setShowMrp(e.target.checked)}
+                            className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                          />
+                          <span>Show MRP</span>
+                          {showMrp && (
+                            <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+                              On
+                            </span>
+                          )}
+                        </label>
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer select-none rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700 dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+                          <input
+                            type="checkbox"
+                            checked={gstEnabled}
+                            onChange={(e) => setGstEnabled(e.target.checked)}
+                            className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          />
+                          <span>Calculate GST</span>
+                          {!gstEnabled && (
+                            <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400">
+                              Exempt / Off
+                            </span>
+                          )}
+                        </label>
                         <button
                           type="button"
                           onClick={() =>
-                            setItems([
+                            setItems((prev) => [
+                              ...prev,
                               {
                                 product_name: "",
                                 description: "",
@@ -2984,608 +3141,805 @@ export function QuotationFormModal({
                               },
                             ])
                           }
-                          className="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/20 transition cursor-pointer"
+                          className="inline-flex items-center gap-1 rounded-lg bg-primary px-3.5 py-1.5 text-sm font-bold text-white shadow-2xs hover:bg-primary-hover transition cursor-pointer"
                         >
                           <Plus className="h-3.5 w-3.5" />
-                          <span>Add Line Item</span>
+                          <span>Add Item</span>
                         </button>
                       </div>
-                    )}
-                    {items.map((it, idx) => {
-                      const comp = calculations.items[idx];
-                      const linkedProductId =
-                        it.product ||
-                        productMasterList.find(
-                          (p) =>
-                            getFieldText(p.product_name).trim().toLowerCase() ===
-                            it.product_name.trim().toLowerCase()
-                        )?._id ||
-                        "";
-                      return (
-                        <div
-                          key={idx}
-                          className="rounded-xl border border-slate-200 bg-slate-50/50 p-3 dark:border-white/10 dark:bg-slate-800/40"
-                        >
-                          <div className="grid grid-cols-12 gap-2 items-end">
-                            {/* Sr & Product Selector */}
-                            <div className="col-span-12 sm:col-span-4">
-                              <div className="flex items-center justify-between gap-1.5 mb-1">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">
-                                    {idx + 1}
-                                  </span>
-                                  <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                                    Product Description <span className="text-rose-500">*</span>
-                                  </label>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  {linkedProductId && (
+                    </div>
+
+                    <div className="space-y-3">
+                      {items.length === 0 && (
+                        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-6 text-center text-xs text-slate-500 dark:border-white/10 dark:bg-slate-800/40 dark:text-slate-400 space-y-2.5">
+                          <p>
+                            No line items yet. Click <strong>Add Item</strong> to add products or{" "}
+                            <strong>Sync from Lead</strong> to pull from the parent Lead.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setItems([
+                                {
+                                  product_name: "",
+                                  description: "",
+                                  hsn_code: "",
+                                  quantity: 1,
+                                  unit: "Nos",
+                                  rate: 0,
+                                  discount_percent: 0,
+                                  discount_amount: 0,
+                                  gst_enabled: true,
+                                  gst_rate: 18,
+                                },
+                              ])
+                            }
+                            className="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/20 transition cursor-pointer"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            <span>Add Line Item</span>
+                          </button>
+                        </div>
+                      )}
+                      {items.map((it, idx) => {
+                        const comp = calculations.items[idx];
+                        const linkedProductId =
+                          it.product ||
+                          productMasterList.find(
+                            (p) =>
+                              getFieldText(p.product_name).trim().toLowerCase() ===
+                              it.product_name.trim().toLowerCase()
+                          )?._id ||
+                          "";
+                        const masterFields = resolveProductMasterFields(linkedProductId, it.product_name);
+                        const resolvedMrp = it.mrp != null && it.mrp > 0 ? it.mrp : masterFields.mrp;
+                        return (
+                          <div
+                            key={idx}
+                            className="rounded-xl border border-slate-200 bg-slate-50/50 p-3 dark:border-white/10 dark:bg-slate-800/40"
+                          >
+                            <div className="grid grid-cols-12 gap-2 items-end">
+                              {/* Sr & Product Selector */}
+                              <div className={`col-span-12 ${showMrp ? "sm:col-span-3" : "sm:col-span-4"}`}>
+                                <div className="flex items-center justify-between gap-1.5 mb-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                                      {idx + 1}
+                                    </span>
+                                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                                      Product Description <span className="text-rose-500">*</span>
+                                    </label>
+                                    {showMrp && resolvedMrp != null && resolvedMrp > 0 && (
+                                      <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                                        MRP: ₹{formatCurrencyINR(resolvedMrp)}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    {linkedProductId && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingProductId(linkedProductId);
+                                          setEditingProductRowIdx(idx);
+                                        }}
+                                        title="Update Product in Master"
+                                        className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-300 cursor-pointer"
+                                      >
+                                        <Pencil className="h-2.5 w-2.5" />
+                                        Update Product
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
-                                      onClick={() => {
-                                        setEditingProductId(linkedProductId);
-                                        setEditingProductRowIdx(idx);
-                                      }}
-                                      title="Update Product in Master"
-                                      className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-300 cursor-pointer"
+                                      onClick={() =>
+                                        setItems((prev) => prev.filter((_, i) => i !== idx))
+                                      }
+                                      title="Remove line item"
+                                      className="inline-flex items-center gap-0.5 rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300 cursor-pointer"
                                     >
-                                      <Pencil className="h-2.5 w-2.5" />
-                                      Update Product
+                                      <Trash2 className="h-2.5 w-2.5" />
+                                      Remove
                                     </button>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setItems((prev) => prev.filter((_, i) => i !== idx))
-                                    }
-                                    title="Remove line item"
-                                    className="inline-flex items-center gap-0.5 rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300 cursor-pointer"
-                                  >
-                                    <Trash2 className="h-2.5 w-2.5" />
-                                    Remove
-                                  </button>
+                                  </div>
                                 </div>
-                              </div>
 
-                              <div className="space-y-1.5">
-                                <ProductRowAutocomplete
-                                  products={productMasterList}
-                                  selectedId={linkedProductId}
-                                  onSelect={(prodId) => {
-                                    const found = productMasterList.find((p) => String(p._id) === String(prodId));
-                                    if (!found) return;
-                                    const nextName = getFieldText(found.product_name) || "Item / Product";
-                                    const nextSku = getFieldText(found.sku);
-                                    const nextDesc = getFieldText(found.description);
-                                    const nextUnit = getFieldText(found.unit) || "Nos";
-                                    const nextRate = Number(found.base_price) || 0;
-                                    const nextGst = Number(found.gst_percent ?? found.default_gst_rate ?? 18);
-                                    setItems((prev) =>
-                                      prev.map((x, i) =>
-                                        i === idx
-                                          ? {
-                                              ...x,
-                                              product: String(found._id),
-                                              product_name: nextName,
-                                              hsn_code: nextSku || x.hsn_code,
-                                              description: nextDesc || x.description,
-                                              unit: nextUnit,
-                                              rate: nextRate || x.rate,
-                                              gst_rate: Number.isFinite(nextGst) ? nextGst : x.gst_rate,
-                                            }
-                                          : x
-                                      )
-                                    );
-                                  }}
-                                />
-                                <input
-                                  type="text"
-                                  required
-                                  value={it.product_name}
-                                  onChange={(e) =>
-                                    setItems((prev) =>
-                                      prev.map((x, i) => (i === idx ? { ...x, product_name: e.target.value } : x))
-                                    )
-                                  }
-                                  placeholder="Enter item name..."
-                                  className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
-                                />
-                              </div>
-                            </div>
-
-                            {/* HSN */}
-                            <div className="col-span-4 sm:col-span-1">
-                              <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                                HSN/SAC
-                              </label>
-                              <input
-                                type="text"
-                                value={it.hsn_code}
-                                onChange={(e) =>
-                                  setItems((prev) =>
-                                    prev.map((x, i) => (i === idx ? { ...x, hsn_code: e.target.value } : x))
-                                  )
-                                }
-                                placeholder="SKU / HSN"
-                                className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-white font-mono"
-                              />
-                            </div>
-
-                            {/* QTY & Unit */}
-                            <div className="col-span-4 sm:col-span-2">
-                              <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                                Qty &amp; Unit
-                              </label>
-                              <div className="flex gap-1">
-                                <input
-                                  type="number"
-                                  step="any"
-                                  title="Negative qty = return / replacement credit"
-                                  value={Number.isFinite(Number(it.quantity)) ? it.quantity : ""}
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    const nextQty = raw === "" ? NaN : Number(raw);
-                                    setItems((prev) =>
-                                      prev.map((x, i) => (i === idx ? { ...x, quantity: nextQty as number } : x))
-                                    );
-                                  }}
-                                  className={`w-16 rounded-lg border bg-white px-2 py-1.5 text-xs font-bold dark:bg-slate-900 dark:text-white ${Number(it.quantity) < 0
-                                    ? "border-amber-400 text-amber-900 dark:border-amber-600 dark:text-amber-200"
-                                    : "border-slate-200 text-slate-900 dark:border-white/10"
-                                    }`}
-                                />
-                                <input
-                                  type="text"
-                                  value={it.unit}
-                                  onChange={(e) =>
-                                    setItems((prev) =>
-                                      prev.map((x, i) => (i === idx ? { ...x, unit: e.target.value } : x))
-                                    )
-                                  }
-                                  placeholder="Nos"
-                                  className="w-14 rounded-lg border border-slate-200 bg-white px-1.5 py-1.5 text-xs text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-white"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Rate */}
-                            <div className="col-span-4 sm:col-span-2">
-                              <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                                Rate (₹)
-                              </label>
-                              <input
-                                type="number"
-                                step="any"
-                                title="Negative rate = price adjustment / credit"
-                                value={Number.isFinite(Number(it.rate)) ? it.rate : ""}
-                                onChange={(e) => {
-                                  const raw = e.target.value;
-                                  const nextRate = raw === "" ? NaN : Number(raw);
-                                  setItems((prev) =>
-                                    prev.map((x, i) => (i === idx ? { ...x, rate: nextRate as number } : x))
-                                  );
-                                }}
-                                className={`w-full rounded-lg border bg-white px-2 py-1.5 text-xs font-bold dark:bg-slate-900 dark:text-white ${
-                                  Number(it.rate) < 0
-                                    ? "border-amber-400 text-amber-900 dark:border-amber-600 dark:text-amber-200"
-                                    : "border-slate-200 text-slate-900 dark:border-white/10"
-                                }`}
-                              />
-                            </div>
-
-                            {/* Disc % */}
-                            <div className="col-span-3 sm:col-span-1">
-                              <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-                                Disc %
-                              </label>
-                              <input
-                                type="number"
-                                min="0"
-                                max="100"
-                                step="0.1"
-                                value={it.discount_percent ?? 0}
-                                onChange={(e) => {
-                                  const p = Math.min(100, Math.max(0, Number(e.target.value) || 0));
-                                  const amt = computeQuotationLineAmounts({
-                                    ...it,
-                                    discount_percent: p,
-                                    discount_amount: 0,
-                                  }).discAmt;
-                                  setItems((prev) =>
-                                    prev.map((x, i) => (i === idx ? { ...x, discount_percent: p, discount_amount: amt } : x))
-                                  );
-                                }}
-                                className="w-full rounded-lg border border-slate-200 bg-white px-1.5 py-1.5 text-xs font-semibold text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-white"
-                                placeholder="0"
-                              />
-                            </div>
-
-                            {/* GST % with Inline Toggle */}
-                            <div className="col-span-3 sm:col-span-1">
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400">
-                                  GST %
-                                </label>
-                                <label
-                                  className={`inline-flex items-center gap-1 select-none ${!gstEnabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"
-                                    }`}
-                                  title={
-                                    !gstEnabled
-                                      ? "GST is disabled at quotation level"
-                                      : it.gst_enabled === false
-                                        ? "GST disabled for this item (click to enable)"
-                                        : "GST enabled for this item (click to disable)"
-                                  }
-                                >
-                                  <input
-                                    type="checkbox"
-                                    disabled={!gstEnabled}
-                                    checked={gstEnabled && it.gst_enabled !== false}
-                                    onChange={(e) => {
+                                <div className="space-y-1.5">
+                                  <ProductRowAutocomplete
+                                    products={productMasterList}
+                                    selectedId={linkedProductId}
+                                    onSelect={(prodId) => {
+                                      const found = productMasterList.find((p) => String(p._id) === String(prodId));
+                                      if (!found) return;
+                                      const nextName = getFieldText(found.product_name) || "Item / Product";
+                                      const nextSku = getFieldText(found.sku);
+                                      const nextDesc = getFieldText(found.description);
+                                      const nextUnit = getFieldText(found.unit) || "Nos";
+                                      const nextRate = Number(found.base_price) || 0;
+                                      const nextGst = Number(found.gst_percent ?? found.default_gst_rate ?? 18);
                                       setItems((prev) =>
                                         prev.map((x, i) =>
-                                          i === idx ? { ...x, gst_enabled: e.target.checked } : x
+                                          i === idx
+                                            ? {
+                                                ...x,
+                                                product: String(found._id),
+                                                product_name: nextName,
+                                                hsn_code: nextSku || x.hsn_code,
+                                                description: nextDesc || x.description,
+                                                unit: nextUnit,
+                                                mrp: found.mrp != null ? Number(found.mrp) : undefined,
+                                                rate: nextRate || x.rate,
+                                                gst_rate: Number.isFinite(nextGst) ? nextGst : x.gst_rate,
+                                              }
+                                            : x
                                         )
                                       );
                                     }}
-                                    className="h-3 w-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:cursor-not-allowed"
                                   />
-                                  <span
-                                    className={`text-[9px] font-bold ${!gstEnabled || it.gst_enabled === false
-                                      ? "text-amber-600 dark:text-amber-400"
-                                      : "text-emerald-600 dark:text-emerald-400"
-                                      }`}
-                                  >
-                                    {!gstEnabled || it.gst_enabled === false ? "Off" : "On"}
-                                  </span>
-                                </label>
+                                  <input
+                                    type="text"
+                                    required
+                                    value={it.product_name}
+                                    onChange={(e) =>
+                                      setItems((prev) =>
+                                        prev.map((x, i) => (i === idx ? { ...x, product_name: e.target.value } : x))
+                                      )
+                                    }
+                                    placeholder="Enter item name..."
+                                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                                  />
+                                </div>
                               </div>
-                              <select
-                                disabled={!gstEnabled || it.gst_enabled === false}
-                                value={gstEnabled && it.gst_enabled !== false ? it.gst_rate : 0}
-                                onChange={(e) =>
-                                  setItems((prev) =>
-                                    prev.map((x, i) => (i === idx ? { ...x, gst_rate: Number(e.target.value) } : x))
-                                  )
-                                }
-                                className={`w-full rounded-lg border bg-white px-1.5 py-1.5 text-xs font-semibold text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-white ${!gstEnabled || it.gst_enabled === false
-                                  ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400"
-                                  : "border-slate-200"
-                                  }`}
-                                title={
-                                  !gstEnabled
-                                    ? "GST calculation is currently disabled for this quotation"
-                                    : it.gst_enabled === false
-                                      ? "GST is disabled for this line item"
-                                      : undefined
-                                }
-                              >
-                                <option value={0}>No GST (0%)</option>
-                                <option value={5}>5%</option>
-                                <option value={8.9}>8.9%</option>
-                                <option value={12}>12%</option>
-                                <option value={18}>18%</option>
-                                <option value={28}>28%</option>
-                              </select>
-                            </div>
-                          </div>
 
-                          {/* Line breakdown */}
-                          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/60 pt-2 text-[11px] text-slate-600 dark:border-white/5 dark:text-slate-400">
-                            <div className="flex-1 min-w-[220px] flex items-center gap-2">
-                              <input
-                                type="text"
-                                value={it.description}
-                                onChange={(e) =>
-                                  setItems((prev) =>
-                                    prev.map((x, i) => (i === idx ? { ...x, description: e.target.value } : x))
-                                  )
-                                }
-                                placeholder="Technical specifications / extra notes..."
-                                className="flex-1 bg-transparent border-0 border-b border-dashed border-slate-300 py-0.5 text-[11px] focus:border-primary focus:outline-none dark:border-slate-700"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setRichDescModalItemIdx(idx);
-                                  setRichDescModalText(it.description || "");
-                                }}
-                                className="inline-flex items-center gap-1 rounded-md bg-blue-50/80 px-2 py-0.5 text-[10px] font-bold text-blue-700 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 transition cursor-pointer border border-blue-200/50 dark:border-blue-800/40 shrink-0"
-                                title="Open rich text editor for detailed specifications"
-                              >
-                                <Sparkles className="h-3 w-3" />
-                                {/<[a-z][\s\S]*>/i.test(it.description || "") ? "Rich Specs" : "Rich Editor"}
-                              </button>
+                              {/* HSN */}
+                              <div className="col-span-4 sm:col-span-1">
+                                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                                  HSN/SAC
+                                </label>
+                                <input
+                                  type="text"
+                                  value={it.hsn_code}
+                                  onChange={(e) =>
+                                    setItems((prev) =>
+                                      prev.map((x, i) => (i === idx ? { ...x, hsn_code: e.target.value } : x))
+                                    )
+                                  }
+                                  placeholder="SKU / HSN"
+                                  className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-white font-mono"
+                                />
+                              </div>
+
+                              {/* QTY & Unit */}
+                              <div className="col-span-4 sm:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                                  Qty &amp; Unit
+                                </label>
+                                <div className="flex gap-1">
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    title="Negative qty = return / replacement credit"
+                                    value={Number.isFinite(Number(it.quantity)) ? it.quantity : ""}
+                                    onChange={(e) => {
+                                      const v = parseQuotationLineQuantity(e.target.value);
+                                      setItems((prev) =>
+                                        prev.map((x, i) => (i === idx ? { ...x, quantity: v } : x))
+                                      );
+                                    }}
+                                    className={`w-14 rounded-lg border px-2 py-2 text-sm font-bold ${!isValidQuotationLineQuantity(it.quantity)
+                                      ? "border-rose-400 bg-rose-50 text-rose-900 dark:bg-rose-950/40 dark:text-rose-200"
+                                      : Number(it.quantity) < 0
+                                        ? "border-amber-400 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                                        : "border-slate-200 bg-white text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                                      }`}
+                                  />
+                                  <input
+                                    type="text"
+                                    value={it.unit}
+                                    onChange={(e) =>
+                                      setItems((prev) =>
+                                        prev.map((x, i) => (i === idx ? { ...x, unit: e.target.value } : x))
+                                      )
+                                    }
+                                    placeholder="Nos"
+                                    className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                                  />
+                                </div>
+                                {Number(it.quantity) < 0 && (
+                                  <p className="mt-0.5 text-[9.5px] font-semibold text-amber-700 dark:text-amber-300">
+                                    Return / credit item
+                                  </p>
+                                )}
+                              </div>
+
+                              {/* MRP (shown when Show MRP is toggled) */}
+                              {showMrp && (
+                                <div className="col-span-4 sm:col-span-1">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                                      MRP (₹)
+                                    </label>
+                                    {masterFields.mrp != null && masterFields.mrp > 0 && (
+                                      <span
+                                        className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400"
+                                        title="Fetched from Product Master"
+                                      >
+                                        Master
+                                      </span>
+                                    )}
+                                  </div>
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    value={it.mrp != null && it.mrp > 0 ? it.mrp : (masterFields.mrp || "")}
+                                    onChange={(e) => {
+                                      const val = e.target.value === "" ? 0 : Number(e.target.value);
+                                      setItems((prev) =>
+                                        prev.map((x, i) => (i === idx ? { ...x, mrp: val } : x))
+                                      );
+                                    }}
+                                    placeholder="0.00"
+                                    className="w-full rounded-lg border border-indigo-200 bg-indigo-50/40 px-2.5 py-2 text-sm font-bold text-indigo-950 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-200 font-mono"
+                                  />
+                                </div>
+                              )}
+
+                              {/* Rate */}
+                              <div className="col-span-4 sm:col-span-2">
+                                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                                  Rate (₹)
+                                </label>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={it.rate}
+                                  onChange={(e) =>
+                                    setItems((prev) =>
+                                      prev.map((x, i) =>
+                                        i === idx ? { ...x, rate: Math.max(0, Number(e.target.value) || 0) } : x
+                                      )
+                                    )
+                                  }
+                                  className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm font-bold text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-white font-mono"
+                                  placeholder="0.00"
+                                />
+                              </div>
+
+                              {/* Disc % */}
+                              <div className="col-span-4 sm:col-span-1">
+                                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                                  Disc %
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.1"
+                                  value={it.discount_percent ?? 0}
+                                  onChange={(e) => {
+                                    const p = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                                    const amt = computeQuotationLineAmounts({
+                                      ...it,
+                                      discount_percent: p,
+                                      discount_amount: 0,
+                                    }).discAmt;
+                                    setItems((prev) =>
+                                      prev.map((x, i) => (i === idx ? { ...x, discount_percent: p, discount_amount: amt } : x))
+                                    );
+                                  }}
+                                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm font-semibold text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                                  placeholder="0"
+                                />
+                              </div>
+
+                              {/* GST % with Inline Toggle */}
+                              <div className="col-span-3 sm:col-span-1">
+                                <div className="flex items-center justify-between mb-1">
+                                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">
+                                    GST %
+                                  </label>
+                                  <label
+                                    className={`inline-flex items-center gap-1 select-none ${!gstEnabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+                                      }`}
+                                    title={
+                                      !gstEnabled
+                                        ? "GST is disabled at quotation level"
+                                        : it.gst_enabled === false
+                                          ? "GST disabled for this item (click to enable)"
+                                          : "GST enabled for this item (click to disable)"
+                                    }
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      disabled={!gstEnabled}
+                                      checked={gstEnabled && it.gst_enabled !== false}
+                                      onChange={(e) => {
+                                        setItems((prev) =>
+                                          prev.map((x, i) =>
+                                            i === idx ? { ...x, gst_enabled: e.target.checked } : x
+                                          )
+                                        );
+                                      }}
+                                      className="h-3 w-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:cursor-not-allowed"
+                                    />
+                                    <span
+                                      className={`text-[9px] font-bold ${!gstEnabled || it.gst_enabled === false
+                                        ? "text-amber-600 dark:text-amber-400"
+                                        : "text-emerald-600 dark:text-emerald-400"
+                                        }`}
+                                    >
+                                      {!gstEnabled || it.gst_enabled === false ? "Off" : "On"}
+                                    </span>
+                                  </label>
+                                </div>
+                                <select
+                                  disabled={!gstEnabled || it.gst_enabled === false}
+                                  value={gstEnabled && it.gst_enabled !== false ? it.gst_rate : 0}
+                                  onChange={(e) =>
+                                    setItems((prev) =>
+                                      prev.map((x, i) => (i === idx ? { ...x, gst_rate: Number(e.target.value) } : x))
+                                    )
+                                  }
+                                  className={`w-full rounded-lg border bg-white px-2 py-2 text-sm font-semibold text-slate-900 dark:border-white/10 dark:bg-slate-900 dark:text-white ${!gstEnabled || it.gst_enabled === false
+                                    ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400"
+                                    : "border-slate-200"
+                                    }`}
+                                  title={
+                                    !gstEnabled
+                                      ? "GST calculation is currently disabled for this quotation"
+                                      : it.gst_enabled === false
+                                        ? "GST is disabled for this line item"
+                                        : undefined
+                                  }
+                                >
+                                  <option value={0}>0%</option>
+                                  <option value={5}>5%</option>
+                                  <option value={12}>12%</option>
+                                  <option value={18}>18%</option>
+                                  <option value={28}>28%</option>
+                                </select>
+                              </div>
+
+                              {/* Line Total */}
+                              <div className="col-span-5 sm:col-span-1 text-right">
+                                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                                  Amount
+                                </label>
+                                <div className="text-xs font-bold text-slate-900 dark:text-white py-1.5 font-mono">
+                                  {formatCurrencyINR(comp?.lineTotal || 0)}
+                                </div>
+                              </div>
                             </div>
-                            <div className="flex flex-wrap items-center gap-3">
-                              <span>
-                                Gross: <strong>{formatCurrencyINR(comp?.gross || 0)}</strong>
-                              </span>
-                              {(comp?.discAmt || 0) > 0 ? (
-                                <span className="text-amber-600 dark:text-amber-400 font-semibold">
-                                  Disc: -{formatCurrencyINR(comp?.discAmt || 0)} ({comp?.discPercent}%)
-                                </span>
-                              ) : null}
-                              <span>
-                                Taxable: <strong>{formatCurrencyINR(comp?.taxable || 0)}</strong>
-                              </span>
-                              <span>
-                                GST: <strong>{!gstEnabled || it.gst_enabled === false || !comp?.gstAmt ? "—" : formatCurrencyINR(comp?.gstAmt || 0)}</strong>
-                                {(!gstEnabled || it.gst_enabled === false) && (
-                                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold ml-1">
-                                    (Exempt)
+
+                            {/* Line breakdown */}
+                            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/60 pt-2 text-xs text-slate-600 dark:border-white/5 dark:text-slate-400">
+                              <div className="flex-1 min-w-[220px] flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={it.description}
+                                  onChange={(e) =>
+                                    setItems((prev) =>
+                                      prev.map((x, i) => (i === idx ? { ...x, description: e.target.value } : x))
+                                    )
+                                  }
+                                  placeholder="Technical specifications / extra notes..."
+                                  className="flex-1 bg-transparent border-0 border-b border-dashed border-slate-300 py-0.5 text-xs focus:border-primary focus:outline-none dark:border-slate-700"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRichDescModalItemIdx(idx);
+                                    setRichDescModalText(it.description || "");
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-md bg-blue-50/80 px-2 py-0.5 text-xs font-bold text-blue-700 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 transition cursor-pointer border border-blue-200/50 dark:border-blue-800/40 shrink-0"
+                                  title="Open rich text editor for detailed specifications"
+                                >
+                                  <Sparkles className="h-3 w-3" />
+                                  {/<[a-z][\s\S]*>/i.test(it.description || "") ? "Rich Specs" : "Rich Editor"}
+                                </button>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-3">
+                                {showMrp && (resolvedMrp || 0) > 0 && (
+                                  <span className="font-bold text-indigo-700 dark:text-indigo-300">
+                                    MRP: {formatCurrencyINR(resolvedMrp || 0)}
                                   </span>
                                 )}
-                              </span>
-                              <span className="text-blue-700 dark:text-blue-400 font-bold">
-                                Total: {formatCurrencyINR(comp?.lineTotal || 0)}
-                              </span>
+                                <span>
+                                  Gross: <strong>{formatCurrencyINR(comp?.gross || 0)}</strong>
+                                </span>
+                                {(comp?.discAmt || 0) > 0 ? (
+                                  <span className="text-amber-600 dark:text-amber-400 font-semibold">
+                                    Disc: -{formatCurrencyINR(comp?.discAmt || 0)} ({comp?.discPercent}%)
+                                  </span>
+                                ) : null}
+                                <span>
+                                  Taxable: <strong>{formatCurrencyINR(comp?.taxable || 0)}</strong>
+                                </span>
+                                <span>
+                                  GST: <strong>{!gstEnabled || it.gst_enabled === false || !comp?.gstAmt ? "—" : formatCurrencyINR(comp?.gstAmt || 0)}</strong>
+                                  {(!gstEnabled || it.gst_enabled === false) && (
+                                    <span className="text-xs text-amber-600 dark:text-amber-400 font-semibold ml-1">
+                                      (Exempt)
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="text-blue-700 dark:text-blue-400 font-bold">
+                                  Total: {formatCurrencyINR(comp?.lineTotal || 0)}
+                                </span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
-                {/* Financial Totals Summary Box */}
-                <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 dark:border-blue-900/40 dark:bg-blue-950/20">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <div className="text-xs font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300">
-                        Grand Total Summary
+                {/* Right Column: Pricing & Cover Note (Sticky on desktop) */}
+                <div className="lg:col-span-5 xl:col-span-4 lg:sticky lg:top-0 space-y-4">
+                  {/* Financial Totals Summary Box */}
+                  <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 shadow-2xs dark:border-blue-900/40 dark:bg-blue-950/20 space-y-3">
+                    <div className="flex items-center justify-between border-b border-blue-200/60 pb-2 dark:border-blue-900/40">
+                      <div className="text-sm font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
+                        <Calculator className="h-4 w-4 text-blue-600" />
+                        Pricing &amp; Grand Total
                       </div>
-                      <div className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                        Gross Total - Total Discount = Taxable Subtotal + Applicable GST
-                      </div>
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200">
+                        {items.length} {items.length === 1 ? "Item" : "Items"}
+                      </span>
                     </div>
 
-                    <div className="space-y-1 text-right text-xs">
+                    {/* Prominent Grand Total Display */}
+                    <div className="rounded-xl bg-white/90 p-3.5 border border-blue-200 shadow-2xs dark:bg-slate-900/90 dark:border-blue-900/40 space-y-1">
+                      <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                        Grand Total (INR)
+                      </div>
+                      <div className="text-3xl font-black text-blue-900 dark:text-blue-200 font-mono">
+                        {formatCurrencyINR(calculations.grandTotal)}
+                      </div>
+                      {calculations.grandTotal > 0 && (
+                        <div className="text-xs font-medium text-slate-600 dark:text-slate-400 capitalize italic leading-tight pt-0.5">
+                          ₹ {numberToIndianWords(calculations.grandTotal)}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Breakdown */}
+                    <div className="space-y-1.5 text-xs text-slate-700 dark:text-slate-300 border-t border-blue-200/60 pt-2.5 dark:border-blue-900/40">
                       {calculations.totalDiscount > 0 ? (
                         <>
-                          <div className="text-slate-600 dark:text-slate-300">
-                            Gross Total: <strong>{formatCurrencyINR(calculations.totalGross)}</strong>
+                          <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                            <span>Gross Total:</span>
+                            <strong>{formatCurrencyINR(calculations.totalGross)}</strong>
                           </div>
-                          <div className="text-amber-600 dark:text-amber-400 font-semibold">
-                            Total Discount: <strong>-{formatCurrencyINR(calculations.totalDiscount)}</strong>
+                          <div className="flex items-center justify-between text-amber-600 dark:text-amber-400 font-semibold">
+                            <span>Total Discount:</span>
+                            <strong>-{formatCurrencyINR(calculations.totalDiscount)}</strong>
                           </div>
                         </>
                       ) : null}
-                      <div className="text-slate-600 dark:text-slate-300">
-                        Taxable Sub Total: <strong>{formatCurrencyINR(calculations.subtotal)}</strong>
+                      <div className="flex items-center justify-between">
+                        <span>Taxable Sub Total:</span>
+                        <strong>{formatCurrencyINR(calculations.subtotal)}</strong>
                       </div>
-                      <div className="text-slate-600 dark:text-slate-300">
-                        Total GST Amount: <strong>{formatCurrencyINR(calculations.totalGst)}</strong>
-                        {!gstEnabled && <span className="text-[10px] text-amber-600 ml-1">(Exempt / Off)</span>}
+                      <div className="flex items-center justify-between">
+                        <span>Total GST Amount:</span>
+                        <span className="font-bold">
+                          {formatCurrencyINR(calculations.totalGst)}
+                          {!gstEnabled && <span className="text-xs text-amber-600 ml-1 font-semibold">(Exempt / Off)</span>}
+                        </span>
                       </div>
                       {calculations.roundOff !== 0 ? (
-                        <div className="text-slate-600 dark:text-slate-300">
-                          Round Off: <strong>{formatCurrencyINR(calculations.roundOff)}</strong>
+                        <div className="flex items-center justify-between">
+                          <span>Round Off:</span>
+                          <strong>{formatCurrencyINR(calculations.roundOff)}</strong>
                         </div>
                       ) : null}
-                      <div className="text-base font-extrabold text-blue-900 dark:text-blue-200 pt-1 border-t border-blue-200 dark:border-blue-900/40">
-                        Grand Total: {formatCurrencyINR(calculations.grandTotal)}
-                      </div>
+                    </div>
+
+                    <div className="text-xs text-slate-400 dark:text-slate-500 pt-1.5 border-t border-blue-200/40 dark:border-blue-900/30">
+                      Gross Total - Total Discount = Taxable Subtotal + Applicable GST
                     </div>
                   </div>
+
+                  {/* Cover / Introductory Message (Above Requirements) */}
+                  <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs dark:border-white/10 dark:bg-slate-900 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 dark:border-white/10">
+                      <div className="flex items-center gap-1.5">
+                        <FileText className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                        <h4 className="text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-300">
+                          Introductory Note (Cover)
+                        </h4>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isMessageCustomizedRef.current && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              isMessageCustomizedRef.current = false;
+                              userClearedMessageRef.current = false;
+                              setMessage(buildDefaultIntroductoryNote(subject));
+                              toast.info("Introductory note synced with subject");
+                            }}
+                            className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+                            title="Regenerate default note from current Subject"
+                          >
+                            Sync with Subject
+                          </button>
+                        )}
+                        {message ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              userClearedMessageRef.current = true;
+                              isMessageCustomizedRef.current = true;
+                              setMessage("");
+                            }}
+                            className="text-xs font-medium text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:underline cursor-pointer"
+                          >
+                            Clear Message
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              userClearedMessageRef.current = false;
+                              isMessageCustomizedRef.current = false;
+                              setMessage(buildDefaultIntroductoryNote(subject));
+                            }}
+                            className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+                          >
+                            + Add Default Note
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Default cover note displayed directly above requirements &amp; pricing on official letterhead (dynamically reflects Subject/Title).
+                    </p>
+                    <RichTextEditor
+                      value={message}
+                      onChange={(val) => {
+                        setMessage(val);
+                        if (!isDefaultIntroductoryNote(val)) {
+                          isMessageCustomizedRef.current = true;
+                        }
+                      }}
+                      placeholder="Write your introductory message or cover note here (e.g. 'Dear Sir, We thank you for your valued enquiry...')..."
+                      minHeight="85px"
+                    />
+                  </div>
                 </div>
-              </>
+              </div>
             )}
 
             {currentStep === 3 && (
-              <>
-                {/* Sales Representative Section (Internal Role / Sales Department) */}
-                <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10 bg-slate-50/40 dark:bg-slate-900/40">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-white/10">
-                    <div>
-                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2 text-xs uppercase tracking-wider">
-                        <UserCheck className="h-4 w-4 text-emerald-600" />
-                        Primary &amp; Secondary Sales Representatives (Internal Use &amp; Order Handover)
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+                {/* Left Column: Team (Sales Reps + Departments) */}
+                <div className="space-y-4">
+                  {/* Sales Representative Section */}
+                  <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs dark:border-white/10 dark:bg-slate-900 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5 dark:border-white/10">
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2 text-sm uppercase tracking-wider">
+                          <UserCheck className="h-4 w-4 text-emerald-600" />
+                          Sales Representatives (Internal)
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Auto-fetched from parent lead assignees.
+                        </p>
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Auto-fetched from the parent lead&apos;s primary and secondary assignees.
-                      </p>
+
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                        Auto-fetched from Lead
+                      </span>
                     </div>
 
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
-                      Auto-fetched from Lead
-                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            Sales Person Name
+                          </label>
+                          <span className="text-xs text-slate-400 font-medium">Read-only</span>
+                        </div>
+                        <input
+                          type="text"
+                          readOnly
+                          value={salesPersonName}
+                          placeholder="Sales person..."
+                          className="w-full rounded-xl border border-slate-200 bg-slate-100/90 px-3 py-2 text-sm text-slate-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 font-bold"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            Sales Role / Designation
+                          </label>
+                          <span className="text-xs text-emerald-600 font-bold dark:text-emerald-400">Editable</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={salesPersonDesignation}
+                          onChange={(e) => setSalesPersonDesignation(e.target.value)}
+                          placeholder="e.g. Sales Executive"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-medium"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            Phone / Mobile
+                          </label>
+                          <span className="text-xs text-slate-400 font-medium">Read-only</span>
+                        </div>
+                        <input
+                          type="text"
+                          readOnly
+                          value={salesPersonPhone}
+                          placeholder="Auto-filled from profile"
+                          className="w-full rounded-xl border border-slate-200 bg-slate-100/90 px-3 py-2 text-sm text-slate-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 font-medium"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            Email
+                          </label>
+                          <span className="text-xs text-slate-400 font-medium">Read-only</span>
+                        </div>
+                        <input
+                          type="email"
+                          readOnly
+                          value={salesPersonEmail}
+                          placeholder="Auto-filled from profile"
+                          className="w-full rounded-xl border border-slate-200 bg-slate-100/90 px-3 py-2 text-sm text-slate-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 font-medium"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Secondary Sales Representatives (Multiple) */}
+                    <div className="pt-2 border-t border-slate-100 dark:border-white/5 space-y-2">
+                      <div className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center justify-between">
+                        <span>Secondary Sales Representatives ({secondarySalesPersons.length})</span>
+                        <span className="text-xs font-normal text-slate-400">Order Handover / Team</span>
+                      </div>
+                      {secondarySalesPersons.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {secondarySalesPersons.map((sec) => (
+                            <span
+                              key={sec.user}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-800 shadow-2xs dark:border-emerald-900/50 dark:bg-slate-800 dark:text-slate-100"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              <span>{sec.name || sec.email}</span>
+                              {sec.designation && (
+                                <span className="text-xs font-medium text-slate-400">
+                                  • {sec.designation}
+                                </span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs italic text-slate-400">
+                          No secondary sales representatives assigned on the parent lead.
+                        </p>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                          Sales Person Name
-                        </label>
-                        <span className="text-[10px] text-slate-400 font-medium">Read-only</span>
+                  {/* Internal Departments Section */}
+                  <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs dark:border-white/10 dark:bg-slate-900 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5 dark:border-white/10">
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2 text-sm uppercase tracking-wider">
+                          <Layers className="h-4 w-4 text-purple-600" />
+                          Departments (Internal Routing) <span className="text-rose-500">*</span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Classify quotation under departments for routing and reports.
+                        </p>
                       </div>
-                      <input
-                        type="text"
-                        readOnly
-                        value={salesPersonName}
-                        placeholder="Choose sales person from dropdown..."
-                        className="w-full rounded-xl border border-slate-200 bg-slate-100/90 px-3 py-2 text-xs text-slate-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 font-bold"
-                      />
-                    </div>
 
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                          Sales Role / Designation
-                        </label>
-                        <span className="text-[10px] text-emerald-600 font-bold dark:text-emerald-400">Editable</span>
-                      </div>
-                      <input
-                        type="text"
-                        value={salesPersonDesignation}
-                        onChange={(e) => setSalesPersonDesignation(e.target.value)}
-                        placeholder="e.g. Sales Executive / Account Executive"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-medium"
-                      />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                          Phone / Mobile
-                        </label>
-                        <span className="text-[10px] text-slate-400 font-medium">Read-only</span>
-                      </div>
-                      <input
-                        type="text"
-                        readOnly
-                        value={salesPersonPhone}
-                        placeholder="Auto-filled from profile"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-100/90 px-3 py-2 text-xs text-slate-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 font-medium"
-                      />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                          Email
-                        </label>
-                        <span className="text-[10px] text-slate-400 font-medium">Read-only</span>
-                      </div>
-                      <input
-                        type="email"
-                        readOnly
-                        value={salesPersonEmail}
-                        placeholder="Auto-filled from profile"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-100/90 px-3 py-2 text-xs text-slate-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 font-medium"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Secondary Sales Representatives (Multiple) */}
-                  <div className="mt-4 border-t border-slate-200/70 pt-4 dark:border-white/10 space-y-2.5">
-                    <div>
-                      <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        Secondary Sales Representatives ({secondarySalesPersons.length})
-                      </div>
-                      <p className="text-[11px] text-slate-500">
-                        Auto-fetched from the parent lead&apos;s secondary assignees.
-                      </p>
-                    </div>
-
-                    {secondarySalesPersons.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {secondarySalesPersons.map((sec) => (
-                          <span
-                            key={sec.user}
-                            className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-800 shadow-2xs dark:border-emerald-900/50 dark:bg-slate-800 dark:text-slate-100"
+                      <div className="flex items-center gap-2">
+                        {selectedDepartments.length < departmentOptions.length ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDepartments(departmentOptions.map((d) => d.value))}
+                            className="text-xs font-medium text-purple-600 hover:underline dark:text-purple-400 cursor-pointer"
                           >
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                            <span>{sec.name || sec.email}</span>
-                            {sec.designation && (
-                              <span className="text-[10px] font-medium text-slate-400">
-                                • {sec.designation}
-                              </span>
-                            )}
+                            Select All
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDepartments([])}
+                            className="text-xs font-medium text-rose-500 hover:underline cursor-pointer"
+                          >
+                            Clear
+                          </button>
+                        )}
+                        {selectedDepartments.length > 0 && (
+                          <span className="rounded-full bg-purple-50 px-2 py-0.5 text-xs font-semibold text-purple-700 dark:bg-purple-950/50 dark:text-purple-300">
+                            {selectedDepartments.length} selected
                           </span>
-                        ))}
+                        )}
                       </div>
-                    ) : (
-                      <p className="text-[11px] italic text-slate-400">
-                        No secondary sales representatives assigned on the parent lead.
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {departmentOptions.map((dept) => {
+                        const isSelected = selectedDepartments.includes(dept.value);
+                        return (
+                          <button
+                            key={dept.value}
+                            type="button"
+                            onClick={() => toggleDepartment(dept.value)}
+                            className={`flex items-center justify-between rounded-xl border px-3 py-2 text-xs font-medium transition cursor-pointer text-left ${isSelected
+                              ? "border-purple-500 bg-purple-50 text-purple-700 font-bold ring-1 ring-purple-300 shadow-xs dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-500 dark:ring-purple-900"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700/60"
+                              }`}
+                          >
+                            <span className="truncate">{dept.label}</span>
+                            {isSelected ? (
+                              <Check className="h-3.5 w-3.5 shrink-0 text-purple-600 dark:text-purple-400" />
+                            ) : (
+                              <Plus className="h-3.5 w-3.5 shrink-0 text-slate-400 opacity-60" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {selectedDepartments.length === 0 && (
+                      <p className="text-xs font-medium text-rose-500">
+                        Please select at least one department for internal purpose.
                       </p>
                     )}
                   </div>
                 </div>
 
-                {/* Internal Departments Section */}
-                <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10 bg-slate-50/40 dark:bg-slate-900/40">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-white/10">
-                    <div>
-                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2 text-xs uppercase tracking-wider">
-                        <Layers className="h-4 w-4 text-purple-600" />
-                        Departments (Internal Purpose) <span className="text-rose-500">*</span>
+                {/* Right Column: Signatory */}
+                <div className="space-y-4">
+                  {/* Signatory / Admin Representative Section */}
+                  <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs dark:border-white/10 dark:bg-slate-900 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5 dark:border-white/10">
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2 text-sm uppercase tracking-wider">
+                          <ShieldCheck className="h-4 w-4 text-blue-600" />
+                          Signatory Representative (Printed on PDF)
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Authorized signatory printed on the official proposal letterhead.
+                        </p>
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Classify this quotation under one or more business departments for internal routing, reports, and team filtering.
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {selectedDepartments.length < departmentOptions.length ? (
-                        <button
-                          type="button"
-                          onClick={() => setSelectedDepartments(departmentOptions.map((d) => d.value))}
-                          className="text-[11px] font-medium text-purple-600 hover:underline dark:text-purple-400 cursor-pointer"
-                        >
-                          Select All
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setSelectedDepartments([])}
-                          className="text-[11px] font-medium text-rose-500 hover:underline cursor-pointer"
-                        >
-                          Clear
-                        </button>
-                      )}
-                      {selectedDepartments.length > 0 && (
-                        <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700 dark:bg-purple-950/50 dark:text-purple-300">
-                          {selectedDepartments.length} selected
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
-                    {departmentOptions.map((dept) => {
-                      const isSelected = selectedDepartments.includes(dept.value);
-                      return (
-                        <button
-                          key={dept.value}
-                          type="button"
-                          onClick={() => toggleDepartment(dept.value)}
-                          className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-xs font-medium transition cursor-pointer text-left ${isSelected
-                            ? "border-purple-500 bg-purple-50 text-purple-700 font-bold ring-1 ring-purple-300 shadow-xs dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-500 dark:ring-purple-900"
-                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700/60"
-                            }`}
-                        >
-                          <span className="truncate">{dept.label}</span>
-                          {isSelected ? (
-                            <Check className="h-3.5 w-3.5 shrink-0 text-purple-600 dark:text-purple-400" />
-                          ) : (
-                            <Plus className="h-3.5 w-3.5 shrink-0 text-slate-400 opacity-60" />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {selectedDepartments.length === 0 && (
-                    <p className="mt-2 text-[11px] font-medium text-rose-500">
-                      Please select at least one department for internal purpose.
-                    </p>
-                  )}
-                </div>
-
-                {/* Signatory / Admin Representative Section */}
-                <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10 bg-slate-50/40 dark:bg-slate-900/40">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-white/10">
-                    <div>
-                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2 text-xs uppercase tracking-wider">
-                        <ShieldCheck className="h-4 w-4 text-blue-600" />
-                        Signatory &amp; Admin Representative (Printed on PDF Letterhead)
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Select an authorized signatory from the dropdown. Signatory details are auto-filled and locked; only designation can be edited.
-                      </p>
                     </div>
 
                     {/* Selector for admin/finance/signatory users */}
                     {usersList.length > 0 && (
-                      <div className="flex items-center gap-2">
-                        <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                          Choose Signatory:
-                        </label>
+                      <div className="space-y-1.5 rounded-xl bg-blue-50/50 p-2.5 border border-blue-200/60 dark:bg-blue-950/20 dark:border-blue-900/40">
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                            Choose Authorized Signatory: <span className="text-rose-500">*</span>
+                          </label>
+                          {signatoryUserId && (
+                            <button
+                              type="button"
+                              onClick={() => handleSelectAdminUser("")}
+                              className="text-xs font-semibold text-rose-600 hover:underline dark:text-rose-400 cursor-pointer"
+                              title="Clear selected signatory"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
                         <select
                           value={signatoryUserId}
                           onChange={(e) => handleSelectAdminUser(e.target.value)}
-                          className="rounded-lg border border-blue-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-800 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-slate-100 cursor-pointer"
+                          className="w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-slate-100 cursor-pointer"
                         >
                           <option value="">
                             -- Select Authorized Signatory (Required) --
@@ -3599,344 +3953,461 @@ export function QuotationFormModal({
                             );
                           })}
                         </select>
-                        {signatoryUserId && (
-                          <button
-                            type="button"
-                            onClick={() => handleSelectAdminUser("")}
-                            className="text-[11px] font-semibold text-rose-600 hover:underline dark:text-rose-400 cursor-pointer"
-                            title="Clear selected signatory"
-                          >
-                            Clear
-                          </button>
-                        )}
                       </div>
                     )}
-                  </div>
 
-                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                          Signatory Name <span className="text-rose-500">*</span>
-                        </label>
-                        <span className="text-[10px] text-slate-400 font-medium">Read-only</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            Signatory Name <span className="text-rose-500">*</span>
+                          </label>
+                          <span className="text-xs text-slate-400 font-medium">Read-only</span>
+                        </div>
+                        <input
+                          type="text"
+                          required
+                          readOnly
+                          value={signatoryName}
+                          placeholder="Choose signatory above..."
+                          className="w-full rounded-xl border border-slate-200 bg-slate-100/90 px-3 py-2 text-sm text-slate-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 font-bold"
+                        />
                       </div>
-                      <input
-                        type="text"
-                        required
-                        readOnly
-                        value={signatoryName}
-                        placeholder="Choose signatory from dropdown..."
-                        className="w-full rounded-xl border border-slate-200 bg-slate-100/90 px-3 py-2 text-xs text-slate-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 font-bold"
-                      />
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            Designation / Title
+                          </label>
+                          <span className="text-xs text-blue-600 font-bold dark:text-blue-400">Editable</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={signatoryDesignation}
+                          onChange={(e) => setSignatoryDesignation(e.target.value)}
+                          placeholder="e.g. Authorized Signatory / Director"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-medium"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            Contact Phone / Mobile
+                          </label>
+                          <span className="text-xs text-slate-400 font-medium">Read-only</span>
+                        </div>
+                        <input
+                          type="text"
+                          readOnly
+                          value={signatoryPhone}
+                          placeholder="Auto-filled from profile"
+                          className="w-full rounded-xl border border-slate-200 bg-slate-100/90 px-3 py-2 text-sm text-slate-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 font-medium"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            Official Email
+                          </label>
+                          <span className="text-xs text-slate-400 font-medium">Read-only</span>
+                        </div>
+                        <input
+                          type="email"
+                          readOnly
+                          value={signatoryEmail}
+                          placeholder="Auto-filled from profile"
+                          className="w-full rounded-xl border border-slate-200 bg-slate-100/90 px-3 py-2 text-sm text-slate-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 font-medium"
+                        />
+                      </div>
                     </div>
 
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                          Designation / Title
-                        </label>
-                        <span className="text-[10px] text-blue-600 font-bold dark:text-blue-400">Editable</span>
-                      </div>
-                      <input
-                        type="text"
-                        value={signatoryDesignation}
-                        onChange={(e) => setSignatoryDesignation(e.target.value)}
-                        placeholder="e.g. Authorized Signatory / Director"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-medium"
-                      />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                          Contact Phone / Mobile
-                        </label>
-                        <span className="text-[10px] text-slate-400 font-medium">Read-only</span>
-                      </div>
-                      <input
-                        type="text"
-                        readOnly
-                        value={signatoryPhone}
-                        placeholder="Auto-filled from profile"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-100/90 px-3 py-2 text-xs text-slate-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 font-medium"
-                      />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                          Official Email
-                        </label>
-                        <span className="text-[10px] text-slate-400 font-medium">Read-only</span>
-                      </div>
-                      <input
-                        type="email"
-                        readOnly
-                        value={signatoryEmail}
-                        placeholder="Auto-filled from profile"
-                        className="w-full rounded-xl border border-slate-200 bg-slate-100/90 px-3 py-2 text-xs text-slate-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 font-medium"
-                      />
+                    <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200/80 dark:bg-slate-800/60 dark:border-white/10 text-xs text-slate-600 dark:text-slate-300">
+                      <span className="font-semibold">Letterhead Notice: </span>
+                      This signatory&apos;s name, designation, and official coordinates will be printed on the bottom right of the quotation PDF letterhead.
                     </div>
                   </div>
                 </div>
-              </>
+              </div>
             )}
 
             {currentStep === 4 && (
-              <>
-                {/* Terms & Conditions Section */}
-                <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-white/10">
-                    <div>
-                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-blue-600" />
-                        General Terms &amp; Conditions ({terms.length} Points)
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+                {/* Left Column: Terms & Conditions (Wide) */}
+                <div className="lg:col-span-7 xl:col-span-8 space-y-4">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs dark:border-white/10 dark:bg-slate-900">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-2.5 dark:border-white/10">
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2 text-sm uppercase tracking-wider">
+                          <FileText className="h-4 w-4 text-blue-600" />
+                          General Terms &amp; Conditions ({terms.length} Points)
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Select master sets or edit individual condition lines printed on the PDF letterhead.
+                        </p>
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Select multiple master terms sets or edit individual condition lines printed on official proposals.
-                      </p>
-                    </div>
 
-                    <div className="flex items-center gap-2">
-                      {terms.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        {terms.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleClearAllTerms}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:border-white/10 dark:bg-slate-800 dark:text-rose-400 cursor-pointer"
+                            title="Clear all terms"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            Clear All
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={handleClearAllTerms}
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 dark:border-white/10 dark:bg-slate-800 dark:text-rose-400 cursor-pointer"
-                          title="Clear all terms"
+                          onClick={handleAddTerm}
+                          className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 cursor-pointer"
                         >
-                          <Trash2 className="h-3 w-3" />
-                          Clear All
+                          <Plus className="h-3 w-3" />
+                          Add Condition
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={handleAddTerm}
-                        className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 cursor-pointer"
-                      >
-                        <Plus className="h-3 w-3" />
-                        Add Condition
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowTerms((p) => !p)}
-                        className="text-xs font-bold text-blue-600 hover:underline dark:text-blue-400 ml-1 cursor-pointer"
-                      >
-                        {showTerms ? "Hide" : "Show"}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowTerms((p) => !p)}
+                          className="text-xs font-bold text-blue-600 hover:underline dark:text-blue-400 ml-1 cursor-pointer"
+                        >
+                          {showTerms ? "Hide" : "Show"}
+                        </button>
+                      </div>
                     </div>
-                  </div>
 
-                  {showTerms && (
-                    <div className="mt-4 space-y-4">
-                      {/* Master Terms Sets Multi-Selector Panel */}
-                      <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-3.5 dark:border-blue-900/40 dark:bg-blue-950/20">
-                        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                          <label className="text-xs font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
-                            <Layers className="h-3.5 w-3.5 text-blue-600" />
-                            Select From Terms &amp; Conditions Master ({masterTermsSets.length} Sets Available)
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={handleSelectAllFilteredSets}
-                              className="text-[11px] font-bold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
-                            >
-                              Select All
-                            </button>
-                            <span className="text-slate-300 dark:text-slate-700">•</span>
-                            <button
-                              type="button"
-                              onClick={handleClearAllTerms}
-                              className="text-[11px] font-semibold text-slate-500 hover:underline dark:text-slate-400 cursor-pointer"
-                            >
-                              Deselect All
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Filter & Search Controls */}
-                        <div className="flex flex-wrap items-center gap-2 mb-3">
-                          <div className="relative flex-1 min-w-[200px]">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                            <input
-                              type="text"
-                              value={termsSearch}
-                              onChange={(e) => setTermsSearch(e.target.value)}
-                              placeholder="Search terms sets or clauses..."
-                              className="w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
-                            />
-                          </div>
-                          <div className="flex items-center gap-1 overflow-x-auto">
-                            {(["all", "quotation", "order", "invoice", "general"] as const).map((type) => (
+                    {showTerms && (
+                      <div className="mt-3.5 space-y-4">
+                        {/* Master Terms Sets Multi-Selector Panel */}
+                        <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-3 dark:border-blue-900/40 dark:bg-blue-950/20">
+                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                            <label className="text-sm font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
+                              <Layers className="h-3.5 w-3.5 text-blue-600" />
+                              Select From Master Sets ({masterTermsSets.length} Available)
+                            </label>
+                            <div className="flex items-center gap-2">
                               <button
-                                key={type}
                                 type="button"
-                                onClick={() => setTermsTypeFilter(type)}
-                                className={`rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider transition cursor-pointer ${termsTypeFilter === type
-                                  ? "bg-blue-600 text-white shadow-xs"
-                                  : "bg-white/80 text-slate-600 hover:bg-white dark:bg-slate-800/80 dark:text-slate-300 border border-slate-200 dark:border-white/10"
-                                  }`}
+                                onClick={handleSelectAllFilteredSets}
+                                className="text-xs font-bold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
                               >
-                                {type}
+                                Select All
                               </button>
-                            ))}
+                              <span className="text-slate-300 dark:text-slate-700">•</span>
+                              <button
+                                type="button"
+                                onClick={handleClearAllTerms}
+                                className="text-xs font-semibold text-slate-500 hover:underline dark:text-slate-400 cursor-pointer"
+                              >
+                                Deselect All
+                              </button>
+                            </div>
                           </div>
-                        </div>
 
-                        {filteredTermsSets.length === 0 ? (
-                          <div className="text-xs text-slate-500 py-3 text-center bg-white/50 rounded-lg dark:bg-slate-900/40">
-                            No matching terms sets found. Try adjusting your search or category filter.
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-[340px] overflow-y-auto pr-1">
-                            {filteredTermsSets.map((set) => {
-                              const status = getSetSelectionStatus(set);
-                              const activeLines = getSetLines(set);
-                              const isExpanded = expandedSetIds.includes(set._id);
-
-                              return (
-                                <div
-                                  key={set._id}
-                                  className={`rounded-lg border transition ${status === "all"
-                                    ? "border-blue-500 bg-white dark:bg-slate-900 shadow-2xs"
-                                    : status === "partial"
-                                      ? "border-blue-300 bg-blue-50/70 dark:border-blue-800 dark:bg-blue-950/40"
-                                      : "border-slate-200 bg-white/70 hover:bg-white dark:border-white/10 dark:bg-slate-800/50 dark:hover:bg-slate-800"
+                          {/* Filter & Search Controls */}
+                          <div className="flex flex-wrap items-center gap-2 mb-2.5">
+                            <div className="relative flex-1 min-w-[180px]">
+                              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                              <input
+                                type="text"
+                                value={termsSearch}
+                                onChange={(e) => setTermsSearch(e.target.value)}
+                                placeholder="Search terms sets or clauses..."
+                                className="w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                              />
+                            </div>
+                            <div className="flex items-center gap-1 overflow-x-auto">
+                              {(["all", "quotation", "order", "invoice", "general"] as const).map((type) => (
+                                <button
+                                  key={type}
+                                  type="button"
+                                  onClick={() => setTermsTypeFilter(type)}
+                                  className={`rounded-lg px-2.5 py-1 text-xs font-bold uppercase tracking-wider transition cursor-pointer ${termsTypeFilter === type
+                                    ? "bg-blue-600 text-white shadow-xs"
+                                    : "bg-white/80 text-slate-600 hover:bg-white dark:bg-slate-800/80 dark:text-slate-300 border border-slate-200 dark:border-white/10"
                                     }`}
                                 >
-                                  <div className="flex items-start justify-between gap-2 p-2.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleToggleTermsSet(set)}
-                                      className="flex items-start gap-2 flex-1 text-left cursor-pointer"
-                                    >
-                                      <div className="mt-0.5 shrink-0 text-blue-600">
-                                        {status === "all" ? (
-                                          <CheckSquare className="h-4 w-4" />
-                                        ) : status === "partial" ? (
-                                          <div className="h-4 w-4 rounded border border-primary bg-primary flex items-center justify-center text-white">
-                                            <Minus className="h-3 w-3 stroke-[3]" />
-                                          </div>
-                                        ) : (
-                                          <Square className="h-4 w-4 text-slate-400" />
-                                        )}
-                                      </div>
-                                      <div className="min-w-0 flex-1">
-                                        <div className="text-xs font-bold text-slate-900 dark:text-white truncate flex items-center gap-1.5">
-                                          <span>{set.title}</span>
-                                          <span className="rounded-full bg-slate-100 px-1.5 py-0.2 text-[9px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-400 uppercase shrink-0">
-                                            {set.type}
-                                          </span>
-                                        </div>
-                                        <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                          {activeLines.length} {activeLines.length === 1 ? "clause" : "clauses"}
-                                          {status === "partial" && " • partially selected"}
-                                          {status === "all" && " • fully selected"}
-                                        </div>
-                                      </div>
-                                    </button>
+                                  {type}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
 
-                                    {activeLines.length > 0 && (
+                          {filteredTermsSets.length === 0 ? (
+                            <div className="text-xs text-slate-500 py-3 text-center bg-white/50 rounded-lg dark:bg-slate-900/40">
+                              No matching terms sets found. Try adjusting your search or category filter.
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[260px] overflow-y-auto pr-1">
+                              {filteredTermsSets.map((set) => {
+                                const status = getSetSelectionStatus(set);
+                                const activeLines = getSetLines(set);
+                                const isExpanded = expandedSetIds.includes(set._id);
+
+                                return (
+                                  <div
+                                    key={set._id}
+                                    className={`rounded-lg border transition ${status === "all"
+                                      ? "border-blue-500 bg-white dark:bg-slate-900 shadow-2xs"
+                                      : status === "partial"
+                                        ? "border-blue-300 bg-white/90 dark:bg-slate-900/90"
+                                        : "border-slate-200 bg-white/60 hover:bg-white dark:border-white/10 dark:bg-slate-900/50"
+                                      }`}
+                                  >
+                                    <div className="flex items-center justify-between p-2.5 gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleTermsSet(set)}
+                                        className="flex items-center gap-2 text-left flex-1 min-w-0 cursor-pointer"
+                                      >
+                                        <div className="shrink-0 text-blue-600 dark:text-blue-400">
+                                          {status === "all" ? (
+                                            <CheckSquare className="h-4 w-4" />
+                                          ) : status === "partial" ? (
+                                            <div className="relative">
+                                              <Square className="h-4 w-4 text-blue-400" />
+                                              <div className="absolute inset-1 bg-blue-500 rounded-xs" />
+                                            </div>
+                                          ) : (
+                                            <Square className="h-4 w-4 text-slate-300 dark:text-slate-600" />
+                                          )}
+                                        </div>
+                                        <div className="min-w-0">
+                                          <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                            {set.title}
+                                          </div>
+                                          <div className="text-xs text-slate-400 flex items-center gap-1.5">
+                                            <span className="capitalize">{set.type || "general"}</span>
+                                            <span>•</span>
+                                            <span>{activeLines.length} clause(s)</span>
+                                            {set.is_default && (
+                                              <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 dark:text-emerald-400 px-1 rounded">
+                                                Default
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </button>
+
                                       <button
                                         type="button"
                                         onClick={() => handleToggleExpandSet(set._id)}
-                                        className="shrink-0 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                                        className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded cursor-pointer"
                                         title={isExpanded ? "Collapse clauses" : "Expand clauses"}
                                       >
                                         {isExpanded ? (
-                                          <ChevronUp className="h-4 w-4" />
+                                          <ChevronUp className="h-3.5 w-3.5" />
                                         ) : (
-                                          <ChevronDown className="h-4 w-4" />
+                                          <ChevronDown className="h-3.5 w-3.5" />
                                         )}
                                       </button>
+                                    </div>
+
+                                    {/* Expanded Individual Clauses */}
+                                    {isExpanded && activeLines.length > 0 && (
+                                      <div className="border-t border-slate-100 bg-slate-50/50 p-2 space-y-1.5 dark:border-white/5 dark:bg-slate-800/30">
+                                        {activeLines.map((clause, cIdx) => {
+                                          const selected = terms.some((t) => t.trim() === clause);
+                                          return (
+                                            <button
+                                              key={cIdx}
+                                              type="button"
+                                              onClick={() => handleToggleClause(clause)}
+                                              className="w-full flex items-start gap-2 p-1.5 text-left rounded hover:bg-white dark:hover:bg-slate-800 transition cursor-pointer"
+                                            >
+                                              <div className="shrink-0 mt-0.5 text-blue-600">
+                                                {selected ? (
+                                                  <CheckSquare className="h-3 w-3" />
+                                                ) : (
+                                                  <Square className="h-3 w-3 text-slate-300 dark:text-slate-600" />
+                                                )}
+                                              </div>
+                                              <div className="flex-1 text-xs leading-snug text-slate-800 dark:text-white">
+                                                <RichTextDisplay content={clause} className="dark:text-white dark:[&_*]:!text-white" />
+                                              </div>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
                                     )}
                                   </div>
-
-                                  {/* Expanded Individual Clauses */}
-                                  {isExpanded && activeLines.length > 0 && (
-                                    <div className="border-t border-slate-100 bg-slate-50/80 p-2 space-y-1.5 dark:border-white/5 dark:bg-slate-900/70 rounded-b-lg">
-                                      {activeLines.map((clause, cIdx) => {
-                                        const isClauseSelected = terms.some((t) => t.trim() === clause);
-                                        return (
-                                          <button
-                                            key={cIdx}
-                                            type="button"
-                                            onClick={() => handleToggleClause(clause)}
-                                            className={`w-full flex items-start gap-2 p-1.5 rounded-md text-left text-xs transition cursor-pointer ${isClauseSelected
-                                              ? "bg-blue-100/70 text-blue-900 dark:bg-blue-950/70 dark:text-white font-medium"
-                                              : "hover:bg-white text-slate-700 dark:text-white dark:hover:bg-slate-800"
-                                              }`}
-                                          >
-                                            <div className="mt-0.5 shrink-0 text-blue-600 dark:text-blue-400">
-                                              {isClauseSelected ? (
-                                                <CheckSquare className="h-3.5 w-3.5" />
-                                              ) : (
-                                                <Square className="h-3.5 w-3.5 text-slate-400" />
-                                              )}
-                                            </div>
-                                            <div className="flex-1 text-[11px] leading-snug text-slate-800 dark:text-white">
-                                              <RichTextDisplay content={clause} className="dark:text-white dark:[&_*]:!text-white" />
-                                            </div>
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Individual Condition Lines Editor (Printed on official PDF) */}
-                      <div className="space-y-3">
-                        <div className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                          <span>Proposal Condition Clauses ({terms.length} Lines)</span>
-                          <span className="text-[10px] font-normal text-slate-400">
-                            These clauses will be printed on the official quotation.
-                          </span>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
 
-                        {terms.map((term, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 transition focus-within:border-blue-300 dark:border-white/10 dark:bg-slate-800/40"
-                          >
-                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-bold text-blue-800 dark:bg-blue-950 dark:text-blue-300 mt-1">
-                              {idx + 1}
+                        {/* Individual Condition Lines Editor (Printed on official PDF) */}
+                        <div className="space-y-2.5">
+                          <div className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                            <span>Proposal Condition Clauses ({terms.length} Lines)</span>
+                            <span className="text-xs font-normal text-slate-400">
+                              These clauses will be printed on the official quotation letterhead.
                             </span>
-                            <div className="flex-1 text-slate-900 dark:text-white">
-                              <RichTextEditor
-                                value={term}
-                                onChange={(html) => handleTermChange(idx, html)}
-                                placeholder={`Condition Line ${idx + 1}...`}
-                                minHeight="50px"
-                              />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveTerm(idx)}
-                              className="rounded-lg p-1.5 text-rose-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 cursor-pointer mt-1"
-                              title="Delete Condition"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
                           </div>
-                        ))}
 
-                        {terms.length === 0 && (
-                          <div className="py-8 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl p-4 dark:border-white/10">
-                            No terms and conditions selected. Choose one or multiple master sets above or click &apos;+ Add Condition&apos; to write custom terms.
-                          </div>
-                        )}
+                          {terms.map((term, idx) => (
+                            <div
+                              key={idx}
+                              className="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 transition focus-within:border-blue-300 dark:border-white/10 dark:bg-slate-800/40"
+                            >
+                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-800 dark:bg-blue-950 dark:text-blue-300 mt-1">
+                                {idx + 1}
+                              </span>
+                              <div className="flex-1 text-slate-900 dark:text-white">
+                                <RichTextEditor
+                                  value={term}
+                                  onChange={(html) => handleTermChange(idx, html)}
+                                  placeholder={`Condition Line ${idx + 1}...`}
+                                  minHeight="50px"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveTerm(idx)}
+                                className="rounded-lg p-1.5 text-rose-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 cursor-pointer mt-1"
+                                title="Delete Condition"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
+
+                          {terms.length === 0 && (
+                            <div className="py-6 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl p-4 dark:border-white/10">
+                              No terms and conditions selected. Choose one or multiple master sets above or click &apos;+ Add Condition&apos; to write custom terms.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Column: Submit & Proposal Review (Sticky on desktop) */}
+                <div className="lg:col-span-5 xl:col-span-4 lg:sticky lg:top-0 space-y-4">
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-2xs dark:border-emerald-900/40 dark:bg-emerald-950/20 space-y-3.5">
+                    <div className="flex items-center justify-between border-b border-emerald-200/60 pb-2 dark:border-emerald-900/40">
+                      <div className="text-sm font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
+                        <CheckSquare className="h-4 w-4 text-emerald-600" />
+                        Quotation Summary &amp; Submit
+                      </div>
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200">
+                        Step 4 of 4
+                      </span>
+                    </div>
+
+                    {/* Snapshot Card */}
+                    <div className="rounded-xl bg-white/90 p-3 border border-emerald-200 dark:bg-slate-900/90 dark:border-emerald-900/40 text-xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 dark:text-slate-400">Quotation Ref:</span>
+                        <span className="font-mono font-bold text-primary">{refNo || "Auto Assigned"}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 dark:text-slate-400">Date:</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">{quotationDate}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 dark:text-slate-400">Customer:</span>
+                        <span className="font-bold text-slate-900 dark:text-white truncate max-w-[180px]">
+                          {customerName || "—"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 dark:text-slate-400">Validity:</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {validityDays} Days ({validityEndDate})
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-white/5">
+                        <span className="text-slate-500 dark:text-slate-400">Total Items:</span>
+                        <span className="font-bold text-slate-900 dark:text-white">{items.length} Product(s)</span>
+                      </div>
+                      <div className="flex items-center justify-between pt-1 border-t border-emerald-100 dark:border-emerald-900/30">
+                        <span className="font-bold text-slate-800 dark:text-slate-200">Grand Total:</span>
+                        <span className="text-xl font-black text-emerald-700 dark:text-emerald-400 font-mono">
+                          {formatCurrencyINR(calculations.grandTotal)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-white/5 text-xs">
+                        <span className="text-slate-500 dark:text-slate-400">Signatory:</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200 truncate max-w-[170px]">
+                          {signatoryName || <span className="text-rose-500 font-bold">Required</span>}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-500 dark:text-slate-400">Terms Clauses:</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{terms.length} Points</span>
                       </div>
                     </div>
-                  )}
+
+                    {/* Readiness checklist */}
+                    <div className="space-y-1 text-xs">
+                      <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                        {customerName ? (
+                          <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                        ) : (
+                          <X className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                        )}
+                        <span>Customer name: {customerName ? "Ready" : "Missing"}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                        {items.length > 0 ? (
+                          <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                        ) : (
+                          <X className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                        )}
+                        <span>Line items: {items.length > 0 ? `${items.length} items configured` : "No items added"}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                        {signatoryName ? (
+                          <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                        ) : (
+                          <X className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                        )}
+                        <span>Signatory: {signatoryName ? "Selected" : "Missing selection"}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                        {selectedDepartments.length > 0 ? (
+                          <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                        ) : (
+                          <X className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                        )}
+                        <span>Department: {selectedDepartments.length > 0 ? `${selectedDepartments.length} selected` : "Missing"}</span>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="space-y-2 pt-1 border-t border-emerald-200/60 dark:border-emerald-900/40">
+                      <button
+                        type="button"
+                        onClick={() => setShowLivePreviewModal(true)}
+                        className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-300 bg-white px-4 py-2 text-xs font-bold text-emerald-800 shadow-2xs hover:bg-emerald-50 dark:border-emerald-800 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-slate-800 transition cursor-pointer"
+                      >
+                        <Eye className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        <span>Live Letterhead Preview</span>
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={isCreating || isUpdating || !canManageQuotations(authUser)}
+                        title={!canManageQuotations(authUser) ? "Only authorized representatives can create quotations" : undefined}
+                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        {isCreating || isUpdating
+                          ? "Saving..."
+                          : isEditing
+                            ? "Update Quotation"
+                            : isCopyMode
+                              ? "Create Copied Quotation"
+                              : "Generate Quotation"}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </>
+              </div>
             )}
           </div>
 
@@ -3945,7 +4416,7 @@ export function QuotationFormModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-slate-800 cursor-pointer"
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-slate-800 cursor-pointer"
             >
               Cancel
             </button>
@@ -3953,7 +4424,7 @@ export function QuotationFormModal({
               <button
                 type="button"
                 onClick={() => setShowLivePreviewModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-2 text-xs font-bold text-emerald-700 shadow-2xs transition hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/50 cursor-pointer"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-2 text-sm font-bold text-emerald-700 shadow-2xs transition hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/50 cursor-pointer"
                 title="View real-time A4 letterhead preview with PREVIEW watermark"
               >
                 <Eye className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -3963,7 +4434,7 @@ export function QuotationFormModal({
                 <button
                   type="button"
                   onClick={() => setCurrentStep((s) => (s > 1 ? ((s - 1) as 1 | 2 | 3 | 4) : s))}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 cursor-pointer"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
                   Previous
@@ -3973,7 +4444,7 @@ export function QuotationFormModal({
                 <button
                   type="button"
                   onClick={() => setCurrentStep((s) => (s < 4 ? ((s + 1) as 1 | 2 | 3 | 4) : s))}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-primary-hover cursor-pointer"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-primary-hover cursor-pointer"
                 >
                   Next
                   <ChevronRight className="h-3.5 w-3.5" />
@@ -4069,14 +4540,14 @@ export function QuotationFormModal({
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
                       Live Quotation Letterhead Preview
                     </h3>
-                    <span className="rounded-md bg-rose-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60">
+                    <span className="rounded-md bg-rose-100 px-2 py-0.5 text-xs font-black uppercase tracking-wider text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60">
                       WATERMARKED • PREVIEW
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     Real-time draft rendering of #{refNo || autoNextRefNo || "New Proposal"} for {customerName || "Customer"}
                   </p>
                 </div>
@@ -4086,10 +4557,10 @@ export function QuotationFormModal({
                 <button
                   type="button"
                   onClick={handlePrintPreview}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
                   title="Print watermarked preview draft"
                 >
-                  <Printer className="h-3.5 w-3.5" />
+                  <Printer className="h-4 w-4" />
                   Print Preview
                 </button>
                 <button
@@ -4104,7 +4575,7 @@ export function QuotationFormModal({
             </div>
 
             {/* Live Indicator Notice Bar */}
-            <div className="bg-amber-50 px-6 py-2 text-[11px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-b border-amber-100 dark:border-amber-900/30 flex items-center justify-between flex-wrap gap-2">
+            <div className="bg-amber-50 px-6 py-2.5 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-b border-amber-100 dark:border-amber-900/30 flex items-center justify-between flex-wrap gap-2">
               <span className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                 <strong>Live Dynamic Preview:</strong> Form changes are instantly rendered on this letterhead.

@@ -594,24 +594,24 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
 
     if (companyName) {
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(12.5);
+      pdf.setFontSize(14.0);
       pdf.setTextColor(...NAVY);
       const companyLines = pdf.splitTextToSize(companyName.toUpperCase(), maxCenterTextW);
       companyLines.forEach((line: string) => {
         pdf.text(line, PAGE_W / 2, hY, { align: "center" });
-        hY += 4.5;
+        hY += 5.0;
       });
     }
 
     if (companyAddress) {
       pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(6.8);
+      pdf.setFontSize(8.0);
       pdf.setTextColor(...TEXT);
       const fullAddressStr = `Regd. Off: ${companyAddress}`;
       const splitAddr = pdf.splitTextToSize(fullAddressStr, maxCenterTextW + 10);
       splitAddr.forEach((line: string) => {
         pdf.text(line, PAGE_W / 2, hY, { align: "center" });
-        hY += 3.4;
+        hY += 3.8;
       });
     }
 
@@ -623,13 +623,13 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
 
     if (contactParts.length > 0) {
       pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(6.8);
+      pdf.setFontSize(8.0);
       pdf.setTextColor(...MUTED);
       const contactStr = contactParts.join("  •  ");
       const splitContact = pdf.splitTextToSize(contactStr, maxCenterTextW + 10);
       splitContact.forEach((line: string) => {
         pdf.text(line, PAGE_W / 2, hY, { align: "center" });
-        hY += 3.4;
+        hY += 3.8;
       });
     }
 
@@ -647,11 +647,11 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
     const refLabel = "Ref. No. :";
 
     pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(11);
+    pdf.setFontSize(13.0);
     pdf.setTextColor(...NAVY);
     pdf.text(docTitle, M, currentY + 3);
 
-    pdf.setFontSize(7.5);
+    pdf.setFontSize(9.0);
     pdf.setFont("helvetica", "bold");
     pdf.setTextColor(...TEXT);
     pdf.text(refLabel, PAGE_W - M - 30, currentY + 1, { align: "right" });
@@ -686,21 +686,24 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
     if (customerAddress) {
       leftLines.push({ val: customerAddress, bold: false, color: TEXT });
     }
-    if (quotation.gstin) {
+    if (quotation.customer_ref && quotation.show_customer_ref !== false) {
+      leftLines.push({ label: "Cust. Ref. : ", val: quotation.customer_ref, bold: true, color: BLUE });
+    }
+    if (quotation.gstin && quotation.show_gstin !== false) {
       leftLines.push({ label: "GSTIN: ", val: quotation.gstin });
     }
-    if (quotation.phone) {
+    if (quotation.phone && quotation.show_phone !== false) {
       leftLines.push({ label: "Tel: ", val: quotation.phone });
     }
-    if (quotation.cell) {
+    if (quotation.cell && quotation.show_cell !== false) {
       leftLines.push({ label: "Cell: ", val: quotation.cell });
     }
-    if (quotation.email) {
+    if (quotation.email && quotation.show_email !== false) {
       leftLines.push({ label: "E-mail: ", val: quotation.email });
     }
 
     const rightLines: Array<{ label: string; val: string; bold?: boolean; color?: [number, number, number] }> = [];
-    if (quotation.kind_attn) {
+    if (quotation.kind_attn && quotation.show_kind_attn !== false) {
       rightLines.push({ label: "Kind Attn : ", val: quotation.kind_attn, bold: true });
     }
     if (quotation.subject) {
@@ -710,23 +713,23 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
     let leftCalcH = 4;
     for (const line of leftLines) {
       pdf.setFont("helvetica", line.bold ? "bold" : "normal");
-      pdf.setFontSize(line.bold ? 8 : 6.8);
+      pdf.setFontSize(line.bold ? 9.5 : 8.0);
       const fullText = line.label ? `${line.label}${line.val}` : line.val;
       const wrapped = pdf.splitTextToSize(fullText, col1W - 6);
-      leftCalcH += wrapped.length * 3.2;
+      leftCalcH += wrapped.length * 3.7;
     }
 
     let rightCalcH = 4;
     for (const line of rightLines) {
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(7);
+      pdf.setFontSize(8.5);
       const labelW = pdf.getTextWidth(line.label);
       pdf.setFont("helvetica", line.bold ? "bold" : "normal");
       const wrapped = pdf.splitTextToSize(line.val, col2W - labelW - 6);
-      rightCalcH += wrapped.length * 3.6 + 1;
+      rightCalcH += wrapped.length * 4.0 + 1;
     }
 
-    const boxH = Math.max(leftCalcH + 2, rightCalcH + 2, 18);
+    const boxH = Math.max(leftCalcH + 2, rightCalcH + 2, 20);
 
     pdf.setFillColor(255, 255, 255);
     pdf.setDrawColor(...LINE);
@@ -738,18 +741,18 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
     let y = currentY + 4;
     for (const line of leftLines) {
       pdf.setFont("helvetica", line.bold ? "bold" : "normal");
-      pdf.setFontSize(line.bold ? 8 : 6.8);
+      pdf.setFontSize(line.bold ? 9.5 : 8.0);
       pdf.setTextColor(...(line.color || TEXT));
       const fullText = line.label ? `${line.label}${line.val}` : line.val;
       const wrapped = pdf.splitTextToSize(fullText, col1W - 6);
       pdf.text(wrapped, boxX + 3, y);
-      y += wrapped.length * 3.2;
+      y += wrapped.length * 3.7;
     }
 
     y = currentY + 4;
     for (const line of rightLines) {
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(7);
+      pdf.setFontSize(8.5);
       pdf.setTextColor(...TEXT);
       pdf.text(line.label, boxX + col1W + 3, y);
       const labelW = pdf.getTextWidth(line.label);
@@ -758,7 +761,7 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
       pdf.setTextColor(...(line.color || DARK));
       const wrapped = pdf.splitTextToSize(line.val, col2W - labelW - 6);
       pdf.text(wrapped, boxX + col1W + 3 + labelW, y);
-      y += wrapped.length * 3.6 + 1;
+      y += wrapped.length * 4.0 + 1;
     }
 
     currentY += boxH + 4;
@@ -793,19 +796,19 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
 
   const drawTableHeaders = () => {
     pdf.setFillColor(...NAVY);
-    pdf.rect(M, currentY, CONTENT_W, 6, "F");
+    pdf.rect(M, currentY, CONTENT_W, 6.8, "F");
 
     pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(6.8);
+    pdf.setFontSize(8.0);
     pdf.setTextColor(255, 255, 255);
 
     let x = M;
     for (const c of cols) {
       const textX = c.align === "center" ? x + c.w / 2 : c.align === "right" ? x + c.w - 1.5 : x + 1.5;
-      pdf.text(c.label, textX, currentY + 4.2, { align: c.align });
+      pdf.text(c.label, textX, currentY + 4.6, { align: c.align });
       x += c.w;
     }
-    currentY += 6;
+    currentY += 6.8;
   };
 
   const drawRichTextMessage = (html: string) => {
@@ -867,7 +870,7 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
         for (const row of rows) {
           const cellData = row.cells.map((cell, cIdx) => {
             const isHeader = cell.isHeader;
-            const fontSize = isHeader ? 7.0 : 6.5;
+            const fontSize = isHeader ? 8.0 : 7.2;
             const isBold = isHeader || cell.runs.some((r) => r.bold);
             pdf.setFont("helvetica", isBold ? "bold" : "normal");
             pdf.setFontSize(fontSize);
@@ -889,8 +892,8 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
               maxLines = cd.splitLines.length;
             }
           }
-          const lineStep = 3.2;
-          const rowH = Math.max(5.5, maxLines * lineStep + 2.0);
+          const lineStep = 3.6;
+          const rowH = Math.max(6.0, maxLines * lineStep + 2.0);
 
           checkPageBreak(rowH + 1, false);
 
@@ -918,7 +921,7 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
               for (let l = 0; l < cd.splitLines.length; l++) {
                 const lineText = cd.splitLines[l];
                 if (!lineText) continue;
-                const lineY = currentY + 3.2 + l * lineStep;
+                const lineY = currentY + 3.4 + l * lineStep;
 
                 if (cd.cell.align === "center") {
                   pdf.text(lineText, curCellX + thisColW / 2, lineY, { align: "center" });
@@ -943,8 +946,8 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
       const isH1 = block.headingLevel === 1;
       const isH2 = block.headingLevel === 2;
       const isH3 = block.headingLevel === 3;
-      const baseFontSize = isH1 ? 9.5 : isH2 ? 8.5 : isH3 ? 7.8 : 7.0;
-      const stepLineHeight = isH1 ? 5.0 : isH2 ? 4.5 : isH3 ? 4.0 : 3.6;
+      const baseFontSize = isH1 ? 11.5 : isH2 ? 10.0 : isH3 ? 9.0 : 8.0;
+      const stepLineHeight = isH1 ? 5.5 : isH2 ? 5.0 : isH3 ? 4.5 : 3.8;
 
       const tokens: TextRun[] = [];
       for (const run of block.runs) {
@@ -1075,11 +1078,11 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
   for (const it of items) {
     rowIndex += 1;
     pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(7.5);
+    pdf.setFontSize(8.5);
     const titleLines = pdf.splitTextToSize(it.product_name || "Item", 51);
 
     pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(6.5);
+    pdf.setFontSize(7.5);
     const cleanDesc = it.description
       ? it.description
           .replace(/<br\s*\/?>/gi, "\n")
@@ -1091,12 +1094,15 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
           .trim()
       : "";
     const descLines = cleanDesc ? pdf.splitTextToSize(cleanDesc, 51) : [];
+    if (quotation.show_mrp && (it.mrp || 0) > 0) {
+      descLines.unshift(`MRP: Rs. ${formatCurrency(it.mrp || 0)}`);
+    }
     if (it.discount_percent && it.discount_percent > 0) {
       descLines.unshift(`Disc: ${it.discount_percent}% (-Rs. ${formatCurrency(it.discount_amount || 0)})`);
     }
 
     const totalTextLines = titleLines.length + descLines.length;
-    const rHeight = Math.max(totalTextLines * 3.2 + 3, 7);
+    const rHeight = Math.max(totalTextLines * 3.6 + 3.5, 7.5);
 
     checkPageBreak(rHeight, true);
 
@@ -1118,60 +1124,63 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
     x = M;
 
     pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(7);
+    pdf.setFontSize(8.0);
     pdf.setTextColor(...MUTED);
-    pdf.text(String(rowIndex), x + cols[0].w / 2, currentY + 4.2, { align: "center" });
+    pdf.text(String(rowIndex), x + cols[0].w / 2, currentY + 4.5, { align: "center" });
     x += cols[0].w;
 
     pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(7.5);
+    pdf.setFontSize(8.5);
     pdf.setTextColor(...DARK);
-    let descY = currentY + 3.8;
+    let descY = currentY + 4.0;
     for (const tl of titleLines) {
       pdf.text(tl, x + 1.5, descY);
-      descY += 3.2;
+      descY += 3.5;
     }
     if (descLines.length > 0) {
       pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(6.5);
+      pdf.setFontSize(7.5);
       pdf.setTextColor(...MUTED);
       for (const dl of descLines) {
         pdf.text(dl, x + 1.5, descY);
-        descY += 2.8;
+        descY += 3.0;
       }
     }
     x += cols[1].w;
 
     pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(7);
+    pdf.setFontSize(8.0);
     pdf.setTextColor(...TEXT);
-    pdf.text(it.hsn_code || "—", x + cols[2].w / 2, currentY + 4.2, { align: "center" });
+    pdf.text(it.hsn_code || "—", x + cols[2].w / 2, currentY + 4.5, { align: "center" });
     x += cols[2].w;
 
     pdf.setFont("helvetica", "bold");
-    pdf.text(`${it.quantity} ${it.unit || ""}`.trim(), x + cols[3].w / 2, currentY + 4.2, { align: "center" });
+    pdf.setFontSize(8.0);
+    pdf.text(`${it.quantity} ${it.unit || ""}`.trim(), x + cols[3].w / 2, currentY + 4.5, { align: "center" });
     x += cols[3].w;
 
     pdf.setFont("helvetica", "normal");
-    pdf.text(formatCurrency(it.rate), x + cols[4].w - 1.5, currentY + 4.2, { align: "right" });
+    pdf.setFontSize(8.0);
+    pdf.text(formatCurrency(it.rate), x + cols[4].w - 1.5, currentY + 4.5, { align: "right" });
     x += cols[4].w;
 
-    pdf.text(formatCurrency(it.taxable_amount), x + cols[5].w - 1.5, currentY + 4.2, { align: "right" });
+    pdf.text(formatCurrency(it.taxable_amount), x + cols[5].w - 1.5, currentY + 4.5, { align: "right" });
     x += cols[5].w;
 
     const isItemGstOff = quotation.gst_enabled === false || it.gst_enabled === false || !it.gst_rate;
     const gstRateText = isItemGstOff ? "" : `${it.gst_rate}%`;
-    pdf.text(gstRateText, x + cols[6].w / 2, currentY + 4.2, { align: "center" });
+    pdf.text(gstRateText, x + cols[6].w / 2, currentY + 4.5, { align: "center" });
     x += cols[6].w;
 
     const gstAmtVal = isItemGstOff ? 0 : Number(it.total_gst_amount || 0);
     const gstAmtText = isItemGstOff || !gstAmtVal ? "" : formatCurrency(gstAmtVal);
-    pdf.text(gstAmtText, x + cols[7].w - 1.5, currentY + 4.2, { align: "right" });
+    pdf.text(gstAmtText, x + cols[7].w - 1.5, currentY + 4.5, { align: "right" });
     x += cols[7].w;
 
     pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(8.0);
     pdf.setTextColor(...DARK);
-    pdf.text(formatCurrency(it.line_total), x + cols[8].w - 1.5, currentY + 4.2, { align: "right" });
+    pdf.text(formatCurrency(it.line_total), x + cols[8].w - 1.5, currentY + 4.5, { align: "right" });
 
     currentY += rHeight;
   }
@@ -1179,7 +1188,7 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
   const hasDiscount = Boolean(quotation.total_discount && quotation.total_discount > 0);
   const hasRoundOff = quotation.round_off !== undefined && quotation.round_off !== 0;
   const standardRowCount = (hasDiscount ? 3 : 1) + 1 + (hasRoundOff ? 1 : 0);
-  const summaryH = standardRowCount * 5 + 6.5;
+  const summaryH = standardRowCount * 5.5 + 7.5;
   checkPageBreak(summaryH + 4, false);
 
   const leftW = 112;
@@ -1191,42 +1200,42 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
   pdf.line(M + leftW, currentY, M + leftW, currentY + summaryH);
 
   pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(6.8);
+  pdf.setFontSize(7.5);
   pdf.setTextColor(...MUTED);
   pdf.text("AMOUNT CHARGEABLE (IN WORDS):", M + 3, currentY + 4.5);
 
   pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(8);
+  pdf.setFontSize(9.5);
   pdf.setTextColor(...NAVY);
   const words = (quotation.amount_in_words && quotation.amount_in_words.trim()) || numberToIndianWords(quotation.grand_total) || "Zero Rupees Only";
   const wrappedWords = pdf.splitTextToSize(words, leftW - 6);
-  pdf.text(wrappedWords, M + 3, currentY + 8.5);
+  pdf.text(wrappedWords, M + 3, currentY + 9.0);
 
   let rightY = currentY;
   const renderSummaryRow = (label: string, val: string, isGrand = false) => {
     if (isGrand) {
       pdf.setFillColor(...ACCENT_BG);
-      pdf.rect(M + leftW, rightY, rightW, 6.5, "F");
+      pdf.rect(M + leftW, rightY, rightW, 7.5, "F");
       pdf.setDrawColor(...LINE);
       pdf.line(M + leftW, rightY, M + CONTENT_W, rightY);
 
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(8.5);
+      pdf.setFontSize(10.0);
       pdf.setTextColor(...NAVY);
-      pdf.text(label, M + leftW + 3, rightY + 4.5);
-      pdf.text(val, PAGE_W - M - 2, rightY + 4.5, { align: "right" });
-      rightY += 6.5;
+      pdf.text(label, M + leftW + 3, rightY + 5.0);
+      pdf.text(val, PAGE_W - M - 2, rightY + 5.0, { align: "right" });
+      rightY += 7.5;
     } else {
       pdf.setDrawColor(...LINE);
-      pdf.line(M + leftW, rightY + 5, M + CONTENT_W, rightY + 5);
+      pdf.line(M + leftW, rightY + 5.5, M + CONTENT_W, rightY + 5.5);
 
       pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(7.5);
+      pdf.setFontSize(8.5);
       pdf.setTextColor(...TEXT);
-      pdf.text(label, M + leftW + 3, rightY + 3.8);
+      pdf.text(label, M + leftW + 3, rightY + 4.0);
       pdf.setFont("helvetica", "bold");
-      pdf.text(val, PAGE_W - M - 2, rightY + 3.8, { align: "right" });
-      rightY += 5;
+      pdf.text(val, PAGE_W - M - 2, rightY + 4.0, { align: "right" });
+      rightY += 5.5;
     }
   };
 
@@ -1252,7 +1261,7 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
   if (terms.length > 0) {
     checkPageBreak(12, false);
     pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(7.5);
+    pdf.setFontSize(9.0);
     pdf.setTextColor(...NAVY);
     pdf.text("GENERAL TERMS & CONDITIONS", M, currentY + 3);
 
@@ -1296,14 +1305,14 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
         let prefixWidth = 0;
         if (isFirstBlockInTerm) {
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(6.5);
+          pdf.setFontSize(8.0);
           prefixWidth = pdf.getTextWidth(termNumStr);
         }
 
         let bulletWidth = 0;
         if (block.type === "list-item" && block.bullet) {
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(6.5);
+          pdf.setFontSize(8.0);
           bulletWidth = pdf.getTextWidth(block.bullet);
         }
 
@@ -1327,7 +1336,7 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
           }
 
           pdf.setFont("helvetica", token.bold && token.italic ? "bolditalic" : token.bold ? "bold" : token.italic ? "italic" : "normal");
-          pdf.setFontSize(6.5);
+          pdf.setFontSize(7.8);
           const tw = pdf.getTextWidth(token.text);
 
           if (currentLineWidth + tw > maxLineWidth && currentLine.length > 0) {
@@ -1344,14 +1353,14 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
         }
 
         for (let lIdx = 0; lIdx < linesOfTokens.length; lIdx += 1) {
-          checkPageBreak(3.5, false);
+          checkPageBreak(3.8, false);
 
           const line = linesOfTokens[lIdx];
           let x = M + 1;
 
           if (isFirstBlockInTerm && lIdx === 0) {
             pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(6.5);
+            pdf.setFontSize(8.0);
             pdf.setTextColor(...NAVY);
             pdf.text(termNumStr, x, currentY);
             x += prefixWidth;
@@ -1362,7 +1371,7 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
           if (block.type === "list-item" && block.bullet) {
             if (lIdx === 0) {
               pdf.setFont("helvetica", "bold");
-              pdf.setFontSize(6.5);
+              pdf.setFontSize(8.0);
               pdf.setTextColor(...NAVY);
               pdf.text(block.bullet, x, currentY);
             }
@@ -1371,7 +1380,7 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
 
           for (const token of line) {
             pdf.setFont("helvetica", token.bold && token.italic ? "bolditalic" : token.bold ? "bold" : token.italic ? "italic" : "normal");
-            pdf.setFontSize(6.5);
+            pdf.setFontSize(7.8);
             pdf.setTextColor(...(token.color || TEXT));
             pdf.text(token.text, x, currentY);
 
@@ -1385,7 +1394,7 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
             x += tw;
           }
 
-          currentY += 3.2;
+          currentY += 3.6;
         }
       }
       currentY += 1.5;
@@ -1420,7 +1429,7 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
     pdf.rect(M, currentY, CONTENT_W, 10, "S");
 
     pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(7);
+    pdf.setFontSize(8.0);
     pdf.setTextColor(...TEXT);
 
     const bankItems = [
@@ -1449,7 +1458,7 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
   currentY += 4;
 
   pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(7.5);
+  pdf.setFontSize(8.5);
   pdf.setTextColor(...NAVY);
   pdf.text("Thanks and Regards,", M, currentY + 2);
   pdf.setTextColor(...DARK);
@@ -1462,11 +1471,11 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
     .join(" | ");
 
   pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(7.5);
+  pdf.setFontSize(9.0);
   pdf.text(sigName, M, currentY + 16);
 
   pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(6.5);
+  pdf.setFontSize(7.8);
   pdf.setTextColor(...MUTED);
   if (sigDesig) {
     pdf.text(sigDesig, M, currentY + 19);
@@ -1476,12 +1485,13 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
   }
 
   pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(7.5);
+  pdf.setFontSize(8.5);
   pdf.setTextColor(...NAVY);
   pdf.text("Order Acceptance", PAGE_W - M, currentY + 2, { align: "right" });
 
   if (customerName) {
     pdf.setTextColor(...DARK);
+    pdf.setFontSize(9.0);
     pdf.text(customerName, PAGE_W - M, currentY + 5.5, { align: "right" });
   }
 
@@ -1490,7 +1500,7 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
   pdf.line(PAGE_W - M - 55, currentY + 16, PAGE_W - M, currentY + 16);
 
   pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(6.5);
+  pdf.setFontSize(7.8);
   pdf.setTextColor(...MUTED);
   pdf.text("( Authorized Signatory / Company Seal )", PAGE_W - M, currentY + 19.5, { align: "right" });
 
@@ -1514,14 +1524,14 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
     // Top continuation indicator on later pages (only if multi-page)
     if (totalPages > 1 && p > 1) {
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(6.8);
+      pdf.setFontSize(8.0);
       pdf.setTextColor(...NAVY);
       pdf.text(`Ref: ${refNumber}  (Page ${p} of ${totalPages})`, PAGE_W - M, M - 1.5, { align: "right" });
     }
 
     // System-generated notice above footer line
     pdf.setFont("helvetica", "italic");
-    pdf.setFontSize(5.5);
+    pdf.setFontSize(6.8);
     pdf.setTextColor(...MUTED);
     pdf.text("* This is a system-generated quotation; physical signature is not required. *", PAGE_W / 2, PAGE_H - M - 4.5, { align: "center" });
 
@@ -1532,21 +1542,21 @@ export async function buildQuotationPdf(input: BuildQuotationPdfInput): Promise<
 
     // Left: Ref & Portal
     pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(6);
+    pdf.setFontSize(7.2);
     pdf.setTextColor(...MUTED);
     pdf.text(`Ref: ${refNumber} • Generated via ${resolvedPortalLabel}`, M, PAGE_H - M);
 
     // Center: Page count (Only printed if totalPages > 1)
     if (totalPages > 1) {
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(7.5);
+      pdf.setFontSize(8.5);
       pdf.setTextColor(...DARK);
       pdf.text(`Page ${p} of ${totalPages}`, PAGE_W / 2, PAGE_H - M, { align: "center" });
     }
 
     // Right: Generated By with Timestamp
     pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(6);
+    pdf.setFontSize(7.2);
     pdf.setTextColor(...MUTED);
     pdf.text(auditRight, PAGE_W - M, PAGE_H - M, { align: "right" });
   }

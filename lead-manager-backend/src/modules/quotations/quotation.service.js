@@ -953,7 +953,7 @@ async function listAll(query = {}, user) {
   const skip = fetchAll ? 0 : (page - 1) * limit;
 
   let findQuery = LeadQuotation.find(filter)
-    .populate('lead', 'lead_no organization_name first_name last_name status assigned_to')
+    .populate('lead', 'lead_no organization_name first_name last_name name company_name status assigned_to billing_address address city state')
     .populate('created_by', 'name email department')
     .populate('sales_person_user', 'name email department phone designation')
     .populate('secondary_sales_persons.user', 'name email department phone designation')
@@ -1181,12 +1181,19 @@ async function create(leadIdOrBody, bodyOrUser, userParam) {
     cell: body.cell || lead?.mobile || lead?.phone || '',
     email: body.email || lead?.email || '',
     gstin: body.gstin || lead?.gstin || '',
+    show_kind_attn: body.show_kind_attn !== undefined ? Boolean(body.show_kind_attn) : true,
+    show_customer_ref: body.show_customer_ref !== undefined ? Boolean(body.show_customer_ref) : true,
+    show_cell: body.show_cell !== undefined ? Boolean(body.show_cell) : true,
+    show_phone: body.show_phone !== undefined ? Boolean(body.show_phone) : true,
+    show_email: body.show_email !== undefined ? Boolean(body.show_email) : true,
+    show_gstin: body.show_gstin !== undefined ? Boolean(body.show_gstin) : true,
+    show_mrp: Boolean(body.show_mrp),
     address: body.address || {
-      address_line_1: lead?.address?.street || '',
-      city: lead?.address?.city || '',
-      state: lead?.address?.state || '',
-      pincode: lead?.address?.pincode || '',
-      country: lead?.address?.country || 'India',
+      address_line_1: lead?.billing_address?.street || lead?.address?.street || '',
+      city: lead?.billing_address?.city || lead?.address?.city || '',
+      state: lead?.billing_address?.state || lead?.address?.state || '',
+      pincode: lead?.billing_address?.pincode || lead?.address?.pincode || '',
+      country: lead?.billing_address?.country || lead?.address?.country || 'India',
     },
     items,
     total_discount,
@@ -1342,6 +1349,13 @@ function buildRevisionSnapshot(quotation, user, changeSummary) {
     cell: quotation.cell || '',
     email: quotation.email || '',
     gstin: quotation.gstin || '',
+    show_kind_attn: quotation.show_kind_attn !== false,
+    show_customer_ref: quotation.show_customer_ref !== false,
+    show_cell: quotation.show_cell !== false,
+    show_phone: quotation.show_phone !== false,
+    show_email: quotation.show_email !== false,
+    show_gstin: quotation.show_gstin !== false,
+    show_mrp: quotation.show_mrp === true,
     address: quotation.address ? JSON.parse(JSON.stringify(quotation.address)) : {},
     items: quotation.items ? JSON.parse(JSON.stringify(quotation.items)) : [],
     subtotal: quotation.subtotal || 0,
@@ -1410,6 +1424,11 @@ async function update(id, body, user) {
   }
 
   const isCreator = isQuotationCreator(user, quotation);
+  const canEdit =
+    isAdmin(user) ||
+    isManager(user) ||
+    isCoordinator(user) ||
+    isCreator;
 
   // Detect if this is a content update (form edit) versus a status-only transition (e.g. marking accepted/on_hold)
   const isContentUpdate = Boolean(
@@ -1429,15 +1448,16 @@ async function update(id, body, user) {
   );
 
   if (isContentUpdate) {
-    if (!isAdmin(user) && !isCreator) {
-      throw new ApiError(403, 'Only administrators and quotation creators can edit quotations');
+    if (!canEdit) {
+      throw new ApiError(403, 'Only administrators, managers, coordinators, and quotation creators can edit quotations');
     }
+    await assertQuotationVisible(id, user);
   } else if (body.status !== undefined || body.approval_status !== undefined) {
     if (!canActOnQuotationPipeline(user, quotation)) {
       throw new ApiError(403, 'You do not have permission to update this quotation status');
     }
-  } else if (!isAdmin(user) && !isCreator) {
-    throw new ApiError(403, 'Only administrators and quotation creators can edit quotations');
+  } else if (!canEdit) {
+    throw new ApiError(403, 'Only administrators, managers, coordinators, and quotation creators can edit quotations');
   }
 
   const previousStatus = quotation.status;
@@ -1492,6 +1512,13 @@ async function update(id, body, user) {
     'cell',
     'email',
     'gstin',
+    'show_kind_attn',
+    'show_customer_ref',
+    'show_cell',
+    'show_phone',
+    'show_email',
+    'show_gstin',
+    'show_mrp',
     'address',
     'quotation_date',
     'valid_until',
@@ -2225,13 +2252,17 @@ async function reviseQuotation(quotationId, user) {
     throw new ApiError(400, 'No further actions allowed: this quotation has already been converted to an order');
   }
 
-  const isCreator =
-    quotation.created_by &&
-    String(quotation.created_by._id || quotation.created_by) === String(user._id);
+  const isCreator = isQuotationCreator(user, quotation);
+  const canEdit =
+    isAdmin(user) ||
+    isManager(user) ||
+    isCoordinator(user) ||
+    isCreator;
 
-  if (!isAdmin(user) && !isCreator) {
-    throw new ApiError(403, 'Only administrators and quotation creators can edit quotations');
+  if (!canEdit) {
+    throw new ApiError(403, 'Only administrators, managers, coordinators, and quotation creators can edit quotations');
   }
+  await assertQuotationVisible(quotationId, user);
 
   const previousVersion = quotation.version || 1;
   const previousStatus = quotation.status;
@@ -3101,6 +3132,13 @@ async function getVersionDetails(id, versionNumber, user) {
     cell: historical.cell !== undefined ? historical.cell : quotation.cell,
     email: historical.email !== undefined ? historical.email : quotation.email,
     gstin: historical.gstin !== undefined ? historical.gstin : quotation.gstin,
+    show_kind_attn: historical.show_kind_attn !== undefined ? historical.show_kind_attn : (quotation.show_kind_attn !== false),
+    show_customer_ref: historical.show_customer_ref !== undefined ? historical.show_customer_ref : (quotation.show_customer_ref !== false),
+    show_cell: historical.show_cell !== undefined ? historical.show_cell : (quotation.show_cell !== false),
+    show_phone: historical.show_phone !== undefined ? historical.show_phone : (quotation.show_phone !== false),
+    show_email: historical.show_email !== undefined ? historical.show_email : (quotation.show_email !== false),
+    show_gstin: historical.show_gstin !== undefined ? historical.show_gstin : (quotation.show_gstin !== false),
+    show_mrp: historical.show_mrp !== undefined ? Boolean(historical.show_mrp) : Boolean(quotation.show_mrp),
     address: historical.address && Object.keys(historical.address).length > 0 ? historical.address : quotation.address,
     items: historical.items && historical.items.length > 0 ? historical.items : quotation.items,
     subtotal: historical.subtotal !== undefined ? historical.subtotal : quotation.subtotal,

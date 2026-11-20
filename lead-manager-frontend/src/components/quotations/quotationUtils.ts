@@ -242,7 +242,12 @@ export function canEditQuotation(
 ): boolean {
   if (!user || !quotation) return false;
   if (quotation.status === "converted") return false;
-  return isAdmin(user as any) || isQuotationCreator(user, quotation);
+  return (
+    isAdmin(user as any) ||
+    isManager(user as any) ||
+    isCoordinator(user as any) ||
+    isQuotationCreator(user, quotation)
+  );
 }
 
 export function isQuotationCreator(
@@ -357,7 +362,12 @@ export function canSubmitForApproval(
   }
   if (!quotation) return false;
   if (quotation.status !== "draft") return false;
-  return isQuotationCreator(user, quotation);
+  return (
+    isAdmin(user as any) ||
+    isManager(user as any) ||
+    isCoordinator(user as any) ||
+    isQuotationCreator(user, quotation)
+  );
 }
 
 export function isDraftVisible(

@@ -18,6 +18,7 @@ const attachmentRoutes = require('./modules/attachments/attachment.routes');
 const termsAndConditionsRoutes = require('./modules/terms_and_conditions/terms_and_conditions.routes');
 const teamRoutes = require('./modules/team/team.routes');
 const leadUserRosterRoutes = require('./modules/users/user.routes');
+const indiamartWebhookRoutes = require('./modules/webhooks/indiamart/indiamart.routes');
 const { proxyToAuthService } = require('./utils/proxyToAuthService');
 const { proxyToMessageService } = require('./utils/proxyToMessageService');
 const { proxyToNotificationService } = require('./utils/proxyToNotificationService');
@@ -36,6 +37,10 @@ app.use(authMiddleware);
 app.get(['/health', '/api/health'], (req, res) => {
   res.json({ status: 'ok', service: 'lead-manager-backend', timestamp: new Date().toISOString() });
 });
+
+/* --- IndiaMART Push Webhook Route --- */
+app.use('/api/webhooks/indiamart', indiamartWebhookRoutes);
+app.use('/indiamart', indiamartWebhookRoutes);
 
 app.use('/api/users', leadUserRosterRoutes);
 app.use('/api/users', proxyToAuthService);

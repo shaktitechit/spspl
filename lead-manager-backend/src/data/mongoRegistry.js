@@ -297,6 +297,17 @@ function registerModels() {
         next_follow_up_at: { type: Date, index: true },
         last_activity_at: { type: Date, default: Date.now, index: true },
 
+        indiamart_meta: {
+          unique_query_id: { type: String, trim: true },
+          query_type: { type: String, trim: true },
+          query_time: { type: Date },
+          subject: { type: String, trim: true },
+          mcat_name: { type: String, trim: true },
+          call_duration: { type: String, trim: true },
+          receiver_mobile: { type: String, trim: true },
+          raw_payload: { type: mongoose.Schema.Types.Mixed },
+        },
+
         created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
         updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         deletedAt: { type: Date, default: null, index: true },
@@ -309,6 +320,7 @@ function registerModels() {
     leadSchema.index({ company_name: 1, deletedAt: 1 });
     leadSchema.index({ status: 1, assigned_to: 1, deletedAt: 1 });
     leadSchema.index({ next_follow_up_at: 1, assigned_to: 1, deletedAt: 1 });
+    leadSchema.index({ 'indiamart_meta.unique_query_id': 1 }, { sparse: true });
     leadSchema.plugin(softDeletePlugin);
     mongoose.model('Lead', leadSchema);
   }
@@ -398,6 +410,13 @@ function registerModels() {
         cell: { type: String, trim: true, default: '' },
         email: { type: String, trim: true, default: '' },
         gstin: { type: String, trim: true, uppercase: true, default: '' },
+        show_kind_attn: { type: Boolean, default: true },
+        show_customer_ref: { type: Boolean, default: true },
+        show_cell: { type: Boolean, default: true },
+        show_phone: { type: Boolean, default: true },
+        show_email: { type: Boolean, default: true },
+        show_gstin: { type: Boolean, default: true },
+        show_mrp: { type: Boolean, default: false },
         address: {
           address_line_1: { type: String, default: '' },
           city: { type: String, default: '' },
@@ -416,6 +435,7 @@ function registerModels() {
             hsn_code: { type: String, default: '' },
             quantity: { type: Number, required: true, default: 1 },
             unit: { type: String, default: 'Nos' },
+            mrp: { type: Number, default: 0 },
             rate: { type: Number, required: true, default: 0 },
             discount_percent: { type: Number, default: 0 },
             discount_amount: { type: Number, default: 0 },
@@ -510,6 +530,13 @@ function registerModels() {
             cell: { type: String, default: '' },
             email: { type: String, default: '' },
             gstin: { type: String, default: '' },
+            show_kind_attn: { type: Boolean, default: true },
+            show_customer_ref: { type: Boolean, default: true },
+            show_cell: { type: Boolean, default: true },
+            show_phone: { type: Boolean, default: true },
+            show_email: { type: Boolean, default: true },
+            show_gstin: { type: Boolean, default: true },
+            show_mrp: { type: Boolean, default: false },
             address: { type: Object, default: {} },
             items: { type: Array, default: [] },
             subtotal: { type: Number, default: 0 },
@@ -866,6 +893,36 @@ function registerModels() {
     mongoose.model('LeadReportingEdge', reportingEdgeSchema);
   }
 
+  // IndiaMartWebhookLog schema
+  if (!mongoose.models.IndiaMartWebhookLog) {
+    const indiaMartWebhookLogSchema = new mongoose.Schema(
+      {
+        unique_query_id: { type: String, trim: true, index: true },
+        sender_name: { type: String, trim: true },
+        sender_mobile: { type: String, trim: true },
+        sender_email: { type: String, trim: true },
+        query_type: { type: String, trim: true },
+        query_product_name: { type: String, trim: true },
+        status: {
+          type: String,
+          enum: ['PROCESSED', 'DUPLICATE', 'INVALID', 'FAILED'],
+          default: 'PROCESSED',
+          index: true,
+        },
+        http_status: { type: Number, default: 200 },
+        message: { type: String },
+        lead: { type: mongoose.Schema.Types.ObjectId, ref: 'Lead', index: true },
+        ip_address: { type: String },
+        request_headers: { type: mongoose.Schema.Types.Mixed },
+        raw_payload: { type: mongoose.Schema.Types.Mixed },
+        error: { type: String },
+      },
+      { timestamps: true }
+    );
+    indiaMartWebhookLogSchema.index({ createdAt: -1 });
+    mongoose.model('IndiaMartWebhookLog', indiaMartWebhookLogSchema);
+  }
+
   _cached = {
     User: mongoose.model('User'),
     CompanyInfo: mongoose.models.CompanyInfo || null,
@@ -887,6 +944,7 @@ function registerModels() {
     OrderPerforma: mongoose.model('OrderPerforma'),
     OrderApproval: mongoose.model('OrderApproval'),
     LeadReportingEdge: mongoose.model('LeadReportingEdge'),
+    IndiaMartWebhookLog: mongoose.model('IndiaMartWebhookLog'),
   };
 
   return _cached;

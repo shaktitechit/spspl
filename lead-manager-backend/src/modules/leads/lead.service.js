@@ -535,6 +535,15 @@ async function list(query = {}, user) {
     }
   }
 
+  if (query.industry && query.industry !== 'all') {
+    const vals = String(query.industry).split(',').map((s) => s.trim()).filter(Boolean);
+    if (vals.length > 1) {
+      andConditions.push({ industry: { $in: vals } });
+    } else if (vals.length === 1) {
+      andConditions.push({ industry: vals[0] });
+    }
+  }
+
   if (query.contact_org) {
     const vals = String(query.contact_org).split(',').map((s) => s.trim()).filter(Boolean);
     if (vals.length > 0) {

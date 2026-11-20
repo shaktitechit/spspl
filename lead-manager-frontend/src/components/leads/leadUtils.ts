@@ -107,6 +107,27 @@ export const FOLLOWUP_TYPE_CONFIG: Record<
   other: { label: "Other", icon: "HelpCircle" },
 };
 
+export const DEFAULT_INDUSTRIES: string[] = [
+  "Healthcare & Hospitals",
+  "Manufacturing & Industrial",
+  "IT, Telecom & Data Centers",
+  "Banking, Financial Services & Insurance (BFSI)",
+  "Education & Institutions",
+  "Government & Public Sector / PSU",
+  "Defense & Aerospace",
+  "Commercial Real Estate & Offices",
+  "Retail & Hospitality",
+  "Energy, Oil & Gas",
+  "Power Generation & Solar EPC",
+  "Infrastructure, Construction & EPC",
+  "Transportation & Logistics",
+  "Pharmaceuticals & Chemicals",
+  "Agriculture & Food Processing",
+  "Automotive & Electric Vehicles (EV)",
+  "Residential & Housing Societies",
+  "Other",
+];
+
 export function formatCurrencyINR(amount?: number | null): string {
   if (amount === undefined || amount === null || isNaN(amount)) return "₹0";
   return new Intl.NumberFormat("en-IN", {
@@ -274,6 +295,11 @@ export function formatLeadAssignees(lead: {
 export function isSeniorLeadRole(user: AuthUserLike): boolean {
   if (!user) return false;
   return isAdmin(user as any) || isManager(user as any) || isCoordinator(user as any);
+}
+
+/** Returns true if user can quick add new products to the catalog (coordinator, manager, admin; not executive) */
+export function canQuickAddProduct(user: AuthUserLike): boolean {
+  return isSeniorLeadRole(user);
 }
 
 /** Returns true if the user is in the admin department */

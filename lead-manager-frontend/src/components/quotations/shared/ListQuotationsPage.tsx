@@ -219,6 +219,7 @@ export function ListQuotationsPage({
     department: departmentFilter.length === 1 ? departmentFilter[0] : undefined,
     scope: apiScope,
     limit: "all",
+    all: true,
   });
 
   const baseQuotations: QuotationRecord[] = useMemo(() => {

@@ -558,6 +558,7 @@ export type ListLeadsQueryArgs = {
   city?: string;
   state?: string;
   department?: string;
+  industry?: string;
   created_by?: string;
   contact_org?: string;
   products?: string;
@@ -1074,6 +1075,7 @@ export const leadsApi = medicaApi.injectEndpoints({
 
 export const {
   useListLeadsQuery,
+  useLazyListLeadsQuery,
   useGetLeadQuery,
   useCreateLeadMutation,
   useUpdateLeadMutation,

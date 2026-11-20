@@ -24,8 +24,17 @@ import {
   ChevronDown,
   Package,
   ShieldAlert,
+  MessageSquarePlus,
+  MessageSquare,
+  StickyNote,
+  Users,
+  History,
+  Send,
+  Clock,
+  Calendar,
 } from "lucide-react";
 import { LargeModalPortal } from "@/components/portal/shared/LargeModalPortal";
+import { ModalOverlay } from "@/components/portal/shared/ModalOverlay";
 import {
   useListLeadsQuery,
   useUpdateLeadMutation,
@@ -34,10 +43,13 @@ import {
   useBulkDeleteLeadsMutation,
   useListLeadSourcesQuery,
   useListUsersQuery,
+  useCreateLeadFollowUpMutation,
+  useListLeadFollowUpsQuery,
   type LeadRecord,
   type LeadStatus,
   type LeadPriority,
   type LeadProductItem,
+  type LeadFollowUpType,
 } from "@/store/api";
 import { useAppSelector } from "@/store/hooks";
 import { toast } from "@/lib/toast";
@@ -62,6 +74,7 @@ import {
   getLeadManagerPortalRole,
   getDeptLabel,
   getLeadDepartments,
+  DEFAULT_INDUSTRIES,
 } from "../../leadUtils";
 import { useLeadDepartmentOptions } from "../../useLeadDepartmentOptions";
 import { AssignLeadModal } from "./AssignLeadModal";
@@ -195,14 +208,324 @@ const COLUMNS: {
   { key: "estimated_value", label: "Est. Value", headerLetter: "P", type: "number", widthPdf: 1.2 },
   { key: "city", label: "City", headerLetter: "Q", type: "text", widthPdf: 1.1 },
   { key: "state", label: "State", headerLetter: "R", type: "text", widthPdf: 1.1 },
-  { key: "industry", label: "Industry", headerLetter: "S", type: "text", widthPdf: 1.2 },
+  { key: "industry", label: "Industry", headerLetter: "S", type: "select", options: DEFAULT_INDUSTRIES, widthPdf: 1.4 },
   { key: "next_follow_up_at", label: "Next Follow-up", headerLetter: "T", type: "date", widthPdf: 1.3 },
-  { key: "last_remarks", label: "Last Remarks", headerLetter: "U", readonly: true, type: "text", widthPdf: 2.0 },
+  { key: "last_remarks", label: "Last Remarks", headerLetter: "U", readonly: false, type: "text", widthPdf: 2.2 },
   { key: "lost_reason", label: "Lost Reason", headerLetter: "V", type: "text", widthPdf: 1.3 },
   { key: "created_by_name", label: "Created By", headerLetter: "W", readonly: true, type: "text", widthPdf: 1.3 },
 ];
 
 import { readSessionFromStorage } from "@/utils/authStorage";
+
+type LiveAddRemarkModalProps = {
+  row: LeadRow;
+  open: boolean;
+  onClose: () => void;
+  onSuccess: (leadId: string, remarkText: string, nextFollowUpAt?: string) => void;
+};
+
+function LiveAddRemarkModal({ row, open, onClose, onSuccess }: LiveAddRemarkModalProps) {
+  const [remarkType, setRemarkType] = useState<LeadFollowUpType>("note");
+  const [remarkText, setRemarkText] = useState("");
+  const [scheduleNext, setScheduleNext] = useState(false);
+
+  const defaultNext = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(11, 0, 0, 0);
+    return d.toISOString().slice(0, 16);
+  }, []);
+
+  const [nextDate, setNextDate] = useState(defaultNext);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const [createFollowUp, { isLoading: isSubmitting }] = useCreateLeadFollowUpMutation();
+  const [updateLead] = useUpdateLeadMutation();
+  const { data: followUps = [], isLoading: isLoadingHistory } = useListLeadFollowUpsQuery(
+    row._id,
+    { skip: !open }
+  );
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (open) {
+      const t = setTimeout(() => textareaRef.current?.focus(), 120);
+      return () => clearTimeout(t);
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = remarkText.trim();
+    if (!clean) {
+      toast.error("Please enter a follow-up remark or note");
+      return;
+    }
+
+    try {
+      let scheduledIso: string | undefined = undefined;
+      if (scheduleNext && nextDate) {
+        scheduledIso = new Date(nextDate).toISOString();
+      }
+
+      // 1. Create the follow-up entry
+      await createFollowUp({
+        leadId: row._id,
+        type: remarkType,
+        notes: clean,
+        follow_up_date: scheduledIso || new Date().toISOString(),
+      }).unwrap();
+
+      // 2. If next follow-up date was scheduled, update lead's next_follow_up_at pointer
+      if (scheduledIso) {
+        await updateLead({
+          id: row._id,
+          body: { next_follow_up_at: scheduledIso },
+        }).unwrap();
+      }
+
+      toast.success("Follow-up remark recorded live!");
+      onSuccess(row._id, clean, scheduledIso);
+      onClose();
+    } catch (err: any) {
+      toast.error(mutationRejectedMessage(err) || "Failed to record follow-up remark");
+    }
+  };
+
+  const TYPE_OPTIONS: Array<{ value: LeadFollowUpType; label: string; icon: any }> = [
+    { value: "note", label: "Note", icon: StickyNote },
+    { value: "call", label: "Call", icon: Phone },
+    { value: "whatsapp", label: "WhatsApp", icon: MessageSquare },
+    { value: "meeting", label: "Meeting", icon: Users },
+    { value: "email", label: "Email", icon: Mail },
+  ];
+
+  return (
+    <LargeModalPortal>
+      <ModalOverlay onClick={onClose}>
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => e.stopPropagation()}
+          className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl transition-all dark:border-slate-800 dark:bg-slate-900 overflow-hidden"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">
+                <MessageSquarePlus className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>Add Follow-Up Remark</span>
+                  <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 uppercase">
+                    Live
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-xs sm:max-w-sm">
+                  Lead #{row.lead_no} • {row.company_name || row.name || "Customer"}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-5 space-y-4">
+            {/* Follow-up Touchpoint Type Selector */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+                Channel / Touchpoint Type
+              </label>
+              <div className="grid grid-cols-5 gap-1.5">
+                {TYPE_OPTIONS.map((opt) => {
+                  const Icon = opt.icon;
+                  const isSelected = remarkType === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setRemarkType(opt.value)}
+                      className={`flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl border text-[11px] font-semibold transition cursor-pointer ${
+                        isSelected
+                          ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-500 shadow-xs"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800/70 dark:text-slate-300 dark:hover:bg-slate-800"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span>{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Remark Textarea */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                Follow-Up Remark / Discussion Notes <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                ref={textareaRef}
+                rows={3}
+                value={remarkText}
+                onChange={(e) => setRemarkText(e.target.value)}
+                placeholder="Enter client conversation notes, client feedback, next steps, or latest touchpoint outcome..."
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-white dark:focus:bg-slate-800 resize-none"
+              />
+            </div>
+
+            {/* Next Follow-Up Scheduling (Optional) */}
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-3 dark:border-slate-800 dark:bg-slate-800/30 space-y-2.5">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={scheduleNext}
+                  onChange={(e) => setScheduleNext(e.target.checked)}
+                  className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                />
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                  <CalendarPlus className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  Schedule / Update Next Follow-Up Date
+                </span>
+              </label>
+
+              {scheduleNext && (
+                <div className="space-y-2 pl-6 animate-in fade-in duration-150">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        d.setDate(d.getDate() + 1);
+                        d.setHours(11, 0, 0, 0);
+                        setNextDate(d.toISOString().slice(0, 16));
+                      }}
+                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 cursor-pointer"
+                    >
+                      Tomorrow 11 AM
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        d.setDate(d.getDate() + 3);
+                        d.setHours(11, 0, 0, 0);
+                        setNextDate(d.toISOString().slice(0, 16));
+                      }}
+                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 cursor-pointer"
+                    >
+                      In 3 Days
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        d.setDate(d.getDate() + 7);
+                        d.setHours(11, 0, 0, 0);
+                        setNextDate(d.toISOString().slice(0, 16));
+                      }}
+                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 cursor-pointer"
+                    >
+                      In 1 Week
+                    </button>
+                  </div>
+                  <input
+                    type="datetime-local"
+                    value={nextDate}
+                    onChange={(e) => setNextDate(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Toggle Past Remarks History */}
+            <div className="border-t border-slate-100 dark:border-slate-800 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowHistory(!showHistory)}
+                className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <History className="h-3.5 w-3.5" />
+                <span>{showHistory ? "Hide Past Remarks" : "View Past Remarks History"}</span>
+                {followUps.length > 0 && (
+                  <span className="rounded-full bg-slate-200/70 dark:bg-slate-700 px-1.5 text-[10px]">
+                    {followUps.length}
+                  </span>
+                )}
+              </button>
+
+              {showHistory && (
+                <div className="mt-2 max-h-36 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 dark:border-slate-800 dark:bg-slate-900/60 space-y-2 text-xs">
+                  {isLoadingHistory ? (
+                    <div className="flex items-center justify-center py-3 text-slate-400 text-xs gap-2">
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Loading remarks...
+                    </div>
+                  ) : followUps.length === 0 ? (
+                    <div className="text-center py-2 text-slate-400 text-[11px] italic">
+                      No previous follow-up remarks recorded for this lead.
+                    </div>
+                  ) : (
+                    followUps.map((fu) => (
+                      <div
+                        key={fu._id}
+                        className="rounded-lg border border-slate-200/60 bg-white p-2 dark:border-slate-800 dark:bg-slate-800/80 space-y-1"
+                      >
+                        <div className="flex items-center justify-between text-[10px] text-slate-400">
+                          <span className="font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                            {fu.type}
+                          </span>
+                          <span>
+                            {fu.createdAt ? formatLeadDate(fu.createdAt) : formatLeadDate(fu.follow_up_date)}
+                            {fu.created_by?.name ? ` • by ${fu.created_by.name}` : ""}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-700 dark:text-slate-200">
+                          {fu.notes || fu.outcome || "Follow-up touchpoint scheduled"}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting || !remarkText.trim()}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition cursor-pointer"
+              >
+                {isSubmitting ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" />
+                )}
+                <span>Log Remark</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </ModalOverlay>
+    </LargeModalPortal>
+  );
+}
 
 export function GoogleSheetLeadsModal({
   isOpen,
@@ -262,6 +585,7 @@ export function GoogleSheetLeadsModal({
   // Sub-modals inside sheet
   const [assignTarget, setAssignTarget] = useState<LeadRecord | null>(null);
   const [followUpTarget, setFollowUpTarget] = useState<LeadRecord | null>(null);
+  const [liveRemarkTarget, setLiveRemarkTarget] = useState<LeadRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<LeadRecord | null>(null);
 
   // Resizable column widths
@@ -307,6 +631,7 @@ export function GoogleSheetLeadsModal({
   const { data: usersData } = useListUsersQuery(undefined, { skip: !isOpen });
 
   const [updateLead] = useUpdateLeadMutation();
+  const [createLeadFollowUp] = useCreateLeadFollowUpMutation();
   const [assignLead] = useAssignLeadMutation();
   const [deleteLead] = useDeleteLeadMutation();
   const [bulkDeleteLeads, { isLoading: isBulkDeleting }] = useBulkDeleteLeadsMutation();
@@ -433,7 +758,7 @@ export function GoogleSheetLeadsModal({
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (assignTarget || followUpTarget || deleteTarget) return;
+        if (assignTarget || followUpTarget || deleteTarget || liveRemarkTarget) return;
         onClose();
       }
     };
@@ -444,7 +769,7 @@ export function GoogleSheetLeadsModal({
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = originalStyle;
     };
-  }, [isOpen, onClose, assignTarget, followUpTarget, deleteTarget]);
+  }, [isOpen, onClose, assignTarget, followUpTarget, deleteTarget, liveRemarkTarget]);
 
   // Column Resizing handlers
   const handleResizeStart = (colKey: string, e: React.MouseEvent) => {
@@ -534,6 +859,63 @@ export function GoogleSheetLeadsModal({
 
       if (originalRow[colKey] === parsedVal) return;
 
+      if (colKey === "last_remarks") {
+        const cleanRemark = String(parsedVal || "").trim();
+        if (!cleanRemark || cleanRemark === originalRow.last_remarks) return;
+
+        const userName = authUser?.name || "You";
+        const formattedRemark = `${cleanRemark} • by ${userName}`;
+
+        // Optimistic update
+        setLocalRows((prev) =>
+          prev.map((row) => {
+            if (row._id !== leadId) return row;
+            return {
+              ...row,
+              status:
+                row.status === "new" || row.status === "assigned"
+                  ? "follow_up"
+                  : row.status,
+              last_remarks: formattedRemark,
+              raw: {
+                ...row.raw,
+                status:
+                  row.raw.status === "new" || row.raw.status === "assigned"
+                    ? "follow_up"
+                    : row.raw.status,
+                last_action: {
+                  remarks: cleanRemark,
+                  timestamp: new Date().toISOString(),
+                  by_user: {
+                    _id: String(authUser?._id || ""),
+                    name: userName,
+                    email: authUser?.email,
+                  },
+                },
+              },
+            };
+          })
+        );
+
+        setSavingRows((prev) => ({ ...prev, [leadId]: true }));
+        try {
+          await createLeadFollowUp({
+            leadId,
+            type: "note",
+            notes: cleanRemark,
+            follow_up_date: new Date().toISOString(),
+          }).unwrap();
+          toast.success("Follow-up remark recorded live!");
+          refetch();
+        } catch (err: any) {
+          toast.error(mutationRejectedMessage(err) || "Failed to record follow-up remark");
+          refetch();
+        } finally {
+          setSavingRows((prev) => ({ ...prev, [leadId]: false }));
+        }
+        return;
+      }
+
       // Optimistic update (keep raw sub-objects in sync so consecutive edits don't overwrite)
       setLocalRows((prev) =>
         prev.map((row) => {
@@ -593,7 +975,50 @@ export function GoogleSheetLeadsModal({
         setSavingRows((prev) => ({ ...prev, [leadId]: false }));
       }
     },
-    [localRows, updateLead, refetch, isSA, isAdmin, showPricing]
+    [localRows, updateLead, createLeadFollowUp, authUser, refetch, isSA, isAdmin, showPricing]
+  );
+
+  // Handle remark saved from LiveAddRemarkModal
+  const handleRemarkSaved = useCallback(
+    (leadId: string, remarkText: string, nextFollowUpAt?: string) => {
+      const userName = authUser?.name || "You";
+      const formattedRemark = `${remarkText} • by ${userName}`;
+
+      setLocalRows((prev) =>
+        prev.map((row) => {
+          if (row._id !== leadId) return row;
+          const updatedRaw: LeadRecord = {
+            ...row.raw,
+            status:
+              row.raw.status === "new" || row.raw.status === "assigned"
+                ? "follow_up"
+                : row.raw.status,
+            next_follow_up_at: nextFollowUpAt || row.raw.next_follow_up_at,
+            last_action: {
+              remarks: remarkText,
+              timestamp: new Date().toISOString(),
+              by_user: {
+                _id: String(authUser?._id || ""),
+                name: userName,
+                email: authUser?.email,
+              },
+            },
+          };
+          return {
+            ...row,
+            status:
+              row.status === "new" || row.status === "assigned"
+                ? "follow_up"
+                : row.status,
+            next_follow_up_at: nextFollowUpAt || row.next_follow_up_at,
+            last_remarks: formattedRemark,
+            raw: updatedRaw,
+          };
+        })
+      );
+      refetch();
+    },
+    [authUser, refetch]
   );
 
   // Inline Primary & Secondary Assignee update handler
@@ -1354,14 +1779,24 @@ export function GoogleSheetLeadsModal({
                         {/* Row Action Buttons */}
                         <div className="w-28 shrink-0 border-r border-slate-200 px-2 py-1.5 dark:border-slate-800 flex items-center justify-center gap-1">
                           {canScheduleFollowUp(row.status) && (
-                            <button
-                              type="button"
-                              onClick={() => setFollowUpTarget(row.raw)}
-                              title="Add Follow-up"
-                              className="rounded p-1 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/50"
-                            >
-                              <CalendarPlus className="h-3.5 w-3.5" />
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setLiveRemarkTarget(row)}
+                                title="Add Follow-up Remark"
+                                className="rounded p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 transition cursor-pointer"
+                              >
+                                <MessageSquarePlus className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setFollowUpTarget(row.raw)}
+                                title="Schedule Follow-up"
+                                className="rounded p-1 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition cursor-pointer"
+                              >
+                                <CalendarPlus className="h-3.5 w-3.5" />
+                              </button>
+                            </>
                           )}
                           {!isRowConverted && (
                             <button
@@ -1871,7 +2306,50 @@ export function GoogleSheetLeadsModal({
                                 <span className="text-slate-500 text-[11px] truncate">
                                   {row.createdAt}
                                 </span>
-                              ) : col.key === "last_remarks" || col.key === "created_by_name" ? (
+                              ) : col.key === "last_remarks" ? (
+                                isRowConverted ? (
+                                  <span
+                                    className="truncate text-slate-700 dark:text-slate-300 text-xs"
+                                    title={String(row.last_remarks || "—")}
+                                  >
+                                    {row.last_remarks || "—"}
+                                  </span>
+                                ) : (
+                                  <div className="group/remark relative flex w-full items-center gap-1">
+                                    <input
+                                      type="text"
+                                      value={row.last_remarks || ""}
+                                      placeholder="Add remark..."
+                                      onChange={(e) => {
+                                        const newVal = e.target.value;
+                                        setLocalRows((prev) =>
+                                          prev.map((r) =>
+                                            r._id === row._id ? { ...r, last_remarks: newVal } : r
+                                          )
+                                        );
+                                      }}
+                                      onBlur={(e) => saveCell(row._id, "last_remarks", e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          e.currentTarget.blur();
+                                        }
+                                      }}
+                                      className="w-full bg-transparent border-0 px-1 py-0.5 text-xs text-slate-800 placeholder:text-slate-400 placeholder:italic dark:text-white focus:bg-white dark:focus:bg-slate-800 rounded focus:ring-1 focus:ring-emerald-500 truncate"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setLiveRemarkTarget(row);
+                                      }}
+                                      title="Open live follow-up remark composer"
+                                      className="shrink-0 rounded p-0.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 transition cursor-pointer"
+                                    >
+                                      <MessageSquarePlus className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                )
+                              ) : col.key === "created_by_name" ? (
                                 <span
                                   className="truncate text-slate-700 dark:text-slate-300 text-xs"
                                   title={String(row[col.key] || "—")}
@@ -1898,6 +2376,33 @@ export function GoogleSheetLeadsModal({
                                     onBlur={(e) => saveCell(row._id, "company_name", e.target.value)}
                                     className="w-full bg-transparent border-0 px-1 py-0.5 text-xs font-bold text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 rounded focus:ring-1 focus:ring-emerald-500 truncate"
                                   />
+                                )
+                              ) : col.key === "industry" ? (
+                                isRowConverted ? (
+                                  <span
+                                    className="truncate text-slate-700 dark:text-slate-300 text-xs"
+                                    title={row.industry || "—"}
+                                  >
+                                    {row.industry || "—"}
+                                  </span>
+                                ) : (
+                                  <select
+                                    value={row.industry || ""}
+                                    onChange={(e) =>
+                                      saveCell(row._id, "industry", e.target.value)
+                                    }
+                                    className="w-full bg-transparent border-0 px-1 py-0.5 text-xs text-slate-800 dark:text-white focus:bg-white dark:focus:bg-slate-800 rounded focus:ring-1 focus:ring-emerald-500 truncate cursor-pointer"
+                                  >
+                                    <option value="">— Select Industry —</option>
+                                    {DEFAULT_INDUSTRIES.map((ind) => (
+                                      <option key={ind} value={ind}>
+                                        {ind}
+                                      </option>
+                                    ))}
+                                    {row.industry && !DEFAULT_INDUSTRIES.includes(row.industry) && (
+                                      <option value={row.industry}>{row.industry}</option>
+                                    )}
+                                  </select>
                                 )
                               ) : isRowConverted ? (
                                 <span className="truncate text-slate-700 dark:text-slate-300">
@@ -2225,6 +2730,15 @@ export function GoogleSheetLeadsModal({
             open={Boolean(followUpTarget)}
             onClose={() => setFollowUpTarget(null)}
             onSuccess={() => refetch()}
+          />
+        )}
+
+        {liveRemarkTarget && (
+          <LiveAddRemarkModal
+            row={liveRemarkTarget}
+            open={Boolean(liveRemarkTarget)}
+            onClose={() => setLiveRemarkTarget(null)}
+            onSuccess={handleRemarkSaved}
           />
         )}
 

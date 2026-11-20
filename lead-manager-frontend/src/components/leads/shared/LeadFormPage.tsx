@@ -27,6 +27,7 @@ import {
   ChevronDown,
   ChevronUp,
   Pencil,
+  Lock,
 } from "lucide-react";
 import {
   useCreateLeadMutation,
@@ -38,9 +39,6 @@ import {
   useListUsersQuery,
   useListProductsQuery,
   useListPartiesQuery,
-  useCreatePartyMutation,
-  usePatchPartyMutation,
-  useLazyListPartiesQuery,
   useGetPartyCountriesQuery,
   useGetPartyStatesQuery,
   useGetPartyCitiesQuery,
@@ -62,6 +60,8 @@ import {
   getDeptLabel,
   isSeniorLeadRole,
   canAssignLead,
+  canQuickAddProduct,
+  DEFAULT_INDUSTRIES,
 } from "../leadUtils";
 import { useLeadDepartmentOptions } from "../useLeadDepartmentOptions";
 import { isAdmin as checkIsAdmin, readSessionFromStorage } from "@/utils/authStorage";
@@ -75,7 +75,6 @@ import {
   getFieldText,
   type CatalogProduct,
 } from "@/components/leads/shared/ProductSearchAutocomplete";
-import { syncPartyMaster } from "@/utils/syncPartyMaster";
 import { PartyDetailModal } from "@/components/portal/shared/parties/modals/PartyDetailModal";
 import { ProductDetailModal } from "@/components/portal/shared/products/modals/ProductDetailModal";
 import PartyCountryDetailModal from "@/components/portal/shared/parties/modals/PartyCountryDetailModal";
@@ -93,14 +92,18 @@ type Props = {
 export { getFieldText };
 
 const CARD_CLASS =
-  "rounded-xl border border-slate-200 bg-white p-2.5 shadow-xs dark:border-white/10 dark:bg-slate-900";
+  "rounded-xl border border-slate-200 bg-white p-3 shadow-xs dark:border-white/10 dark:bg-slate-900";
 const CARD_HEADER_CLASS =
-  "flex flex-wrap items-center justify-between gap-1.5 border-b border-slate-100 pb-1.5 mb-2 dark:border-white/10";
-const LABEL_CLASS = "block text-[11px] font-semibold text-slate-700 dark:text-slate-300 leading-tight";
+  "flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 mb-2.5 dark:border-white/10";
+const LABEL_CLASS = "block text-xs font-semibold text-slate-700 dark:text-slate-300 leading-tight";
 const INPUT_CLASS =
-  "mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white";
+  "mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white";
 const SELECT_CLASS =
-  "mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white disabled:opacity-50";
+  "mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white disabled:opacity-50";
+const LOCKED_INPUT_CLASS =
+  "mt-1 w-full rounded-lg border border-slate-200 bg-slate-100/90 px-2.5 py-1.5 text-sm text-slate-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 font-medium";
+const LOCKED_SELECT_CLASS =
+  "mt-1 w-full rounded-lg border border-slate-200 bg-slate-100/90 px-2.5 py-1.5 text-sm text-slate-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 font-medium disabled:opacity-70";
 
 const DEFAULT_SOURCES = [
   "Website",
@@ -183,9 +186,7 @@ export function LeadFormPage({
   const [createLead, { isLoading: creating }] = useCreateLeadMutation();
   const [updateLead, { isLoading: updating }] = useUpdateLeadMutation();
   const [checkDuplicates] = useCheckLeadDuplicatesMutation();
-  const [createParty] = useCreatePartyMutation();
-  const [patchParty] = usePatchPartyMutation();
-  const [fetchPartiesTrigger] = useLazyListPartiesQuery();
+  const isPartyLocked = Boolean(selectedPartyId);
 
   // Form State
   const [name, setName] = useState<string>("");
@@ -195,6 +196,7 @@ export function LeadFormPage({
   const [alternatePhone, setAlternatePhone] = useState<string>("");
   const [gstNo, setGstNo] = useState<string>("");
   const [industry, setIndustry] = useState<string>("");
+  const [isCustomIndustry, setIsCustomIndustry] = useState<boolean>(false);
   const [designation, setDesignation] = useState<string>("");
 
   const [addressLine1, setAddressLine1] = useState<string>("");
@@ -344,6 +346,7 @@ export function LeadFormPage({
   }, [parties, state, city, country]);
 
   const isSenior = isSeniorLeadRole(authUser);
+  const canQuickAdd = canQuickAddProduct(authUser);
   const canAssign = canAssignLead(authUser, portalHome);
   const [primaryAssigneeId, setPrimaryAssigneeId] = useState<string>("");
   const [secondaryAssigneeIds, setSecondaryAssigneeIds] = useState<string[]>([]);
@@ -618,6 +621,7 @@ export function LeadFormPage({
   };
 
   const openQuickProductModal = (targetRowIdx: number | null = null, initialName = "") => {
+    if (!canQuickAdd) return;
     setQuickProductTargetRowIdx(targetRowIdx);
     setQuickProductInitialName(initialName);
     setQuickProductModalOpen(true);
@@ -972,58 +976,7 @@ export function LeadFormPage({
         }
         : {};
 
-    // Sync Party Master (check party master with name, contact, email, gst; create with party_type leads if not exist, or update via party service)
-    let resolvedPartyId = selectedPartyId || "";
-    try {
-      const syncResult = await syncPartyMaster({
-        partyType: "leads",
-        partyId: selectedPartyId || undefined,
-        partyName: companyName.trim() || name.trim(),
-        contactPerson: name.trim(),
-        phone: phone.trim(),
-        email: email.trim(),
-        gst: gstNo.trim(),
-        billingAddress: {
-          address_line_1: addressLine1.trim() || undefined,
-          address_line_2: addressLine2.trim() || undefined,
-          city: city.trim() || undefined,
-          state: state.trim() || undefined,
-          pincode: pincode.trim() || undefined,
-          country: country.trim() || "India",
-          country_id: countryId || undefined,
-          state_id: stateId || undefined,
-          city_id: cityId || undefined,
-        },
-        countryId: countryId || undefined,
-        stateId: stateId || undefined,
-        cityId: cityId || undefined,
-        contacts: contacts.map((c) => ({
-          name: c.name.trim(),
-          department: c.department?.trim(),
-          designation: c.designation?.trim(),
-          phone: c.phone?.trim(),
-          email: c.email?.trim(),
-          alternate_phone: c.alternate_phone?.trim(),
-          is_primary: Boolean(c.is_primary),
-        })),
-        existingParties: parties,
-        fetchPartiesBySearch: (q) => fetchPartiesTrigger(q).unwrap(),
-        createParty: (body) => createParty(body).unwrap(),
-        patchParty: (arg) => patchParty(arg).unwrap(),
-      });
-
-      if (syncResult?.partyId) {
-        resolvedPartyId = syncResult.partyId;
-        setSelectedPartyId(syncResult.partyId);
-        if (syncResult.matched) {
-          toast.info(`Party Master matched & updated: ${syncResult.partyName}`);
-        } else {
-          toast.success(`New Party Master created with type 'leads': ${syncResult.partyName}`);
-        }
-      }
-    } catch (partyErr) {
-      console.warn("Party master sync warning:", partyErr);
-    }
+    const resolvedPartyId = selectedPartyId || "";
 
     const payload: LeadInputPayload = {
       name: name.trim(),
@@ -1101,24 +1054,24 @@ export function LeadFormPage({
       <PortalBusyOverlay active={creating || updating || loadingLead} />
 
       {/* Header Banner */}
-      <div className="relative shrink-0 overflow-hidden rounded-xl border border-primary/20 bg-primary/5 px-3 py-1.5 shadow-xs">
-        <div className="relative flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+      <div className="relative shrink-0 overflow-hidden rounded-xl border border-primary/20 bg-primary/5 px-3.5 py-2 shadow-xs">
+        <div className="relative flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5">
             <Link
               href={`${portalHome}/leads`}
-              className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 shadow-xs transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-white/5"
+              className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 shadow-xs transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-white/5"
             >
-              <ArrowLeft className="h-3.5 w-3.5" />
+              <ArrowLeft className="h-4 w-4" />
             </Link>
-            <div className="flex flex-wrap items-baseline gap-x-2">
-              <h1 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">
+            <div className="flex flex-wrap items-baseline gap-x-2.5">
+              <h1 className="text-base font-bold tracking-tight text-slate-900 dark:text-white sm:text-lg">
                 {isCopyMode
                   ? `Copy Lead (from #${existingLead?.lead_no || ""})`
                   : mode === "create"
                     ? "Create New Lead"
                     : `Edit Lead #${existingLead?.lead_no}`}
               </h1>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {isCopyMode
                   ? `Pre-filled from Lead #${existingLead?.lead_no || ""}. Review and create.`
                   : mode === "create"
@@ -1128,14 +1081,14 @@ export function LeadFormPage({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             {mode === "edit" && leadId && (
               <Link
                 href={`${portalHome}/leads/new?copy_from=${leadId}`}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200"
                 title="Create a copy of this lead"
               >
-                <Copy className="h-3 w-3 text-indigo-500" />
+                <Copy className="h-3.5 w-3.5 text-indigo-500" />
                 Copy Lead
               </Link>
             )}
@@ -1144,9 +1097,9 @@ export function LeadFormPage({
               type="button"
               onClick={handleSubmit}
               disabled={creating || updating}
-              className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-white shadow-xs transition hover:bg-primary-hover disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-sm font-semibold text-white shadow-xs transition hover:bg-primary-hover disabled:opacity-50"
             >
-              <Save className="h-3.5 w-3.5" />
+              <Save className="h-4 w-4" />
               {mode === "create" ? (isCopyMode ? "Create Copied Lead" : "Save Lead") : "Save Changes"}
             </button>
           </div>
@@ -1155,20 +1108,20 @@ export function LeadFormPage({
 
       {/* Duplicate Warning Banner */}
       {dupResult && dupResult.has_duplicates && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-2.5 shadow-xs dark:border-amber-900/40 dark:bg-amber-950/30">
+        <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-3 shadow-xs dark:border-amber-900/40 dark:bg-amber-950/30">
           <div className="flex items-start gap-2.5">
             <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
-              <h4 className="text-xs font-bold text-amber-900 dark:text-amber-300">
+              <h4 className="text-sm font-bold text-amber-900 dark:text-amber-300">
                 Potential Duplicate Records Detected
               </h4>
-              <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-400">
+              <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
                 We found matching records with identical phone, email, or company name. You may still proceed if this is a distinct lead.
               </p>
 
               {dupResult.matching_leads.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300">
+                  <span className="text-xs font-bold text-amber-800 dark:text-amber-300">
                     Existing Leads:
                   </span>
                   {dupResult.matching_leads.map((l) => (
@@ -1176,10 +1129,10 @@ export function LeadFormPage({
                       key={l._id}
                       href={`${portalHome}/leads/${l._id}`}
                       target="_blank"
-                      className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white/80 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900 hover:bg-white dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                      className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white/80 px-2 py-0.5 text-xs font-semibold text-amber-900 hover:bg-white dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
                     >
                       #{l.lead_no} - {l.name} ({l.status})
-                      <ExternalLink className="h-2.5 w-2.5" />
+                      <ExternalLink className="h-3 w-3" />
                     </Link>
                   ))}
                 </div>
@@ -1187,13 +1140,13 @@ export function LeadFormPage({
 
               {dupResult.matching_parties.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300">
+                  <span className="text-xs font-bold text-amber-800 dark:text-amber-300">
                     Existing Customers in Master:
                   </span>
                   {dupResult.matching_parties.map((p) => (
                     <span
                       key={p._id}
-                      className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white/80 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                      className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white/80 px-2 py-0.5 text-xs font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
                     >
                       {p.party_name} ({p.mobile || p.email || p.district})
                     </span>
@@ -1206,7 +1159,7 @@ export function LeadFormPage({
               onClick={() => setDupResult(null)}
               className="text-amber-500 hover:text-amber-700"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -1221,33 +1174,33 @@ export function LeadFormPage({
             <div className={CARD_CLASS}>
               <div className={CARD_HEADER_CLASS}>
                 <div className="flex items-center gap-1.5">
-                  <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                  <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white">
                     1. Lead &amp; Contact Information
                   </h2>
                 </div>
                 {selectedParty && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
-                    <Building2 className="h-2.5 w-2.5" />
+                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                    <Building2 className="h-3 w-3" />
                     Party Linked
                   </span>
                 )}
               </div>
 
               {/* Party Master Search / Autofill Panel */}
-              <div className="mb-2 rounded-lg border border-blue-100 bg-blue-50/30 p-1.5 dark:border-blue-900/30 dark:bg-blue-950/20">
-                <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300 flex items-center gap-1">
-                    <Search className="h-3 w-3 text-blue-600" />
+              <div className="mb-2 rounded-lg border border-blue-100 bg-blue-50/30 p-2 dark:border-blue-900/30 dark:bg-blue-950/20">
+                <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300 flex items-center gap-1">
+                    <Search className="h-3.5 w-3.5 text-blue-600" />
                     Party Master (Autofill)
                   </label>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => openQuickPartyModal(companyName || "")}
-                      className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
+                      className="inline-flex items-center gap-0.5 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
                     >
-                      <Plus className="h-2.5 w-2.5" />
+                      <Plus className="h-3 w-3" />
                       <span>Quick Add</span>
                     </button>
                     {selectedParty && (
@@ -1256,15 +1209,15 @@ export function LeadFormPage({
                           type="button"
                           onClick={() => setEditingPartyId(selectedPartyId)}
                           title="Update Party in Master"
-                          className="inline-flex items-center gap-0.5 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 cursor-pointer"
+                          className="inline-flex items-center gap-0.5 rounded bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 cursor-pointer"
                         >
-                          <Pencil className="h-2.5 w-2.5" />
+                          <Pencil className="h-3 w-3" />
                           <span>Update</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => handlePartySelect(null)}
-                          className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
+                          className="text-xs font-bold text-rose-600 hover:underline cursor-pointer"
                         >
                           Unlink
                         </button>
@@ -1279,20 +1232,20 @@ export function LeadFormPage({
                   onQuickAdd={openQuickPartyModal}
                 />
                 {selectedParty && (
-                  <div className="mt-1 flex flex-wrap items-center justify-between gap-1.5 rounded-md bg-white/80 px-1.5 py-1 text-[11px] dark:bg-slate-900/80 border border-blue-100 dark:border-white/5">
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-1.5 rounded-md bg-white/80 px-2 py-1 text-xs dark:bg-slate-900/80 border border-blue-100 dark:border-white/5">
                     <div className="flex items-center gap-1.5 truncate">
                       <span className="font-bold text-slate-900 dark:text-white truncate">{selectedParty.party_name}</span>
                       {selectedParty.party_code && (
-                        <span className="font-mono text-[9px] text-slate-500">({selectedParty.party_code})</span>
+                        <span className="font-mono text-[10px] text-slate-500">({selectedParty.party_code})</span>
                       )}
                     </div>
                     {selectedParty.contacts && selectedParty.contacts.length > 1 && (
-                      <div className="flex items-center gap-1 text-[10px]">
+                      <div className="flex items-center gap-1 text-xs">
                         <span className="text-slate-500">Switch:</span>
                         <select
                           value={name}
                           onChange={(e) => handlePartyContactSwitch(e.target.value)}
-                          className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] dark:border-white/10 dark:bg-slate-800"
+                          className="rounded border border-slate-200 bg-white px-2 py-0.5 text-xs dark:border-white/10 dark:bg-slate-800"
                         >
                           {selectedParty.contacts.map((c, i) => (
                             <option key={i} value={c.name || ""}>
@@ -1304,201 +1257,324 @@ export function LeadFormPage({
                     )}
                   </div>
                 )}
+                {isPartyLocked && (
+                  <div className="mt-1.5 flex items-center justify-between gap-1 rounded bg-blue-100/60 px-2.5 py-1 text-xs text-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <Lock className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                      Party &amp; address fields are locked to Master. Click &quot;Update&quot; to modify or &quot;Unlink&quot; to edit freely.
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Main Contact Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                 <div>
-                  <label className={LABEL_CLASS}>
-                    Contact Person Name <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className={LABEL_CLASS}>
+                      Contact Person Name <span className="text-rose-500">*</span>
+                    </label>
+                    {isPartyLocked && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                        <Lock className="h-3 w-3" /> Locked
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
+                    readOnly={isPartyLocked}
                     placeholder="e.g. Dr. Rajesh Sharma"
-                    className={INPUT_CLASS}
+                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
                   />
                 </div>
 
                 <div>
-                  <label className={LABEL_CLASS}>
-                    Company / Organization
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className={LABEL_CLASS}>
+                      Company / Organization
+                    </label>
+                    {isPartyLocked && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                        <Lock className="h-3 w-3" /> Locked
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
                     onBlur={triggerDuplicateCheck}
+                    readOnly={isPartyLocked}
                     placeholder="e.g. Apollo Hospital / Tech Corp"
-                    className={INPUT_CLASS}
+                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
                   />
                 </div>
 
                 <div>
-                  <label className={LABEL_CLASS}>
-                    Primary Phone Number <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className={LABEL_CLASS}>
+                      Primary Phone Number <span className="text-rose-500">*</span>
+                    </label>
+                    {isPartyLocked && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                        <Lock className="h-3 w-3" /> Locked
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     onBlur={triggerDuplicateCheck}
+                    readOnly={isPartyLocked}
                     placeholder="+91 98765 43210"
-                    className={INPUT_CLASS}
+                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
                   />
                 </div>
 
                 <div>
-                  <label className={LABEL_CLASS}>
-                    Email Address
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className={LABEL_CLASS}>
+                      Email Address
+                    </label>
+                    {isPartyLocked && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                        <Lock className="h-3 w-3" /> Locked
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     onBlur={triggerDuplicateCheck}
+                    readOnly={isPartyLocked}
                     placeholder="contact@company.com"
-                    className={INPUT_CLASS}
+                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
                   />
                 </div>
 
                 <div>
-                  <label className={LABEL_CLASS}>
-                    Alternate Phone
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className={LABEL_CLASS}>
+                      Alternate Phone
+                    </label>
+                    {isPartyLocked && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                        <Lock className="h-3 w-3" /> Locked
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="tel"
                     value={alternatePhone}
                     onChange={(e) => setAlternatePhone(e.target.value)}
+                    readOnly={isPartyLocked}
                     placeholder="+91 22 1234 5678"
-                    className={INPUT_CLASS}
+                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
                   />
                 </div>
 
                 <div>
-                  <label className={LABEL_CLASS}>
-                    Designation / Role
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className={LABEL_CLASS}>
+                      Designation / Role
+                    </label>
+                    {isPartyLocked && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                        <Lock className="h-3 w-3" /> Locked
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={designation}
                     onChange={(e) => setDesignation(e.target.value)}
+                    readOnly={isPartyLocked}
                     placeholder="e.g. Purchase Head"
-                    className={INPUT_CLASS}
+                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
                   />
                 </div>
 
                 <div>
-                  <label className={LABEL_CLASS}>
-                    Industry / Domain
-                  </label>
-                  <input
-                    type="text"
-                    value={industry}
-                    onChange={(e) => setIndustry(e.target.value)}
-                    placeholder="e.g. Healthcare, Manufacturing"
-                    className={INPUT_CLASS}
-                  />
+                  <div className="flex items-center justify-between">
+                    <label className={LABEL_CLASS}>
+                      Industry / Domain
+                    </label>
+                    {isCustomIndustry ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomIndustry(false);
+                          setIndustry("");
+                        }}
+                        className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+                      >
+                        Choose from list
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomIndustry(true)}
+                        className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+                      >
+                        +Custom
+                      </button>
+                    )}
+                  </div>
+                  {isCustomIndustry ? (
+                    <input
+                      type="text"
+                      value={industry}
+                      onChange={(e) => setIndustry(e.target.value)}
+                      placeholder="e.g. Healthcare, Manufacturing"
+                      autoFocus
+                      className={INPUT_CLASS}
+                    />
+                  ) : (
+                    <select
+                      value={industry}
+                      onChange={(e) => {
+                        if (e.target.value === "__custom__") {
+                          setIsCustomIndustry(true);
+                          setIndustry("");
+                        } else {
+                          setIndustry(e.target.value);
+                        }
+                      }}
+                      className={SELECT_CLASS}
+                    >
+                      <option value="">Select Industry / Domain</option>
+                      {DEFAULT_INDUSTRIES.map((ind) => (
+                        <option key={ind} value={ind}>
+                          {ind}
+                        </option>
+                      ))}
+                      {industry && !DEFAULT_INDUSTRIES.includes(industry) && (
+                        <option value={industry}>{industry}</option>
+                      )}
+                      <option value="__custom__">+ Enter Custom Industry...</option>
+                    </select>
+                  )}
                 </div>
 
                 <div>
-                  <label className={LABEL_CLASS}>
-                    GSTIN / Tax ID
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className={LABEL_CLASS}>
+                      GSTIN / Tax ID
+                    </label>
+                    {isPartyLocked && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                        <Lock className="h-3 w-3" /> Locked
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={gstNo}
                     onChange={(e) => setGstNo(e.target.value.toUpperCase())}
+                    readOnly={isPartyLocked}
                     placeholder="27AAAAA0000A1Z5"
-                    className={`${INPUT_CLASS} font-mono uppercase`}
+                    className={isPartyLocked ? LOCKED_INPUT_CLASS : `${INPUT_CLASS} font-mono uppercase`}
                   />
                 </div>
               </div>
 
               {/* Collapsible Additional Contacts */}
-              <div className="mt-2 border-t border-slate-100 pt-1.5 dark:border-white/10">
+              <div className="mt-2.5 border-t border-slate-100 pt-2 dark:border-white/10">
                 <div className="flex items-center justify-between">
                   <button
                     type="button"
                     onClick={() => setShowAdditionalContacts((prev) => !prev)}
-                    className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
                   >
                     {showAdditionalContacts ? (
-                      <ChevronUp className="h-3 w-3" />
+                      <ChevronUp className="h-3.5 w-3.5" />
                     ) : (
-                      <ChevronDown className="h-3 w-3" />
+                      <ChevronDown className="h-3.5 w-3.5" />
                     )}
                     <span>Additional Contacts ({contacts.length})</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleAddContact}
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
-                  >
-                    <Plus className="h-3 w-3" />
-                    <span>Add Contact</span>
-                  </button>
+                  {!isPartyLocked ? (
+                    <button
+                      type="button"
+                      onClick={handleAddContact}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Add Contact</span>
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-400 italic">Locked to Master</span>
+                  )}
                 </div>
 
                 {showAdditionalContacts && contacts.length > 0 && (
-                  <div className="mt-1.5 space-y-1.5 max-h-36 overflow-y-auto pr-0.5">
+                  <div className="mt-2 space-y-2 max-h-40 overflow-y-auto pr-0.5">
                     {contacts.map((c, idx) => (
                       <div
                         key={idx}
-                        className="rounded-lg border border-slate-200/80 bg-slate-50/60 p-1.5 dark:border-white/10 dark:bg-slate-800/40"
+                        className="rounded-lg border border-slate-200/80 bg-slate-50/60 p-2 dark:border-white/10 dark:bg-slate-800/40"
                       >
-                        <div className="flex items-center justify-between pb-1 border-b border-slate-200/50 dark:border-white/5">
-                          <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                        <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/50 dark:border-white/5">
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                             #{idx + 1} {c.name || "New Contact"}
                           </span>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleSetAsPrimary(idx)}
-                              className="text-[10px] font-semibold text-blue-600 hover:underline dark:text-blue-400"
-                            >
-                              Make Primary
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveContact(idx)}
-                              className="text-slate-400 hover:text-rose-600"
-                              title="Remove"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
+                          {!isPartyLocked && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleSetAsPrimary(idx)}
+                                className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400"
+                              >
+                                Make Primary
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveContact(idx)}
+                                className="text-slate-400 hover:text-rose-600"
+                                title="Remove"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        <div className="mt-1 grid grid-cols-2 sm:grid-cols-4 gap-1">
+                        <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                           <input
                             type="text"
                             value={c.name}
                             onChange={(e) => handleContactChange(idx, "name", e.target.value)}
+                            readOnly={isPartyLocked}
                             placeholder="Full Name"
-                            className="w-full rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                            className={isPartyLocked ? "w-full rounded-md border border-slate-200 bg-slate-100/90 px-2.5 py-1 text-xs text-slate-700 cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300" : "w-full rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"}
                           />
                           <input
                             type="text"
                             value={c.designation || ""}
                             onChange={(e) => handleContactChange(idx, "designation", e.target.value)}
+                            readOnly={isPartyLocked}
                             placeholder="Designation"
-                            className="w-full rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                            className={isPartyLocked ? "w-full rounded-md border border-slate-200 bg-slate-100/90 px-2.5 py-1 text-xs text-slate-700 cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300" : "w-full rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"}
                           />
                           <input
                             type="tel"
                             value={c.phone || ""}
                             onChange={(e) => handleContactChange(idx, "phone", e.target.value)}
+                            readOnly={isPartyLocked}
                             placeholder="Phone"
-                            className="w-full rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                            className={isPartyLocked ? "w-full rounded-md border border-slate-200 bg-slate-100/90 px-2.5 py-1 text-xs text-slate-700 cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300" : "w-full rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"}
                           />
                           <input
                             type="email"
                             value={c.email || ""}
                             onChange={(e) => handleContactChange(idx, "email", e.target.value)}
+                            readOnly={isPartyLocked}
                             placeholder="Email"
-                            className="w-full rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                            className={isPartyLocked ? "w-full rounded-md border border-slate-200 bg-slate-100/90 px-2.5 py-1 text-xs text-slate-700 cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300" : "w-full rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"}
                           />
                         </div>
                       </div>
@@ -1512,37 +1588,58 @@ export function LeadFormPage({
             <div className={CARD_CLASS}>
               <div className={CARD_HEADER_CLASS}>
                 <div className="flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                  <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white">
                     2. Location &amp; Address
                   </h2>
                 </div>
+                {isPartyLocked && (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400">
+                    <Lock className="h-3 w-3" /> Locked to Party Master
+                  </span>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                 <div>
-                  <label className={LABEL_CLASS}>
-                    Address Line 1
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className={LABEL_CLASS}>
+                      Address Line 1
+                    </label>
+                    {isPartyLocked && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                        <Lock className="h-3 w-3" /> Locked
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={addressLine1}
                     onChange={(e) => setAddressLine1(e.target.value)}
+                    readOnly={isPartyLocked}
                     placeholder="Plot / Building, Street / Area"
-                    className={INPUT_CLASS}
+                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
                   />
                 </div>
 
                 <div>
-                  <label className={LABEL_CLASS}>
-                    Address Line 2 (Optional)
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className={LABEL_CLASS}>
+                      Address Line 2 (Optional)
+                    </label>
+                    {isPartyLocked && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                        <Lock className="h-3 w-3" /> Locked
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={addressLine2}
                     onChange={(e) => setAddressLine2(e.target.value)}
+                    readOnly={isPartyLocked}
                     placeholder="Landmark / Floor"
-                    className={INPUT_CLASS}
+                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
                   />
                 </div>
               </div>
@@ -1554,13 +1651,15 @@ export function LeadFormPage({
                     <label className={LABEL_CLASS}>
                       Country <span className="text-rose-500">*</span>
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setCountryModalOpen(true)}
-                      className="text-[10px] font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
-                    >
-                      +Add
-                    </button>
+                    {!isPartyLocked && (
+                      <button
+                        type="button"
+                        onClick={() => setCountryModalOpen(true)}
+                        className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+                      >
+                        +Add
+                      </button>
+                    )}
                   </div>
                   <select
                     value={countryId}
@@ -1574,8 +1673,8 @@ export function LeadFormPage({
                       setCityId("");
                       setCity("");
                     }}
-                    disabled={isCountriesLoading}
-                    className={SELECT_CLASS}
+                    disabled={isPartyLocked || isCountriesLoading}
+                    className={isPartyLocked ? LOCKED_SELECT_CLASS : SELECT_CLASS}
                   >
                     <option value="">{isCountriesLoading ? "..." : "Select Country"}</option>
                     {countriesData.map((c) => (
@@ -1592,14 +1691,16 @@ export function LeadFormPage({
                     <label className={LABEL_CLASS}>
                       State <span className="text-rose-500">*</span>
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setStateModalOpen(true)}
-                      disabled={!countryId}
-                      className="text-[10px] font-semibold text-blue-600 hover:underline disabled:opacity-40 dark:text-blue-400 cursor-pointer"
-                    >
-                      +Add
-                    </button>
+                    {!isPartyLocked && (
+                      <button
+                        type="button"
+                        onClick={() => setStateModalOpen(true)}
+                        disabled={!countryId}
+                        className="text-xs font-semibold text-blue-600 hover:underline disabled:opacity-40 dark:text-blue-400 cursor-pointer"
+                      >
+                        +Add
+                      </button>
+                    )}
                   </div>
                   <select
                     value={stateId}
@@ -1611,8 +1712,8 @@ export function LeadFormPage({
                       setCityId("");
                       setCity("");
                     }}
-                    disabled={!countryId || isStatesLoading}
-                    className={SELECT_CLASS}
+                    disabled={isPartyLocked || !countryId || isStatesLoading}
+                    className={isPartyLocked ? LOCKED_SELECT_CLASS : SELECT_CLASS}
                   >
                     <option value="">
                       {!countryId ? "Select Country" : isStatesLoading ? "..." : "Select State"}
@@ -1634,14 +1735,16 @@ export function LeadFormPage({
                     <label className={LABEL_CLASS}>
                       City <span className="text-rose-500">*</span>
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setCityModalOpen(true)}
-                      disabled={!stateId}
-                      className="text-[10px] font-semibold text-blue-600 hover:underline disabled:opacity-40 dark:text-blue-400 cursor-pointer"
-                    >
-                      +Add
-                    </button>
+                    {!isPartyLocked && (
+                      <button
+                        type="button"
+                        onClick={() => setCityModalOpen(true)}
+                        disabled={!stateId}
+                        className="text-xs font-semibold text-blue-600 hover:underline disabled:opacity-40 dark:text-blue-400 cursor-pointer"
+                      >
+                        +Add
+                      </button>
+                    )}
                   </div>
                   <select
                     value={cityId}
@@ -1651,8 +1754,8 @@ export function LeadFormPage({
                       const matched = citiesData.find((ci) => (ci._id || ci.id) === ciId);
                       setCity(matched?.name || "");
                     }}
-                    disabled={!stateId || isCitiesLoading}
-                    className={SELECT_CLASS}
+                    disabled={isPartyLocked || !stateId || isCitiesLoading}
+                    className={isPartyLocked ? LOCKED_SELECT_CLASS : SELECT_CLASS}
                   >
                     <option value="">
                       {!stateId ? "Select State" : isCitiesLoading ? "..." : "Select City"}
@@ -1670,15 +1773,23 @@ export function LeadFormPage({
 
                 {/* Pincode */}
                 <div>
-                  <label className={LABEL_CLASS}>
-                    Pincode
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className={LABEL_CLASS}>
+                      Pincode
+                    </label>
+                    {isPartyLocked && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                        <Lock className="h-3 w-3" /> Locked
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={pincode}
                     onChange={(e) => setPincode(e.target.value)}
+                    readOnly={isPartyLocked}
                     placeholder="e.g. 400001"
-                    className={INPUT_CLASS}
+                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
                   />
                 </div>
               </div>
@@ -1691,8 +1802,8 @@ export function LeadFormPage({
             <div className={CARD_CLASS}>
               <div className={CARD_HEADER_CLASS}>
                 <div className="flex items-center gap-1.5">
-                  <Layers className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                  <Layers className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white">
                     3. Classification &amp; Pipeline
                   </h2>
                 </div>
@@ -1708,17 +1819,17 @@ export function LeadFormPage({
                     <button
                       type="button"
                       onClick={() => setQuickDeptOpen((v) => !v)}
-                      className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+                      className="inline-flex items-center gap-0.5 text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
                     >
-                      <Plus className="h-2.5 w-2.5" />
-                      Quick Add
+                      <Plus className="h-3 w-3" />
+                      <span>Quick Add</span>
                     </button>
                     <span className="text-slate-300 dark:text-slate-700">|</span>
                     {selectedDepartments.length < departmentOptions.length ? (
                       <button
                         type="button"
                         onClick={() => setSelectedDepartments(departmentOptions.map((d) => d.value))}
-                        className="text-[10px] font-medium text-primary hover:underline cursor-pointer"
+                        className="text-xs font-medium text-primary hover:underline cursor-pointer"
                       >
                         Select All
                       </button>
@@ -1726,20 +1837,20 @@ export function LeadFormPage({
                       <button
                         type="button"
                         onClick={() => setSelectedDepartments([])}
-                        className="text-[10px] font-medium text-rose-500 hover:underline cursor-pointer"
+                        className="text-xs font-medium text-rose-500 hover:underline cursor-pointer"
                       >
                         Clear
                       </button>
                     )}
                     {selectedDepartments.length > 0 && (
-                      <span className="text-[10px] font-medium text-slate-400">
+                      <span className="text-xs font-medium text-slate-400">
                         ({selectedDepartments.length} selected)
                       </span>
                     )}
                   </div>
                 </div>
                 {quickDeptOpen && (
-                  <div className="mb-2 flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/60 p-1.5 dark:border-blue-800/60 dark:bg-blue-950/30">
+                  <div className="mb-2 flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/60 p-2 dark:border-blue-800/60 dark:bg-blue-950/30">
                     <input
                       type="text"
                       value={quickDeptName}
@@ -1764,7 +1875,7 @@ export function LeadFormPage({
                         }
                       }}
                       placeholder="New department name..."
-                      className="flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                      className="flex-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
                       autoFocus
                     />
                     <button
@@ -1786,7 +1897,7 @@ export function LeadFormPage({
                           toast.error(mutationRejectedMessage(err));
                         }
                       }}
-                      className="rounded-md bg-primary px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-primary-hover disabled:opacity-50 cursor-pointer"
+                      className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50 cursor-pointer"
                     >
                       {isCreatingDepartment ? "Adding..." : "Add"}
                     </button>
@@ -1796,13 +1907,13 @@ export function LeadFormPage({
                         setQuickDeptOpen(false);
                         setQuickDeptName("");
                       }}
-                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 cursor-pointer"
+                      className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 cursor-pointer"
                     >
                       Cancel
                     </button>
                   </div>
                 )}
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1.5">
                   {departmentOptions.map((dept) => {
                     const isSelected = selectedDepartments.includes(dept.value);
                     return (
@@ -1810,39 +1921,39 @@ export function LeadFormPage({
                         key={dept.value}
                         type="button"
                         onClick={() => toggleDepartment(dept.value)}
-                        className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium transition cursor-pointer ${isSelected
+                        className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition cursor-pointer ${isSelected
                           ? "bg-primary text-white font-semibold shadow-xs"
                           : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                           }`}
                       >
                         <span>{dept.label}</span>
                         {isSelected ? (
-                          <Check className="h-2.5 w-2.5 shrink-0" />
+                          <Check className="h-3 w-3 shrink-0" />
                         ) : (
-                          <Plus className="h-2.5 w-2.5 shrink-0 opacity-40" />
+                          <Plus className="h-3 w-3 shrink-0 opacity-40" />
                         )}
                       </button>
                     );
                   })}
                 </div>
                 {selectedDepartments.length === 0 && (
-                  <p className="mt-0.5 text-[10px] font-medium text-rose-500">
+                  <p className="mt-0.5 text-xs font-medium text-rose-500">
                     Please select at least one department.
                   </p>
                 )}
               </div>
 
               {/* Source, Priority, Expected Date, Tags, Created By */}
-              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                    <label className={LABEL_CLASS}>
                       Lead Source <span className="text-rose-500">*</span>
                     </label>
                     <button
                       type="button"
                       onClick={() => setLeadMastersModalOpen(true)}
-                      className="text-[10px] font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+                      className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
                     >
                       +Add
                     </button>
@@ -1922,16 +2033,16 @@ export function LeadFormPage({
                       })}
                     </select>
                   ) : (
-                    <div className="mt-0.5 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700 dark:border-white/10 dark:bg-slate-800/60 dark:text-slate-300">
+                    <div className="mt-1 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm text-slate-700 dark:border-white/10 dark:bg-slate-800/60 dark:text-slate-300">
                       <span className="font-semibold truncate">{authUser?.name || "Your Profile"}</span>
-                      <span className="text-[9px] text-slate-400 shrink-0">Self</span>
+                      <span className="text-[10px] text-slate-400 shrink-0">Self</span>
                     </div>
                   )}
                 </div>
               </div>
 
               {canAssign && (
-                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5 border-t border-slate-100 pt-2 dark:border-white/10">
+                <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-1.5 border-t border-slate-100 pt-2.5 dark:border-white/10">
                   {/* Column 1: Primary Assignee */}
                   <div>
                     <label className={LABEL_CLASS}>
@@ -1972,13 +2083,13 @@ export function LeadFormPage({
                         <button
                           type="button"
                           onClick={() => setSecondaryAssigneeIds([])}
-                          className="text-[10px] font-medium text-rose-500 hover:underline cursor-pointer"
+                          className="text-xs font-medium text-rose-500 hover:underline cursor-pointer"
                         >
                           Clear
                         </button>
                       )}
                     </div>
-                    <div className="mt-0.5 max-h-24 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 space-y-0.5 dark:border-white/10 dark:bg-slate-800">
+                    <div className="mt-1 max-h-28 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 space-y-0.5 dark:border-white/10 dark:bg-slate-800">
                       {allPortalUsers.map((u) => {
                         const uId = String(u._id);
                         const isPrimary = uId === String(primaryAssigneeId);
@@ -1987,7 +2098,7 @@ export function LeadFormPage({
                         return (
                           <label
                             key={uId}
-                            className={`flex items-center justify-between gap-1.5 rounded px-1.5 py-0.5 text-[11px] transition ${isPrimary
+                            className={`flex items-center justify-between gap-1.5 rounded px-2 py-1 text-xs transition ${isPrimary
                               ? "opacity-45 cursor-not-allowed bg-slate-50 dark:bg-slate-900/40"
                               : isSelected
                                 ? "bg-blue-50 text-blue-700 font-semibold cursor-pointer dark:bg-blue-950/40 dark:text-blue-300"
@@ -2000,11 +2111,11 @@ export function LeadFormPage({
                                 checked={isSelected}
                                 disabled={isPrimary}
                                 onChange={() => toggleSecondaryAssignee(uId)}
-                                className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary"
                               />
                               <span className="truncate">{u.name}</span>
                             </span>
-                            <span className="shrink-0 text-[9px] text-slate-400">
+                            <span className="shrink-0 text-[10px] text-slate-400">
                               {isPrimary ? "Primary" : roleBadge || ""}
                             </span>
                           </label>
@@ -2020,26 +2131,28 @@ export function LeadFormPage({
             <div className={CARD_CLASS}>
               <div className={CARD_HEADER_CLASS}>
                 <div className="flex items-center gap-1.5">
-                  <Package className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                  <Package className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white">
                     4. Products &amp; Requirements
                   </h2>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => openQuickProductModal(null, "")}
-                    className="inline-flex items-center gap-0.5 rounded-lg border border-blue-200 bg-blue-50/60 px-2 py-0.5 text-[11px] font-semibold text-blue-600 transition hover:bg-blue-100/70 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-400 cursor-pointer"
-                  >
-                    <Plus className="h-3 w-3" />
-                    <span>Quick Add</span>
-                  </button>
+                <div className="flex items-center gap-1.5">
+                  {canQuickAdd && (
+                    <button
+                      type="button"
+                      onClick={() => openQuickProductModal(null, "")}
+                      className="inline-flex items-center gap-0.5 rounded-lg border border-blue-200 bg-blue-50/60 px-2.5 py-1 text-xs font-semibold text-blue-600 transition hover:bg-blue-100/70 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-400 cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Quick Add</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={handleAddBlankProductRow}
-                    className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 cursor-pointer"
+                    className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 cursor-pointer"
                   >
-                    <Plus className="h-3 w-3" />
+                    <Plus className="h-3.5 w-3.5" />
                     <span>Add Item</span>
                   </button>
                 </div>
@@ -2060,39 +2173,39 @@ export function LeadFormPage({
               </div>
 
               {/* Quick Search & Add from Catalog Bar */}
-              <div className="mt-1.5 rounded-lg border border-blue-100 bg-blue-50/30 p-1.5 dark:border-blue-900/30 dark:bg-blue-950/20">
-                <div className="mb-0.5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-900 dark:text-blue-200">
-                  <Search className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+              <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50/30 p-2 dark:border-blue-900/30 dark:bg-blue-950/20">
+                <div className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-900 dark:text-blue-200">
+                  <Search className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                   <span>Search Catalog &amp; Add Item</span>
                 </div>
                 <ProductSearchAutocomplete
                   products={catalogProducts}
                   selectedId=""
                   onChange={(id, p) => handleQuickAddProduct(id, p)}
-                  onQuickAdd={(searchName) => openQuickProductModal(null, searchName)}
+                  onQuickAdd={canQuickAdd ? (searchName) => openQuickProductModal(null, searchName) : undefined}
                   showPrice={isAdmin}
                   placeholder="Type product name, SKU, or brand to add directly..."
-                  className="w-full rounded-lg border border-blue-200 bg-white px-2 py-1 text-xs text-slate-800 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                  className="w-full rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
                 />
               </div>
 
               {/* Product items table */}
               {products.length > 0 && (
-                <div className="mt-1.5 overflow-x-auto max-h-36 overflow-y-auto rounded-lg border border-slate-100 dark:border-white/10">
+                <div className="mt-2 overflow-x-auto max-h-40 overflow-y-auto rounded-lg border border-slate-100 dark:border-white/10">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 font-bold uppercase text-[10px] text-slate-500 dark:bg-slate-800/60 dark:text-slate-400 sticky top-0">
+                    <thead className="bg-slate-50 font-bold uppercase text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300 sticky top-0">
                       <tr>
-                        <th className="px-1.5 py-1 min-w-[150px]">Catalog Product</th>
-                        <th className="px-1.5 py-1 min-w-[130px]">Item Name</th>
-                        <th className="px-1.5 py-1 w-16">Qty</th>
+                        <th className="px-2 py-1.5 min-w-[150px]">Catalog Product</th>
+                        <th className="px-2 py-1.5 min-w-[130px]">Item Name</th>
+                        <th className="px-2 py-1.5 w-16">Qty</th>
                         {isAdmin && (
                           <>
-                            <th className="px-1.5 py-1 w-20">Price (₹)</th>
-                            <th className="px-1.5 py-1 w-20 text-right">Total</th>
+                            <th className="px-2 py-1.5 w-24">Price (₹)</th>
+                            <th className="px-2 py-1.5 w-24 text-right">Total</th>
                           </>
                         )}
-                        <th className="px-1.5 py-1 w-14">Unit</th>
-                        <th className="px-1.5 py-1 text-right w-14">Actions</th>
+                        <th className="px-2 py-1.5 w-16">Unit</th>
+                        <th className="px-2 py-1.5 text-right w-16">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-white/5">
@@ -2108,10 +2221,10 @@ export function LeadFormPage({
                                 products={catalogProducts}
                                 selectedId={selProdId}
                                 onChange={(id, p) => handleProductSelect(idx, id, p)}
-                                onQuickAdd={(searchName) => openQuickProductModal(idx, searchName)}
+                                onQuickAdd={canQuickAdd ? (searchName) => openQuickProductModal(idx, searchName) : undefined}
                                 showPrice={isAdmin}
                                 placeholder="Search..."
-                                className="w-full rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                                className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
                               />
                             </td>
                             <td className="p-1">
@@ -2120,10 +2233,10 @@ export function LeadFormPage({
                                 required
                                 value={item.product_name}
                                 onChange={(e) =>
-                                  handleProductChange(idx, "product_name", e.target.value)
+                                   handleProductChange(idx, "product_name", e.target.value)
                                 }
                                 placeholder="Item name..."
-                                className="w-full rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                                className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
                               />
                             </td>
                             <td className="p-1">
@@ -2138,7 +2251,7 @@ export function LeadFormPage({
                                     Number(e.target.value) || 1
                                   )
                                 }
-                                className="w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                                className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
                               />
                             </td>
                             {isAdmin && (
@@ -2153,10 +2266,10 @@ export function LeadFormPage({
                                       handleProductChange(idx, "target_price", e.target.value)
                                     }
                                     placeholder="0"
-                                    className="w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                                    className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
                                   />
                                 </td>
-                                <td className="p-1 text-right font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap text-[11px]">
+                                <td className="p-1 text-right font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap text-xs">
                                   {formatCurrencyINR(leadLineValue(item))}
                                 </td>
                               </>
@@ -2168,7 +2281,7 @@ export function LeadFormPage({
                                 onChange={(e) =>
                                   handleProductChange(idx, "unit", e.target.value)
                                 }
-                                className="w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                                className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
                               />
                             </td>
                             <td className="p-1 text-right">
@@ -2192,7 +2305,7 @@ export function LeadFormPage({
                                   title="Remove item"
                                   className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30 dark:hover:text-rose-400 cursor-pointer"
                                 >
-                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <Trash2 className="h-4 w-4" />
                                 </button>
                               </div>
                             </td>
@@ -2205,7 +2318,7 @@ export function LeadFormPage({
               )}
 
               {/* Summary Row */}
-              <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 rounded-lg bg-slate-50 px-2 py-1 dark:bg-slate-800/50">
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300 rounded-lg bg-slate-50 px-2.5 py-1.5 dark:bg-slate-800/50">
                 <span>
                   Total Qty: <strong className="text-slate-900 dark:text-white">{products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0).toLocaleString()}</strong> Units
                 </span>
@@ -2219,9 +2332,9 @@ export function LeadFormPage({
 
             {/* Card 5: Internal Notes */}
             <div className={CARD_CLASS}>
-              <div className="flex items-center gap-1.5 border-b border-slate-100 pb-1.5 mb-1.5 dark:border-white/10">
-                <FileText className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+              <div className="flex items-center gap-1.5 border-b border-slate-100 pb-1.5 mb-2 dark:border-white/10">
+                <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white">
                   5. Internal Notes &amp; Remarks
                 </h2>
               </div>
@@ -2230,26 +2343,26 @@ export function LeadFormPage({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Internal comments, previous relationship history, or meeting highlights..."
-                className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 shadow-xs placeholder:text-slate-400 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 shadow-xs placeholder:text-slate-400 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
               />
             </div>
           </div>
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-end gap-2 pt-0.5">
+        <div className="flex items-center justify-end gap-2 pt-1">
           <Link
             href={`${portalHome}/leads`}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300"
+            className="rounded-lg border border-slate-200 bg-white px-3.5 py-1.5 text-sm font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300"
           >
             Cancel
           </Link>
           <button
             type="submit"
             disabled={creating || updating}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1 text-xs font-semibold text-white shadow-xs transition hover:bg-primary-hover disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-1.5 text-sm font-semibold text-white shadow-xs transition hover:bg-primary-hover disabled:opacity-50"
           >
-            <Save className="h-3.5 w-3.5" />
+            <Save className="h-4 w-4" />
             {mode === "create" ? (isCopyMode ? "Create Copied Lead" : "Save Lead") : "Save Changes"}
           </button>
         </div>

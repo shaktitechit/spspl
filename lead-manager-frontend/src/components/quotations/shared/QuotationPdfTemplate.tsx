@@ -30,8 +30,8 @@ const pageStyle: CSSProperties = {
   backgroundColor: "#ffffff",
   color: "#0f172a",
   fontFamily: "Arial, Helvetica, sans-serif",
-  fontSize: "9px",
-  lineHeight: "14px",
+  fontSize: "10px",
+  lineHeight: "15px",
   boxSizing: "border-box",
   display: "block",
   position: "relative",
@@ -184,15 +184,15 @@ export default function QuotationPdfTemplate({
         }
 
         .quotation-item-rich-desc {
-          font-size: 7.5px;
-          line-height: 11px;
+          font-size: 8.5px;
+          line-height: 12.5px;
           color: #475569;
           margin-top: 2px;
           word-break: break-word;
         }
         .quotation-item-rich-desc p {
           margin: 0 0 2px 0;
-          line-height: 11px;
+          line-height: 12.5px;
         }
         .quotation-item-rich-desc ul {
           list-style-type: disc;
@@ -211,24 +211,24 @@ export default function QuotationPdfTemplate({
           width: 100%;
           border-collapse: collapse;
           margin: 2px 0;
-          font-size: 7px;
+          font-size: 8px;
         }
         .quotation-item-rich-desc th, .quotation-item-rich-desc td {
           border: 1px solid #cbd5e1;
-          padding: 1.5px 3px;
+          padding: 2px 4px;
         }
 
         /* Message Rich-Text & HTML Table layout preservation */
         .rich-text-content {
-          font-size: 8.5px;
-          line-height: 14px;
+          font-size: 9.5px;
+          line-height: 15px;
           color: #334155;
           word-break: break-word;
           overflow-wrap: break-word;
         }
         .rich-text-content p {
           margin: 0 0 4px 0;
-          line-height: 14px;
+          line-height: 15px;
         }
         .rich-text-content p:last-child {
           margin-bottom: 0;
@@ -245,8 +245,8 @@ export default function QuotationPdfTemplate({
         .rich-text-content td {
           border: 1px solid #cbd5e1 !important;
           padding: 4px 6px !important;
-          font-size: 8px !important;
-          line-height: 12px !important;
+          font-size: 9px !important;
+          line-height: 13px !important;
           text-align: left;
           vertical-align: top;
           box-sizing: border-box !important;
@@ -262,19 +262,19 @@ export default function QuotationPdfTemplate({
           color: #334155 !important;
         }
         .rich-text-content h1 {
-          font-size: 11px;
+          font-size: 13px;
           font-weight: 700;
           color: #1e3a5f;
           margin: 6px 0 2px 0;
         }
         .rich-text-content h2 {
-          font-size: 10px;
+          font-size: 11.5px;
           font-weight: 700;
           color: #1e3a5f;
           margin: 5px 0 2px 0;
         }
         .rich-text-content h3 {
-          font-size: 9px;
+          font-size: 10px;
           font-weight: 700;
           color: #1e3a5f;
           margin: 4px 0 1px 0;
@@ -291,7 +291,7 @@ export default function QuotationPdfTemplate({
         }
         .rich-text-content li {
           margin-bottom: 2px !important;
-          line-height: 13px !important;
+          line-height: 14px !important;
         }
         .rich-text-content blockquote {
           border-left: 2px solid #94a3b8 !important;
@@ -444,12 +444,12 @@ export default function QuotationPdfTemplate({
               {companyName && (
                 <div
                   style={{
-                    fontSize: "15.5px",
+                    fontSize: "17px",
                     fontWeight: 800,
                     color: "#1e3a5f",
                     letterSpacing: "0.03em",
                     textTransform: "uppercase",
-                    lineHeight: "20px",
+                    lineHeight: "22px",
                     marginBottom: "3px",
                     textAlign: "center",
                     whiteSpace: "normal",
@@ -464,9 +464,9 @@ export default function QuotationPdfTemplate({
               {companyRegdAddress && (
                 <div
                   style={{
-                    fontSize: "8.5px",
+                    fontSize: "9.5px",
                     color: "#334155",
-                    lineHeight: "13px",
+                    lineHeight: "14px",
                     marginBottom: "3px",
                     textAlign: "center",
                     whiteSpace: "normal",
@@ -481,7 +481,7 @@ export default function QuotationPdfTemplate({
               {(companyPhone || companyEmail || companyGstin) && (
                 <div
                   style={{
-                    fontSize: "8px",
+                    fontSize: "9px",
                     color: "#475569",
                     fontWeight: 500,
                     display: "flex",
@@ -514,10 +514,10 @@ export default function QuotationPdfTemplate({
             {/* Right: Document Badge */}
             <div style={{ flex: "0 0 145px", width: "145px", minWidth: "145px", flexShrink: 0, textAlign: "right" }}>
               <div style={{ display: "inline-block", background: "#eff6ff", border: "1px solid #bfdbfe", padding: "5px 10px", borderRadius: "5px" }}>
-                <div style={{ fontSize: "9px", fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+                <div style={{ fontSize: "10px", fontWeight: 800, color: "#1e3a5f", textTransform: "uppercase", letterSpacing: "0.03em" }}>
                   QUOTATION
                 </div>
-                <div style={{ fontSize: "8.5px", fontWeight: 700, color: "#2563eb", marginTop: "1px" }}>
+                <div style={{ fontSize: "9.5px", fontWeight: 700, color: "#2563eb", marginTop: "1px" }}>
                   {quotation.quotation_no || "DRAFT"}
                 </div>
               </div>
@@ -542,18 +542,18 @@ export default function QuotationPdfTemplate({
           <div>
             <span
               style={{
-                fontSize: "13px",
+                fontSize: "14px",
                 fontWeight: 800,
                 color: "#1e3a5f",
                 letterSpacing: "0.06em",
                 textTransform: "uppercase",
-                lineHeight: "16px",
+                lineHeight: "18px",
               }}
             >
               QUOTATION
             </span>
           </div>
-          <div style={{ textAlign: "right", fontSize: "8.5px", color: "#334155", lineHeight: "13px" }}>
+          <div style={{ textAlign: "right", fontSize: "9.5px", color: "#334155", lineHeight: "14px" }}>
             <div>
               <strong>Ref. No. :</strong>{" "}
               <span style={{ fontWeight: 700, color: "#1e40af" }}>
@@ -609,12 +609,12 @@ export default function QuotationPdfTemplate({
             }}
           >
             {customerDisplay && (
-              <div style={{ fontSize: "10px", fontWeight: 700, color: "#0f172a", lineHeight: "14px", wordBreak: "break-word" }}>
+              <div style={{ fontSize: "11px", fontWeight: 700, color: "#0f172a", lineHeight: "15px", wordBreak: "break-word" }}>
                 {customerDisplay}
               </div>
             )}
-            {quotation.customer_ref && (
-              <div style={{ marginTop: "2px", marginBottom: "2px", fontSize: "8px", color: "#1e3a5f", wordBreak: "break-word" }}>
+            {quotation.customer_ref && quotation.show_customer_ref !== false && (
+              <div style={{ marginTop: "2px", marginBottom: "2px", fontSize: "9px", color: "#1e3a5f", wordBreak: "break-word" }}>
                 <strong>Cust. Ref. :</strong>{" "}
                 <span style={{ fontWeight: 700, color: "#1e40af" }}>
                   {quotation.customer_ref}
@@ -622,32 +622,37 @@ export default function QuotationPdfTemplate({
               </div>
             )}
             {custAddress && (
-              <div style={{ marginTop: "2px", fontSize: "8px", color: "#475569", lineHeight: "11.5px", wordBreak: "break-word" }}>
+              <div style={{ marginTop: "2px", fontSize: "9px", color: "#475569", lineHeight: "13px", wordBreak: "break-word" }}>
                 {custAddress}
               </div>
             )}
-            <div style={{ marginTop: "4px", fontSize: "8px", color: "#334155", lineHeight: "12px" }}>
-              {quotation.gstin && (
-                <div>
-                  <strong>GSTIN :</strong> {quotation.gstin}
-                </div>
-              )}
-              {quotation.phone && (
-                <div>
-                  <strong>Tel. :</strong> {quotation.phone}
-                </div>
-              )}
-              {quotation.cell && (
-                <div>
-                  <strong>Cell :</strong> {quotation.cell}
-                </div>
-              )}
-              {quotation.email && (
-                <div>
-                  <strong>E-mail :</strong> {quotation.email}
-                </div>
-              )}
-            </div>
+            {((quotation.gstin && quotation.show_gstin !== false) ||
+              (quotation.phone && quotation.show_phone !== false) ||
+              (quotation.cell && quotation.show_cell !== false) ||
+              (quotation.email && quotation.show_email !== false)) && (
+              <div style={{ marginTop: "4px", fontSize: "9px", color: "#334155", lineHeight: "13.5px" }}>
+                {quotation.gstin && quotation.show_gstin !== false && (
+                  <div>
+                    <strong>GSTIN :</strong> {quotation.gstin}
+                  </div>
+                )}
+                {quotation.phone && quotation.show_phone !== false && (
+                  <div>
+                    <strong>Tel. :</strong> {quotation.phone}
+                  </div>
+                )}
+                {quotation.cell && quotation.show_cell !== false && (
+                  <div>
+                    <strong>Cell :</strong> {quotation.cell}
+                  </div>
+                )}
+                {quotation.email && quotation.show_email !== false && (
+                  <div>
+                    <strong>E-mail :</strong> {quotation.email}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Proposal Details */}
@@ -655,22 +660,22 @@ export default function QuotationPdfTemplate({
             style={{
               width: "45%",
               padding: "7px 10px",
-              fontSize: "8px",
+              fontSize: "9px",
               color: "#334155",
-              lineHeight: "12.5px",
+              lineHeight: "14px",
               boxSizing: "border-box",
             }}
           >
-            {quotation.kind_attn && (
+            {quotation.kind_attn && quotation.show_kind_attn !== false && (
               <div style={{ marginBottom: "4px" }}>
                 <strong>Kind Attn :</strong>{" "}
-                <span style={{ fontWeight: 600, color: "#0f172a" }}>{quotation.kind_attn}</span>
+                <span style={{ fontWeight: 600, color: "#0f172a", fontSize: "9.5px" }}>{quotation.kind_attn}</span>
               </div>
             )}
             {quotation.subject && (
               <div style={{ marginBottom: "4px" }}>
                 <strong>Sub. :</strong>{" "}
-                <span style={{ fontWeight: 700, color: "#1e3a5f" }}>{quotation.subject}</span>
+                <span style={{ fontWeight: 700, color: "#1e3a5f", fontSize: "9.5px" }}>{quotation.subject}</span>
               </div>
             )}
           </div>
@@ -683,15 +688,15 @@ export default function QuotationPdfTemplate({
               width: "100%",
               marginBottom: "8px",
               padding: "4px 2px",
-              fontSize: "8.5px",
+              fontSize: "9.5px",
               color: "#334155",
-              lineHeight: "14px",
+              lineHeight: "15px",
               boxSizing: "border-box",
             }}
           >
             <RichTextDisplay
               content={(quotation.message || (quotation as any).quotation_message) || ""}
-              className="text-[8.5px] leading-relaxed text-slate-800"
+              className="text-[9.5px] leading-relaxed text-slate-800"
             />
           </div>
         )}
@@ -715,22 +720,22 @@ export default function QuotationPdfTemplate({
               backgroundColor: "#f8fafc",
               borderBottom: "1px solid #cbd5e1",
               fontWeight: 700,
-              fontSize: "8.5px",
+              fontSize: "9.5px",
               color: "#1e3a5f",
               textTransform: "uppercase",
               letterSpacing: "0.02em",
               boxSizing: "border-box",
             }}
           >
-            <div style={{ width: "5%", padding: "6px 4px", textAlign: "center", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>Sr.</div>
-            <div style={{ width: "27%", padding: "6px 6px", textAlign: "left", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>Description of Goods</div>
-            <div style={{ width: "9%", padding: "6px 4px", textAlign: "center", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>HSN/SAC</div>
-            <div style={{ width: "7%", padding: "6px 4px", textAlign: "center", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>QTY</div>
-            <div style={{ width: "11%", padding: "6px 4px", textAlign: "right", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>Rate (Rs.)</div>
-            <div style={{ width: "12%", padding: "6px 4px", textAlign: "right", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>Sub Total (Rs.)</div>
-            <div style={{ width: "7%", padding: "6px 4px", textAlign: "center", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>GST %</div>
-            <div style={{ width: "10%", padding: "6px 4px", textAlign: "right", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>GST Amt (Rs.)</div>
-            <div style={{ width: "12%", padding: "6px 4px", textAlign: "right", boxSizing: "border-box" }}>Total (Rs.)</div>
+            <div style={{ width: "5%", padding: "7px 4px", textAlign: "center", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>Sr.</div>
+            <div style={{ width: "27%", padding: "7px 6px", textAlign: "left", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>Description of Goods</div>
+            <div style={{ width: "9%", padding: "7px 4px", textAlign: "center", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>HSN/SAC</div>
+            <div style={{ width: "7%", padding: "7px 4px", textAlign: "center", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>QTY</div>
+            <div style={{ width: "11%", padding: "7px 4px", textAlign: "right", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>Rate (Rs.)</div>
+            <div style={{ width: "12%", padding: "7px 4px", textAlign: "right", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>Sub Total (Rs.)</div>
+            <div style={{ width: "7%", padding: "7px 4px", textAlign: "center", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>GST %</div>
+            <div style={{ width: "10%", padding: "7px 4px", textAlign: "right", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>GST Amt (Rs.)</div>
+            <div style={{ width: "12%", padding: "7px 4px", textAlign: "right", boxSizing: "border-box" }}>Total (Rs.)</div>
           </div>
 
           {/* Item Rows */}
@@ -742,8 +747,8 @@ export default function QuotationPdfTemplate({
                 flexDirection: "row",
                 width: "100%",
                 borderBottom: "1px solid #cbd5e1",
-                fontSize: "8.5px",
-                lineHeight: "12.5px",
+                fontSize: "9.5px",
+                lineHeight: "13.5px",
                 color: "#334155",
                 backgroundColor: "#ffffff",
                 boxSizing: "border-box",
@@ -753,13 +758,25 @@ export default function QuotationPdfTemplate({
                 {index + 1}
               </div>
               <div style={{ width: "27%", padding: "6px 6px", textAlign: "left", borderRight: "1px solid #cbd5e1", boxSizing: "border-box" }}>
-                <div style={{ fontWeight: 700, color: "#0f172a", lineHeight: "12px" }}>
+                <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "10px", lineHeight: "13.5px" }}>
                   {item.product_name}
                 </div>
+                {quotation.show_mrp && (item.mrp || 0) > 0 ? (
+                  <div
+                    style={{
+                      fontSize: "8.5px",
+                      fontWeight: 700,
+                      color: "#4f46e5",
+                      marginTop: "1.5px",
+                    }}
+                  >
+                    MRP: ₹{formatCurrency(item.mrp || 0)}
+                  </div>
+                ) : null}
                 {item.discount_percent && item.discount_percent > 0 ? (
                   <div
                     style={{
-                      fontSize: "7px",
+                      fontSize: "8px",
                       fontWeight: 600,
                       color: "#059669",
                       marginTop: "1.5px",
@@ -777,11 +794,11 @@ export default function QuotationPdfTemplate({
                   ) : (
                     <div
                       style={{
-                        fontSize: "7.5px",
+                        fontSize: "8.5px",
                         color: "#64748b",
                         marginTop: "2px",
                         whiteSpace: "pre-line",
-                        lineHeight: "11px",
+                        lineHeight: "12px",
                       }}
                     >
                       {item.description}
@@ -836,16 +853,16 @@ export default function QuotationPdfTemplate({
               boxSizing: "border-box",
             }}
           >
-            <div style={{ fontSize: "7.5px", textTransform: "uppercase", fontWeight: 700, color: "#64748b", lineHeight: "10px" }}>
+            <div style={{ fontSize: "8.5px", textTransform: "uppercase", fontWeight: 700, color: "#64748b", lineHeight: "11px" }}>
               Amount in words:
             </div>
             <div
               style={{
-                fontSize: "9px",
+                fontSize: "10.5px",
                 fontWeight: 700,
                 color: "#1e3a5f",
                 marginTop: "3px",
-                lineHeight: "13px",
+                lineHeight: "15px",
                 textTransform: "capitalize",
               }}
             >
@@ -857,38 +874,38 @@ export default function QuotationPdfTemplate({
           <div style={{ width: "41%", boxSizing: "border-box" }}>
             {quotation.total_discount && quotation.total_discount > 0 ? (
               <>
-                <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", padding: "4px 6px", fontSize: "8.5px", borderBottom: "1px solid #cbd5e1", boxSizing: "border-box" }}>
+                <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", padding: "4.5px 6px", fontSize: "9.5px", borderBottom: "1px solid #cbd5e1", boxSizing: "border-box" }}>
                   <span style={{ color: "#475569", fontWeight: 600 }}>Gross Total:</span>
                   <span style={{ fontWeight: 700 }}>Rs. {formatCurrency((quotation.subtotal || 0) + (quotation.total_discount || 0))}</span>
                 </div>
-                <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", padding: "4px 6px", fontSize: "8.5px", borderBottom: "1px solid #cbd5e1", boxSizing: "border-box" }}>
+                <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", padding: "4.5px 6px", fontSize: "9.5px", borderBottom: "1px solid #cbd5e1", boxSizing: "border-box" }}>
                   <span style={{ color: "#059669", fontWeight: 600 }}>Total Discount:</span>
                   <span style={{ fontWeight: 700, color: "#059669" }}>-Rs. {formatCurrency(quotation.total_discount)}</span>
                 </div>
-                <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", padding: "4px 6px", fontSize: "8.5px", borderBottom: "1px solid #cbd5e1", boxSizing: "border-box" }}>
+                <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", padding: "4.5px 6px", fontSize: "9.5px", borderBottom: "1px solid #cbd5e1", boxSizing: "border-box" }}>
                   <span style={{ color: "#475569", fontWeight: 600 }}>Taxable Sub Total:</span>
                   <span style={{ fontWeight: 700 }}>Rs. {formatCurrency(quotation.subtotal)}</span>
                 </div>
               </>
             ) : (
-              <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", padding: "4px 6px", fontSize: "8.5px", borderBottom: "1px solid #cbd5e1", boxSizing: "border-box" }}>
+              <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", padding: "4.5px 6px", fontSize: "9.5px", borderBottom: "1px solid #cbd5e1", boxSizing: "border-box" }}>
                 <span style={{ color: "#475569", fontWeight: 600 }}>Sub Total (Taxable):</span>
                 <span style={{ fontWeight: 700 }}>Rs. {formatCurrency(quotation.subtotal)}</span>
               </div>
             )}
-            <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", padding: "4px 6px", fontSize: "8.5px", borderBottom: "1px solid #cbd5e1", boxSizing: "border-box" }}>
+            <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", padding: "4.5px 6px", fontSize: "9.5px", borderBottom: "1px solid #cbd5e1", boxSizing: "border-box" }}>
               <span style={{ color: "#475569", fontWeight: 600 }}>Total GST:</span>
               <span style={{ fontWeight: 700 }}>
                 {quotation.gst_enabled === false || !quotation.total_gst ? "" : `Rs. ${formatCurrency(quotation.total_gst)}`}
               </span>
             </div>
             {quotation.round_off !== undefined && quotation.round_off !== 0 && (
-              <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", padding: "4px 6px", fontSize: "8.5px", borderBottom: "1px solid #cbd5e1", boxSizing: "border-box" }}>
+              <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", padding: "4.5px 6px", fontSize: "9.5px", borderBottom: "1px solid #cbd5e1", boxSizing: "border-box" }}>
                 <span style={{ color: "#475569" }}>Round Off:</span>
                 <span>Rs. {formatCurrency(quotation.round_off)}</span>
               </div>
             )}
-            <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", padding: "5px 6px", fontSize: "9.5px", fontWeight: 800, color: "#1e3a5f", backgroundColor: "#f8fafc", boxSizing: "border-box" }}>
+            <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", padding: "5px 6px", fontSize: "11px", fontWeight: 800, color: "#1e3a5f", backgroundColor: "#f8fafc", boxSizing: "border-box" }}>
               <span>Grand Total:</span>
               <span>Rs. {formatCurrency(quotation.grand_total)}</span>
             </div>
@@ -900,7 +917,7 @@ export default function QuotationPdfTemplate({
           <div style={{ marginBottom: "12px", width: "100%", boxSizing: "border-box" }}>
             <div
               style={{
-                fontSize: "9px",
+                fontSize: "10.5px",
                 fontWeight: 800,
                 color: "#1e3a5f",
                 textTransform: "uppercase",
@@ -912,10 +929,10 @@ export default function QuotationPdfTemplate({
             >
               General Terms &amp; Conditions
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "3.5px" }}>
               {terms.map((term, index) => (
-                <div key={index} style={{ display: "flex", flexDirection: "row", alignItems: "flex-start", fontSize: "7.5px", lineHeight: "11.5px" }}>
-                  <span style={{ width: "16px", fontWeight: 700, color: "#1e3a5f", flexShrink: 0 }}>
+                <div key={index} style={{ display: "flex", flexDirection: "row", alignItems: "flex-start", fontSize: "9px", lineHeight: "13.5px" }}>
+                  <span style={{ width: "18px", fontWeight: 700, color: "#1e3a5f", flexShrink: 0, fontSize: "9.5px" }}>
                     {index + 1})
                   </span>
                   <div
@@ -936,7 +953,7 @@ export default function QuotationPdfTemplate({
           <div style={{ marginBottom: "12px", width: "100%", boxSizing: "border-box" }}>
             <div
               style={{
-                fontSize: "9px",
+                fontSize: "10.5px",
                 fontWeight: 800,
                 color: "#1e3a5f",
                 textTransform: "uppercase",
@@ -958,8 +975,8 @@ export default function QuotationPdfTemplate({
                 backgroundColor: "#f8fafc",
                 border: "1px solid #cbd5e1",
                 borderRadius: "4px",
-                fontSize: "8px",
-                lineHeight: "13px",
+                fontSize: "9px",
+                lineHeight: "14px",
                 color: "#334155",
               }}
             >
@@ -1025,7 +1042,7 @@ export default function QuotationPdfTemplate({
         <div style={{ marginBottom: "12px", paddingTop: "8px", borderTop: "1.5px dashed #cbd5e1", width: "100%", boxSizing: "border-box" }}>
           <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", width: "100%" }}>
             {/* Company Signatory */}
-            <div style={{ width: "55%", fontSize: "8px", lineHeight: "12px", boxSizing: "border-box" }}>
+            <div style={{ width: "55%", fontSize: "9px", lineHeight: "13px", boxSizing: "border-box" }}>
               <div style={{ fontWeight: 700, color: "#1e3a5f", marginBottom: "1px" }}>
                 Thanks and Regards,
               </div>
@@ -1034,39 +1051,39 @@ export default function QuotationPdfTemplate({
               )}
               <div style={{ height: "24px" }} />
               {quotation.signatory_name && (
-                <div style={{ fontWeight: 700, color: "#0f172a" }}>{quotation.signatory_name}</div>
+                <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "10px" }}>{quotation.signatory_name}</div>
               )}
               {quotation.signatory_designation && (
-                <div style={{ fontSize: "7.5px", fontWeight: 600, color: "#1e3a5f", lineHeight: "11px" }}>
+                <div style={{ fontSize: "8.5px", fontWeight: 600, color: "#1e3a5f", lineHeight: "12px" }}>
                   {quotation.signatory_designation}
                 </div>
               )}
-              {signatoryContacts && <div style={{ color: "#475569", lineHeight: "11px" }}>{signatoryContacts}</div>}
+              {signatoryContacts && <div style={{ color: "#475569", fontSize: "8.5px", lineHeight: "12px" }}>{signatoryContacts}</div>}
               {companyRegdAddress && (
                 <div
                   style={{
                     color: "#64748b",
-                    fontSize: "7.5px",
+                    fontSize: "8px",
                     marginTop: "1px",
                     maxWidth: "340px",
-                    lineHeight: "10.5px",
+                    lineHeight: "11px",
                   }}
                 >
                   {companyRegdAddress}
                 </div>
               )}
               {companyPhone && (
-                <div style={{ color: "#64748b", fontSize: "7.5px", lineHeight: "10.5px" }}>Off Phone: {companyPhone}</div>
+                <div style={{ color: "#64748b", fontSize: "8px", lineHeight: "11px" }}>Off Phone: {companyPhone}</div>
               )}
             </div>
 
             {/* Order Acceptance */}
-            <div style={{ width: "45%", textAlign: "right", fontSize: "8px", lineHeight: "12px", boxSizing: "border-box" }}>
+            <div style={{ width: "45%", textAlign: "right", fontSize: "9px", lineHeight: "13px", boxSizing: "border-box" }}>
               <div style={{ fontWeight: 700, color: "#1e3a5f", marginBottom: "1px" }}>
                 Order Acceptance
               </div>
               {customerDisplay && (
-                <div style={{ fontWeight: 700, color: "#0f172a" }}>{customerDisplay}</div>
+                <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "10px" }}>{customerDisplay}</div>
               )}
               <div style={{ height: "24px" }} />
               <div
@@ -1074,10 +1091,10 @@ export default function QuotationPdfTemplate({
                   borderTop: "1px solid #94a3b8",
                   paddingTop: "3px",
                   color: "#64748b",
-                  fontSize: "7.5px",
+                  fontSize: "8.5px",
                   display: "inline-block",
                   minWidth: "180px",
-                  lineHeight: "11px",
+                  lineHeight: "12px",
                 }}
               >
                 ( Authorized Signatory / Company Seal )
@@ -1090,7 +1107,7 @@ export default function QuotationPdfTemplate({
         <div
           style={{
             textAlign: "center",
-            fontSize: "7.5px",
+            fontSize: "8.5px",
             color: "#64748b",
             fontStyle: "italic",
             marginTop: "10px",
@@ -1110,9 +1127,9 @@ export default function QuotationPdfTemplate({
             alignItems: "center",
             paddingTop: "5px",
             borderTop: "1px solid #e2e8f0",
-            fontSize: "7px",
+            fontSize: "8px",
             color: "#94a3b8",
-            lineHeight: "10px",
+            lineHeight: "11px",
             width: "100%",
             boxSizing: "border-box",
           }}
@@ -1125,7 +1142,7 @@ export default function QuotationPdfTemplate({
             style={{
               textAlign: "center",
               fontWeight: 700,
-              fontSize: "7.5px",
+              fontSize: "8.5px",
               color: "#334155",
             }}
           />

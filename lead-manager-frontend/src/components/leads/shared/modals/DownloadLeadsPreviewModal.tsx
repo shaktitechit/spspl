@@ -480,6 +480,14 @@ export function DownloadLeadsPreviewModal({
                                       <span className="text-slate-400 font-normal">—</span>
                                     )}
                                   </div>
+                                ) : col.key === "industry" ? (
+                                  val && String(val) !== "—" && String(val).trim() !== "" ? (
+                                    <span className="inline-flex items-center rounded-md bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300">
+                                      {String(val)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 font-normal">—</span>
+                                  )
                                 ) : (
                                   <span>{val !== undefined && val !== null && val !== "" ? String(val) : "—"}</span>
                                 )}

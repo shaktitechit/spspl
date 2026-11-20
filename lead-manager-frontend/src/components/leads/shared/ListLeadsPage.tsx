@@ -7,7 +7,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import {
   Plus,
   BarChart3,
@@ -27,6 +27,7 @@ import {
   MoreVertical,
   X,
   FileSpreadsheet,
+  Loader2,
   Copy,
   Calendar,
   Layers,
@@ -40,6 +41,7 @@ import {
 } from "lucide-react";
 import {
   useListLeadsQuery,
+  useLazyListLeadsQuery,
   useListUsersQuery,
   useListLeadSourcesQuery,
   useListProductsQuery,
@@ -126,6 +128,7 @@ const DEFAULT_LEAD_EXPORT_COLUMNS: ColumnDef[] = [
   { key: "email", label: "Email", defaultSelected: false, widthPdf: 1.4 },
   { key: "city", label: "City", defaultSelected: false, widthPdf: 1 },
   { key: "state", label: "State", defaultSelected: false, widthPdf: 1 },
+  { key: "industry", label: "Industry / Domain", defaultSelected: false, widthPdf: 1.3 },
   { key: "source", label: "Source*", defaultSelected: true, widthPdf: 1.2 },
   { key: "status", label: "Status*", defaultSelected: true, widthPdf: 1 },
   { key: "priority", label: "Priority*", defaultSelected: true, widthPdf: 1 },
@@ -158,6 +161,7 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const [departmentFilter, setDepartmentFilter] = useState<string[]>([]);
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
+  const [industryFilter, setIndustryFilter] = useState<string[]>([]);
   const [primaryAssigneeFilter, setPrimaryAssigneeFilter] = useState<string[]>([]);
   const [secondaryAssigneeFilter, setSecondaryAssigneeFilter] = useState<string[]>([]);
   const [productFilter, setProductFilter] = useState<string[]>([]);
@@ -183,6 +187,8 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
   // Modals state
   const [downloadModalOpen, setDownloadModalOpen] = useState<boolean>(false);
   const [downloadOnlySelected, setDownloadOnlySelected] = useState<boolean>(false);
+  const [exportRawLeads, setExportRawLeads] = useState<LeadRecord[] | null>(null);
+  const [fetchExportLeads, { isFetching: isExportFetching }] = useLazyListLeadsQuery();
   const [assignTarget, setAssignTarget] = useState<LeadRecord | null>(null);
   const [followUpTarget, setFollowUpTarget] = useState<LeadRecord | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<LeadRecord | null>(null);
@@ -217,6 +223,7 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
       priority: priorityFilter.length > 0 ? priorityFilter.join(",") : undefined,
       department: departmentFilter.length > 0 ? departmentFilter.join(",") : undefined,
       source: sourceFilter.length > 0 ? sourceFilter.join(",") : undefined,
+      industry: industryFilter.length > 0 ? industryFilter.join(",") : undefined,
       scope: isTeamLead ? scopeFilter : undefined,
       assigned_to:
         canFilterRep && primaryAssigneeFilter.length > 0
@@ -247,6 +254,7 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
       priorityFilter,
       departmentFilter,
       sourceFilter,
+      industryFilter,
       isTeamLead,
       scopeFilter,
       canFilterRep,
@@ -292,83 +300,126 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
   }, [users, filterByTeam, withSelfInList, authUser, isAdmin]);
 
   // Formatted export data
-  const formattedLeadsForExport = useMemo(() => {
-    const listToFormat = downloadOnlySelected
-      ? items.filter((l) => selectedLeadIds.includes(String(l._id)))
-      : items;
-
-    return listToFormat.map((lead: LeadRecord) => {
-      const assignedNames = formatLeadAssignees(lead) || "Unassigned";
-      const { primary, secondary } = splitLeadAssignees(lead);
-      const primaryAssigneeName = primary?.name || "Unassigned";
-      const secondaryAssigneesName =
-        secondary.map((u) => u.name).filter(Boolean).join(", ") || "—";
-      const requiredProducts =
-        Array.isArray(lead.products) && lead.products.length > 0
-          ? lead.products
-              .map((p: any) => `${p.product_name || p.name || "Item"} (${Number(p.quantity) || 0})`)
-              .join(", ")
-          : "—";
-      const totalQty = Array.isArray(lead.products)
-        ? lead.products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0)
-        : 0;
-      const requirementSummary =
-        [lead.requirement, lead.notes].filter(Boolean).join(" — ") || "—";
-      const lastRemarks = lead.last_action?.remarks
-        ? [
-            lead.last_action.remarks,
-            lead.last_action.timestamp ? formatLeadDate(lead.last_action.timestamp) : "",
-            lead.last_action.by_user?.name ? `by ${lead.last_action.by_user.name}` : "",
-          ]
-            .filter(Boolean)
-            .join(" • ")
+  const formatSingleLeadForExport = useCallback((lead: LeadRecord) => {
+    const assignedNames = formatLeadAssignees(lead) || "Unassigned";
+    const { primary, secondary } = splitLeadAssignees(lead);
+    const primaryAssigneeName = primary?.name || "Unassigned";
+    const secondaryAssigneesName =
+      secondary.map((u) => u.name).filter(Boolean).join(", ") || "—";
+    const requiredProducts =
+      Array.isArray(lead.products) && lead.products.length > 0
+        ? lead.products
+            .map((p: any) => `${p.product_name || p.name || "Item"} (${Number(p.quantity) || 0})`)
+            .join(", ")
         : "—";
-      const party = lead.party_id;
-      const contactName =
-        (typeof (lead as any).name === "string" && (lead as any).name) ||
-        party?.party_name ||
-        (party as any)?.legal_name ||
-        "N/A";
-      const companyName =
-        (lead as any).company_name || party?.party_name || (party as any)?.legal_name || "N/A";
-      const phoneVal = (lead as any).phone || party?.mobile || "N/A";
-      const emailVal = (lead as any).email || party?.email || "N/A";
-      const cityVal = party?.district || party?.billing_address?.city || (lead as any).city || "N/A";
-      const stateVal = party?.state || party?.billing_address?.state || (lead as any).state || "N/A";
-      const createdDate = lead.createdAt || (lead as any).created_at;
-      const createdByName = getCreatedByName(lead.created_by, "System");
+    const totalQty = Array.isArray(lead.products)
+      ? lead.products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0)
+      : 0;
+    const requirementSummary =
+      [lead.requirement, lead.notes].filter(Boolean).join(" — ") || "—";
+    const lastRemarks = lead.last_action?.remarks
+      ? [
+          lead.last_action.remarks,
+          lead.last_action.timestamp ? formatLeadDate(lead.last_action.timestamp) : "",
+          lead.last_action.by_user?.name ? `by ${lead.last_action.by_user.name}` : "",
+        ]
+          .filter(Boolean)
+          .join(" • ")
+      : "—";
+    const party = lead.party_id;
+    const contactName =
+      (typeof (lead as any).name === "string" && (lead as any).name) ||
+      party?.party_name ||
+      (party as any)?.legal_name ||
+      "N/A";
+    const companyName =
+      (lead as any).company_name || party?.party_name || (party as any)?.legal_name || "N/A";
+    const phoneVal = (lead as any).phone || party?.mobile || "N/A";
+    const emailVal = (lead as any).email || party?.email || "N/A";
+    const cityVal = lead.billing_address?.city || (lead as any).city || party?.billing_address?.city || party?.district || "N/A";
+    const stateVal = lead.billing_address?.state || (lead as any).state || party?.billing_address?.state || party?.state || "N/A";
+    const createdDate = lead.createdAt || (lead as any).created_at;
+    const createdByName = getCreatedByName(lead.created_by, "System");
 
-      return {
-        _id: lead._id,
-        lead_no: lead.lead_no || `LEAD-${lead._id.slice(-6).toUpperCase()}`,
-        name: contactName,
-        company_name: companyName,
-        phone: phoneVal,
-        email: emailVal,
-        city: cityVal,
-        state: stateVal,
-        source: typeof lead.source === "string" ? lead.source : (lead.source as any)?.name || "Direct",
-        status: (lead.status || "new").toUpperCase(),
-        priority: (lead.priority || "medium").toUpperCase(),
-        department: getLeadDepartments(lead).map(getDeptLabel).join(", ") || getDeptLabel(lead.department || ""),
-        departments: getLeadDepartments(lead).map(getDeptLabel).join(", ") || getDeptLabel(lead.department || ""),
-        assigned_to_name: assignedNames,
-        primary_assignee_name: primaryAssigneeName,
-        secondary_assignees_name: secondaryAssigneesName,
-        requirement_summary: requirementSummary,
-        required_products: requiredProducts,
-        total_quantity: totalQty,
-        created_by_name: createdByName,
-        estimated_value_fmt: lead.estimated_value
-          ? `₹${Number(lead.estimated_value).toLocaleString("en-IN")}`
-          : "₹0",
-        products_summary: requiredProducts,
-        next_follow_up_at: lead.next_follow_up_at ? formatLeadDate(lead.next_follow_up_at) : "None",
-        last_remarks: lastRemarks,
-        created_at_fmt: createdDate ? formatLeadDate(createdDate) : "N/A",
-      };
-    });
-  }, [items, downloadOnlySelected, selectedLeadIds]);
+    return {
+      _id: lead._id,
+      lead_no: lead.lead_no || `LEAD-${lead._id.slice(-6).toUpperCase()}`,
+      name: contactName,
+      company_name: companyName,
+      phone: phoneVal,
+      email: emailVal,
+      city: cityVal,
+      state: stateVal,
+      industry: lead.industry || "—",
+      source: typeof lead.source === "string" ? lead.source : (lead.source as any)?.name || "Direct",
+      status: (lead.status || "new").toUpperCase(),
+      priority: (lead.priority || "medium").toUpperCase(),
+      department: getLeadDepartments(lead).map(getDeptLabel).join(", ") || getDeptLabel(lead.department || ""),
+      departments: getLeadDepartments(lead).map(getDeptLabel).join(", ") || getDeptLabel(lead.department || ""),
+      assigned_to_name: assignedNames,
+      primary_assignee_name: primaryAssigneeName,
+      secondary_assignees_name: secondaryAssigneesName,
+      requirement_summary: requirementSummary,
+      required_products: requiredProducts,
+      total_quantity: totalQty,
+      created_by_name: createdByName,
+      estimated_value_fmt: lead.estimated_value
+        ? `₹${Number(lead.estimated_value).toLocaleString("en-IN")}`
+        : "₹0",
+      products_summary: requiredProducts,
+      next_follow_up_at: lead.next_follow_up_at ? formatLeadDate(lead.next_follow_up_at) : "None",
+      last_remarks: lastRemarks,
+      created_at_fmt: createdDate ? formatLeadDate(createdDate) : "N/A",
+    };
+  }, []);
+
+  const formattedLeadsForExport = useMemo(() => {
+    const listToFormat = exportRawLeads !== null
+      ? exportRawLeads
+      : downloadOnlySelected
+        ? items.filter((l) => selectedLeadIds.includes(String(l._id)))
+        : items;
+
+    return listToFormat.map(formatSingleLeadForExport);
+  }, [exportRawLeads, items, downloadOnlySelected, selectedLeadIds, formatSingleLeadForExport]);
+
+  const handleOpenExportAll = async () => {
+    try {
+      const res = await fetchExportLeads({
+        ...queryArgs,
+        paginate: "false",
+      }).unwrap();
+      const allItems = res?.items || [];
+      setExportRawLeads(allItems);
+      setDownloadOnlySelected(false);
+      setDownloadModalOpen(true);
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to load all leads for export");
+    }
+  };
+
+  const handleOpenExportSelected = async () => {
+    const selectedInItems = items.filter((l) => selectedLeadIds.includes(String(l._id)));
+    if (selectedInItems.length === selectedLeadIds.length) {
+      setExportRawLeads(selectedInItems);
+      setDownloadOnlySelected(true);
+      setDownloadModalOpen(true);
+      return;
+    }
+    try {
+      const res = await fetchExportLeads({
+        ...queryArgs,
+        paginate: "false",
+      }).unwrap();
+      const allItems = res?.items || [];
+      const selected = allItems.filter((l: LeadRecord) => selectedLeadIds.includes(String(l._id)));
+      setExportRawLeads(selected);
+      setDownloadOnlySelected(true);
+      setDownloadModalOpen(true);
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to load selected leads for export");
+    }
+  };
 
   const contactOrgOptions = useMemo<MultiSelectOption[]>(() => {
     const seen = new Set<string>();
@@ -439,6 +490,7 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
     setPriorityFilter([]);
     setDepartmentFilter([]);
     setSourceFilter([]);
+    setIndustryFilter([]);
     setPrimaryAssigneeFilter([]);
     setSecondaryAssigneeFilter([]);
     setProductFilter([]);
@@ -463,6 +515,7 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
     if (priorityFilter.length > 0) count++;
     if (departmentFilter.length > 0) count++;
     if (sourceFilter.length > 0) count++;
+    if (industryFilter.length > 0) count++;
     if (canFilterRep && primaryAssigneeFilter.length > 0) count++;
     if (canFilterRep && secondaryAssigneeFilter.length > 0) count++;
     if (productFilter.length > 0) count++;
@@ -479,6 +532,7 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
     priorityFilter,
     departmentFilter,
     sourceFilter,
+    industryFilter,
     canFilterRep,
     primaryAssigneeFilter,
     secondaryAssigneeFilter,
@@ -610,14 +664,16 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
 
             <button
               type="button"
-              onClick={() => {
-                setDownloadOnlySelected(false);
-                setDownloadModalOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 shadow-2xs hover:bg-emerald-500/20 transition cursor-pointer"
+              disabled={isExportFetching}
+              onClick={handleOpenExportAll}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 shadow-2xs hover:bg-emerald-500/20 transition cursor-pointer disabled:opacity-50"
             >
-              <FileSpreadsheet className="h-3.5 w-3.5" />
-              <span>Export (.xlsx)</span>
+              {isExportFetching ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+              )}
+              <span>{isExportFetching ? "Exporting..." : "Export (.xlsx)"}</span>
             </button>
 
             {isAdmin && (
@@ -880,13 +936,23 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
                               <Building2 className="h-3 w-3 shrink-0 text-muted" />
                               <span className="truncate">{lead.company_name}</span>
                             </div>
-                            <div className="text-[11px] text-muted truncate mt-0.5">
-                              {lead.name || "Untitled Lead"}
+                            <div className="flex items-center gap-1.5 text-[11px] text-muted truncate mt-0.5">
+                              <span className="truncate">{lead.name || "Untitled Lead"}</span>
+                              {lead.industry && (
+                                <span className="rounded bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.2 text-[9px] font-semibold text-blue-700 dark:text-blue-300 shrink-0">
+                                  {lead.industry}
+                                </span>
+                              )}
                             </div>
                           </>
                         ) : (
-                          <div className="font-bold text-foreground truncate">
-                            {lead.name || "Untitled Lead"}
+                          <div className="flex items-center gap-1.5 font-bold text-foreground truncate">
+                            <span className="truncate">{lead.name || "Untitled Lead"}</span>
+                            {lead.industry && (
+                              <span className="rounded bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.2 text-[9px] font-semibold text-blue-700 dark:text-blue-300 shrink-0">
+                                {lead.industry}
+                              </span>
+                            )}
                           </div>
                         )}
                         {lead.phone && (
@@ -1251,10 +1317,16 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
                     <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition truncate">
                       {lead.name || "Untitled Lead"}
                     </h3>
-                    {lead.company_name && (
+                    {(lead.company_name || lead.industry) && (
                       <div className="flex items-center gap-1.5 text-xs text-muted mt-0.5 truncate">
                         <Building2 className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">{lead.company_name}</span>
+                        {lead.company_name && <span className="truncate">{lead.company_name}</span>}
+                        {lead.company_name && lead.industry && <span>•</span>}
+                        {lead.industry && (
+                          <span className="rounded bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.2 text-[9px] font-semibold text-blue-700 dark:text-blue-300 shrink-0">
+                            {lead.industry}
+                          </span>
+                        )}
                       </div>
                     )}
                   </Link>
@@ -1419,14 +1491,16 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
             {/* Export Selected */}
             <button
               type="button"
-              onClick={() => {
-                setDownloadOnlySelected(true);
-                setDownloadModalOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition cursor-pointer"
+              disabled={isExportFetching}
+              onClick={handleOpenExportSelected}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition cursor-pointer disabled:opacity-50"
             >
-              <FileSpreadsheet className="h-3.5 w-3.5" />
-              <span>Export</span>
+              {isExportFetching ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+              )}
+              <span>{isExportFetching ? "Loading..." : "Export"}</span>
             </button>
 
             {/* Bulk Delete (Admin only) */}
@@ -1477,6 +1551,11 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
         sourceFilter={sourceFilter}
         setSourceFilter={(val) => {
           setSourceFilter(val);
+          setPage(1);
+        }}
+        industryFilter={industryFilter}
+        setIndustryFilter={(val) => {
+          setIndustryFilter(val);
           setPage(1);
         }}
         statusFilter={statusFilter}
@@ -1604,6 +1683,7 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
           onClose={() => {
             setDownloadModalOpen(false);
             setDownloadOnlySelected(false);
+            setExportRawLeads(null);
           }}
           leads={formattedLeadsForExport}
           availableColumns={

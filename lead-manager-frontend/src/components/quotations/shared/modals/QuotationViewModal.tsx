@@ -303,10 +303,10 @@ export function QuotationViewModal({
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   Quotation Preview: {displayedQuotation.ref_no || displayedQuotation.quotation_no}
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase ${
                       displayedQuotation.approval_status === "approved" || displayedQuotation.status === "approved"
                         ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
                         : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
@@ -315,7 +315,7 @@ export function QuotationViewModal({
                     {displayedQuotation.approval_status || displayedQuotation.status}
                   </span>
                   <span
-                    className={`rounded-md px-1.5 py-0.2 text-[10px] font-extrabold ${
+                    className={`rounded-md px-2 py-0.5 text-xs font-extrabold ${
                       isViewingArchive
                         ? "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300"
                         : "bg-indigo-100 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-300"
@@ -325,15 +325,15 @@ export function QuotationViewModal({
                   </span>
                 </h3>
               </div>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-xs text-slate-500 mt-0.5">
                 Official Letterhead format for {displayedQuotation.customer_name}
               </p>
 
               {/* Version switcher pills */}
               {availableVersions.length > 1 && (
-                <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1 flex items-center gap-1">
-                    <History className="h-3 w-3" /> Version:
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400 mr-1 flex items-center gap-1">
+                    <History className="h-3.5 w-3.5" /> Version:
                   </span>
                   {availableVersions.map((v) => {
                     const isCurrent = v === currentVersion;
@@ -343,7 +343,7 @@ export function QuotationViewModal({
                         key={v}
                         type="button"
                         onClick={() => setSelectedVersion(isCurrent ? null : v)}
-                        className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold transition-all cursor-pointer ${
+                        className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold transition-all cursor-pointer ${
                           isSelected
                             ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
                             : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300"
@@ -351,7 +351,7 @@ export function QuotationViewModal({
                       >
                         v{v}
                         {isCurrent && (
-                          <span className="text-[9px] font-extrabold uppercase opacity-80">(Cur)</span>
+                          <span className="text-[10px] font-extrabold uppercase opacity-80">(Cur)</span>
                         )}
                       </button>
                     );
@@ -364,10 +364,10 @@ export function QuotationViewModal({
           <div className="flex items-center gap-2">
             <Link
               href={`/dashboard/quotations/new?copy_from=${quotation._id}`}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
               title="Copy this quotation as a new quotation"
             >
-              <Copy className="h-3.5 w-3.5 text-indigo-500" />
+              <Copy className="h-4 w-4 text-indigo-500" />
               Copy
             </Link>
             {isPdfAllowed && (
@@ -385,16 +385,16 @@ export function QuotationViewModal({
                     const fileName = `Quotation_${displayedQuotation.ref_no || displayedQuotation.quotation_no || "document"}${isViewingArchive ? `_v${displayedQuotation.version}` : ""}.pdf`;
                     pdf.save(fileName);
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
                 >
                   Download PDF (v{displayedQuotation.version || 1})
                 </button>
                 <button
                   type="button"
                   onClick={handlePrint}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-hover cursor-pointer"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover cursor-pointer"
                 >
-                  <Printer className="h-3.5 w-3.5" />
+                  <Printer className="h-4 w-4" />
                   Print (v{displayedQuotation.version || 1})
                 </button>
               </>

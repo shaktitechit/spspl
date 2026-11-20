@@ -90,6 +90,7 @@ import {
   isUserInLeadManagerPortal,
   getDeptLabel,
   getLeadDepartments,
+  canQuickAddProduct,
 } from "@/components/leads/leadUtils";
 import { useLeadDepartmentOptions } from "@/components/leads/useLeadDepartmentOptions";
 import { isAdmin, isManager, readSessionFromStorage } from "@/utils/authStorage";
@@ -115,6 +116,7 @@ type ItemState = {
   hsn_code: string;
   quantity: number;
   unit: string;
+  mrp?: number;
   rate: number;
   discount_percent?: number;
   discount_amount?: number;
@@ -548,6 +550,7 @@ export function QuotationFormPage({
   const reduxUser = useAppSelector((state) => state.auth.user);
   const sessionUser = useMemo(() => readSessionFromStorage()?.user || null, []);
   const authUser = (reduxUser || sessionUser) as any;
+  const canQuickAdd = canQuickAddProduct(authUser);
   const { filterByTeam, withSelfInList, isManager, isCoordinator } = useLeadManagerTeamScope();
   const teamScopedPickers = isManager || isCoordinator;
 
@@ -704,6 +707,7 @@ export function QuotationFormPage({
   const [refNo, setRefNo] = useState("");
   const [customerRef, setCustomerRef] = useState("");
   const [gstEnabled, setGstEnabled] = useState<boolean>(true);
+  const [showMrp, setShowMrp] = useState<boolean>(false);
   const [quotationDate, setQuotationDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [validityDays, setValidityDays] = useState(15);
   const [subject, setSubject] = useState("");
@@ -713,6 +717,13 @@ export function QuotationFormPage({
   const [cell, setCell] = useState("");
   const [email, setEmail] = useState("");
   const [gstin, setGstin] = useState("");
+  // Visibility toggles for PDF
+  const [showKindAttn, setShowKindAttn] = useState(true);
+  const [showCustomerRef, setShowCustomerRef] = useState(true);
+  const [showCell, setShowCell] = useState(true);
+  const [showPhone, setShowPhone] = useState(true);
+  const [showEmail, setShowEmail] = useState(true);
+  const [showGstin, setShowGstin] = useState(true);
   const [addressLine, setAddressLine] = useState("");
   const [countryId, setCountryId] = useState("");
   const [country, setCountry] = useState("India");
@@ -1168,6 +1179,12 @@ export function QuotationFormPage({
       setCell(qAny.cell || "");
       setEmail(existingQuotation.email || "");
       setGstin(qAny.gstin || "");
+      setShowKindAttn(qAny.show_kind_attn !== false);
+      setShowCustomerRef(qAny.show_customer_ref !== false);
+      setShowCell(qAny.show_cell !== false);
+      setShowPhone(qAny.show_phone !== false);
+      setShowEmail(qAny.show_email !== false);
+      setShowGstin(qAny.show_gstin !== false);
       const addr = (qAny.billing_address || existingQuotation.address) as any;
       if (addr) {
         setAddressLine(addr.address_line_1 || "");
@@ -1205,6 +1222,7 @@ export function QuotationFormPage({
       setSignatoryPhone(existingQuotation.signatory_phone || "");
       setSignatoryEmail(existingQuotation.signatory_email || "");
       setSignatoryDesignation(existingQuotation.signatory_designation || "");
+      setShowMrp(Boolean(qAny.show_mrp));
 
       // Sales Person from quotation
       const qSalesPersonId =
@@ -1231,6 +1249,7 @@ export function QuotationFormPage({
             hsn_code: i.hsn_code || "9018",
             quantity: parseQuotationLineQuantity(i.quantity, 1),
             unit: i.unit || "Nos",
+            mrp: i.mrp != null ? Number(i.mrp) : undefined,
             rate: Number(i.rate) || 0,
             discount_percent: Number(i.discount_percent) || 0,
             discount_amount: Number(i.discount_amount) || 0,
@@ -1263,6 +1282,12 @@ export function QuotationFormPage({
       setCell(qAny.cell || "");
       setEmail(existingQuotation.email || "");
       setGstin(qAny.gstin || "");
+      setShowKindAttn(qAny.show_kind_attn !== false);
+      setShowCustomerRef(qAny.show_customer_ref !== false);
+      setShowCell(qAny.show_cell !== false);
+      setShowPhone(qAny.show_phone !== false);
+      setShowEmail(qAny.show_email !== false);
+      setShowGstin(qAny.show_gstin !== false);
       const addr = (qAny.billing_address || existingQuotation.address) as any;
       if (addr) {
         setAddressLine(addr.address_line_1 || "");
@@ -1300,6 +1325,7 @@ export function QuotationFormPage({
       setSignatoryPhone(existingQuotation.signatory_phone || "");
       setSignatoryEmail(existingQuotation.signatory_email || "");
       setSignatoryDesignation(existingQuotation.signatory_designation || "");
+      setShowMrp(Boolean(qAny.show_mrp));
 
       // Sales Person from quotation or authUser
       const qSalesPersonId =
@@ -1334,6 +1360,7 @@ export function QuotationFormPage({
             hsn_code: i.hsn_code || "9018",
             quantity: parseQuotationLineQuantity(i.quantity, 1),
             unit: i.unit || "Nos",
+            mrp: i.mrp != null ? Number(i.mrp) : undefined,
             rate: Number(i.rate) || 0,
             discount_percent: Number(i.discount_percent) || 0,
             discount_amount: Number(i.discount_amount) || 0,
@@ -1474,6 +1501,7 @@ export function QuotationFormPage({
       quotation_no: refNo.trim() || autoNextRefNo || "Q-PREVIEW",
       ref_no: refNo.trim() || autoNextRefNo || "Q-PREVIEW",
       customer_ref: customerRef.trim() || undefined,
+      show_customer_ref: showCustomerRef,
       lead: selectedLeadId || leadId || "",
       party_id: selectedPartyId || undefined,
       quotation_date: quotationDate ? new Date(quotationDate).toISOString() : new Date().toISOString(),
@@ -1482,10 +1510,15 @@ export function QuotationFormPage({
       subject: subject.trim() || "Quotation Proposal",
       customer_name: customerName.trim() || "Customer / Organization",
       kind_attn: kindAttn.trim() || undefined,
+      show_kind_attn: showKindAttn,
       phone: phone.trim() || undefined,
+      show_phone: showPhone,
       cell: cell.trim() || undefined,
+      show_cell: showCell,
       email: email.trim() || undefined,
+      show_email: showEmail,
       gstin: gstin.trim() || undefined,
+      show_gstin: showGstin,
       address: {
         address_line_1: addressLine.trim() || undefined,
         city: city.trim() || undefined,
@@ -1505,6 +1538,7 @@ export function QuotationFormPage({
           hsn_code: i.hsn_code || "9018",
           quantity: parseQuotationLineQuantity(i.quantity, 1),
           unit: i.unit || "Nos",
+          mrp: i.mrp ?? products.find((p) => String(p._id) === String(i.product))?.mrp,
           rate: Number(i.rate) || 0,
           discount_percent: Number(i.discount_percent) || 0,
           discount_amount: Number(i.discount_amount) || 0,
@@ -1553,6 +1587,7 @@ export function QuotationFormPage({
       status: "draft",
       approval_status: "pending_approval",
       gst_enabled: gstEnabled,
+      show_mrp: showMrp,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1561,6 +1596,7 @@ export function QuotationFormPage({
     refNo,
     autoNextRefNo,
     customerRef,
+    showCustomerRef,
     selectedLeadId,
     leadId,
     selectedPartyId,
@@ -1570,10 +1606,15 @@ export function QuotationFormPage({
     subject,
     customerName,
     kindAttn,
+    showKindAttn,
     phone,
+    showPhone,
     cell,
+    showCell,
     email,
+    showEmail,
     gstin,
+    showGstin,
     addressLine,
     city,
     cityId,
@@ -1584,6 +1625,7 @@ export function QuotationFormPage({
     pincode,
     items,
     gstEnabled,
+    showMrp,
     calculations,
     terms,
     message,
@@ -1798,6 +1840,7 @@ export function QuotationFormPage({
           hsn_code: prodHsn || it.hsn_code || "9018",
           rate: Number(found.base_price ?? found.minimum_sale_rate ?? it.rate ?? 0),
           unit: prodUnit || it.unit || "Nos",
+          mrp: found.mrp != null ? Number(found.mrp) : undefined,
           gst_rate: Number(found.gst_percent ?? it.gst_rate ?? 5),
         };
       })
@@ -1817,6 +1860,7 @@ export function QuotationFormPage({
   };
 
   const openQuickProductModal = (searchName = "", targetRowIdx: number | null = null) => {
+    if (!canQuickAdd) return;
     setQuickProductInitialName(searchName);
     setQuickProductTargetRowIdx(targetRowIdx);
     setQuickProductModalOpen(true);
@@ -2007,7 +2051,7 @@ export function QuotationFormPage({
     e.preventDefault();
 
     if (!canManageQuotations(authUser)) {
-      toast.error("Only managers are authorized to create or edit quotations");
+      toast.error("Only administrators, managers, and coordinators are authorized to create or edit quotations");
       return;
     }
 
@@ -2106,17 +2150,24 @@ export function QuotationFormPage({
     const payload: CreateQuotationPayload & Record<string, unknown> = {
       ref_no: refNo.trim() || undefined,
       customer_ref: customerRef.trim() || undefined,
+      show_customer_ref: showCustomerRef,
       party_id: resolvedPartyId || undefined,
       gst_enabled: gstEnabled,
+      show_mrp: showMrp,
       quotation_date: quotationDate ? new Date(quotationDate).toISOString() : new Date().toISOString(),
       validity_days: Number(validityDays) || 15,
       subject: subject.trim() || undefined,
       customer_name: customerName.trim(),
       kind_attn: kindAttn.trim(),
+      show_kind_attn: showKindAttn,
       phone: phone.trim(),
+      show_phone: showPhone,
       cell: cell.trim(),
+      show_cell: showCell,
       email: email.trim(),
+      show_email: showEmail,
       gstin: gstin.trim(),
+      show_gstin: showGstin,
       address: {
         address_line_1: addressLine.trim(),
         city: city.trim(),
@@ -2134,6 +2185,7 @@ export function QuotationFormPage({
         hsn_code: i.hsn_code.trim() || "9018",
         quantity: parseQuotationLineQuantity(i.quantity, 1),
         unit: i.unit.trim() || "Nos",
+        mrp: i.mrp != null ? Number(i.mrp) : products.find((p) => String(p._id) === String(i.product))?.mrp,
         rate: Number(i.rate) || 0,
         discount_percent: Number(i.discount_percent) || 0,
         discount_amount: Number(i.discount_amount) || 0,
@@ -2689,80 +2741,158 @@ export function QuotationFormPage({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Customer Ref <span className="text-[10px] text-slate-400 font-normal">(Enquiry / PO Ref)</span>
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Customer Ref <span className="text-[10px] text-slate-400 font-normal">(Enquiry / PO Ref)</span>
+                </label>
+                <label className="inline-flex items-center gap-1 cursor-pointer text-[11px] select-none">
+                  <input
+                    type="checkbox"
+                    checked={showCustomerRef}
+                    onChange={(e) => setShowCustomerRef(e.target.checked)}
+                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                  />
+                  <span className={showCustomerRef ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                    {showCustomerRef ? "Show in PDF" : "Hidden in PDF"}
+                  </span>
+                </label>
+              </div>
               <input
                 type="text"
                 value={customerRef}
                 onChange={(e) => setCustomerRef(e.target.value)}
                 placeholder="e.g. PO-9876 / ENQ-123"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-mono"
+                className={`w-full rounded-xl border ${!showCustomerRef ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-xs font-bold text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white font-mono`}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Kind Attn (Contact Person)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Kind Attn (Contact Person)
+                </label>
+                <label className="inline-flex items-center gap-1 cursor-pointer text-[11px] select-none">
+                  <input
+                    type="checkbox"
+                    checked={showKindAttn}
+                    onChange={(e) => setShowKindAttn(e.target.checked)}
+                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                  />
+                  <span className={showKindAttn ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                    {showKindAttn ? "Show in PDF" : "Hidden in PDF"}
+                  </span>
+                </label>
+              </div>
               <input
                 type="text"
                 value={kindAttn}
                 onChange={(e) => setKindAttn(e.target.value)}
                 placeholder="e.g. Dr. Rajesh Sharma"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                className={`w-full rounded-xl border ${!showKindAttn ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white`}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Phone / Tel.
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Phone / Tel.
+                </label>
+                <label className="inline-flex items-center gap-1 cursor-pointer text-[11px] select-none">
+                  <input
+                    type="checkbox"
+                    checked={showPhone}
+                    onChange={(e) => setShowPhone(e.target.checked)}
+                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                  />
+                  <span className={showPhone ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                    {showPhone ? "Show in PDF" : "Hidden in PDF"}
+                  </span>
+                </label>
+              </div>
               <input
                 type="text"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="Office Landline / Phone"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                className={`w-full rounded-xl border ${!showPhone ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white`}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Mobile / Cell
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Mobile / Cell
+                </label>
+                <label className="inline-flex items-center gap-1 cursor-pointer text-[11px] select-none">
+                  <input
+                    type="checkbox"
+                    checked={showCell}
+                    onChange={(e) => setShowCell(e.target.checked)}
+                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                  />
+                  <span className={showCell ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                    {showCell ? "Show in PDF" : "Hidden in PDF"}
+                  </span>
+                </label>
+              </div>
               <input
                 type="text"
                 value={cell}
                 onChange={(e) => setCell(e.target.value)}
                 placeholder="Mobile Number"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                className={`w-full rounded-xl border ${!showCell ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white`}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Email Address
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Email Address
+                </label>
+                <label className="inline-flex items-center gap-1 cursor-pointer text-[11px] select-none">
+                  <input
+                    type="checkbox"
+                    checked={showEmail}
+                    onChange={(e) => setShowEmail(e.target.checked)}
+                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                  />
+                  <span className={showEmail ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                    {showEmail ? "Show in PDF" : "Hidden in PDF"}
+                  </span>
+                </label>
+              </div>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="customer@email.com"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                className={`w-full rounded-xl border ${!showEmail ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white`}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                GSTIN
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  GSTIN
+                </label>
+                <label className="inline-flex items-center gap-1 cursor-pointer text-[11px] select-none">
+                  <input
+                    type="checkbox"
+                    checked={showGstin}
+                    onChange={(e) => setShowGstin(e.target.checked)}
+                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                  />
+                  <span className={showGstin ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                    {showGstin ? "Show in PDF" : "Hidden in PDF"}
+                  </span>
+                </label>
+              </div>
               <input
                 type="text"
                 value={gstin}
                 onChange={(e) => setGstin(e.target.value.toUpperCase())}
                 placeholder="e.g. 03ABCDE1234F1Z5"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-mono uppercase"
+                className={`w-full rounded-xl border ${!showGstin ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-xs text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white font-mono uppercase`}
               />
             </div>
 
@@ -2962,6 +3092,28 @@ export function QuotationFormPage({
                 Line Items &amp; Products ({items.length})
               </div>
 
+              {/* Show MRP Checkbox */}
+              <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 shadow-2xs cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/60 transition select-none">
+                <input
+                  type="checkbox"
+                  checked={showMrp}
+                  onChange={(e) => setShowMrp(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Show MRP
+                </span>
+                <span
+                  className={`rounded-md px-1.5 py-0.5 text-[10px] font-black uppercase ${
+                    showMrp
+                      ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                      : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400"
+                  }`}
+                >
+                  {showMrp ? "On" : "Off"}
+                </span>
+              </label>
+
               {/* GST Enable/Disable Checkbox */}
               <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 shadow-2xs cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/60 transition select-none">
                 <input
@@ -2986,15 +3138,17 @@ export function QuotationFormPage({
             </div>
 
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => openQuickProductModal("", null)}
-                className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-xs font-bold text-white shadow-2xs hover:bg-primary-hover transition cursor-pointer"
-                title="Create a new product in Product Master and add to quotation"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                + Quick Add Product
-              </button>
+              {canQuickAdd && (
+                <button
+                  type="button"
+                  onClick={() => openQuickProductModal("", null)}
+                  className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-xs font-bold text-white shadow-2xs hover:bg-primary-hover transition cursor-pointer"
+                  title="Create a new product in Product Master and add to quotation"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  + Quick Add Product
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleAddItem}
@@ -3017,25 +3171,38 @@ export function QuotationFormPage({
                 <Sparkles className="h-3.5 w-3.5 text-blue-600" />
                 Quick Search &amp; Add Products from Catalog
               </div>
-              <button
-                type="button"
-                onClick={() => openQuickProductModal("", null)}
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline cursor-pointer"
-              >
-                <Plus className="h-3 w-3" />
-                New Catalog Product
-              </button>
+              {canQuickAdd && (
+                <button
+                  type="button"
+                  onClick={() => openQuickProductModal("", null)}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                >
+                  <Plus className="h-3 w-3" />
+                  New Catalog Product
+                </button>
+              )}
             </div>
             <QuickProductSearchAndAdd
               products={products}
               onAddProduct={handleQuickAddProduct}
-              onQuickAdd={(name) => openQuickProductModal(name, null)}
+              onQuickAdd={canQuickAdd ? (name) => openQuickProductModal(name, null) : undefined}
             />
           </div>
 
           <div className="space-y-3">
             {items.map((it, idx) => {
               const comp = calculations.items[idx];
+              const matchedProduct = products.find(
+                (p) =>
+                  (it.product && String(p._id) === String(it.product)) ||
+                  getFieldText(p.product_name).trim().toLowerCase() === it.product_name.trim().toLowerCase()
+              );
+              const resolvedMrp =
+                it.mrp != null && it.mrp > 0
+                  ? it.mrp
+                  : matchedProduct?.mrp != null
+                  ? Number(matchedProduct.mrp)
+                  : undefined;
               return (
                 <div
                   key={idx}
@@ -3043,14 +3210,19 @@ export function QuotationFormPage({
                 >
                   <div className="grid grid-cols-12 gap-2 items-end">
                     {/* Sr & Product Selector */}
-                    <div className="col-span-12 sm:col-span-4">
-                      <div className="flex items-center gap-1.5 mb-1">
+                    <div className={`col-span-12 ${showMrp ? "sm:col-span-3" : "sm:col-span-4"}`}>
+                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">
                           {idx + 1}
                         </span>
                         <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
                           Product Description <span className="text-rose-500">*</span>
                         </label>
+                        {showMrp && resolvedMrp != null && resolvedMrp > 0 && (
+                          <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
+                            MRP: ₹{formatCurrencyINR(resolvedMrp)}
+                          </span>
+                        )}
                       </div>
 
                       {/* Searchable catalog autocomplete in row */}
@@ -3058,7 +3230,7 @@ export function QuotationFormPage({
                         products={products}
                         selectedId={it.product}
                         onSelect={(pId) => handleSelectProduct(idx, pId)}
-                        onQuickAdd={(name) => openQuickProductModal(name, idx)}
+                        onQuickAdd={canQuickAdd ? (name) => openQuickProductModal(name, idx) : undefined}
                       />
 
                       <input
@@ -3130,6 +3302,38 @@ export function QuotationFormPage({
                         />
                       </div>
                     </div>
+
+                    {/* MRP (shown when Show MRP is toggled) */}
+                    {showMrp && (
+                      <div className="col-span-4 sm:col-span-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-[11px] font-medium text-indigo-700 dark:text-indigo-300">
+                            MRP (₹)
+                          </label>
+                          {matchedProduct?.mrp != null && matchedProduct.mrp > 0 && (
+                            <span
+                              className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400"
+                              title="Fetched from Product Master"
+                            >
+                              Master
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          type="number"
+                          step="any"
+                          value={it.mrp != null && it.mrp > 0 ? it.mrp : (matchedProduct?.mrp || "")}
+                          onChange={(e) => {
+                            const val = e.target.value === "" ? 0 : Number(e.target.value);
+                            setItems((prev) =>
+                              prev.map((x, i) => (i === idx ? { ...x, mrp: val } : x))
+                            );
+                          }}
+                          placeholder="0.00"
+                          className="w-full rounded-lg border border-indigo-200 bg-indigo-50/40 px-2 py-1.5 text-xs font-bold text-indigo-950 dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-200 font-mono"
+                        />
+                      </div>
+                    )}
 
                     {/* Rate */}
                     <div className="col-span-4 sm:col-span-2">
@@ -3296,6 +3500,11 @@ export function QuotationFormPage({
                       </button>
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
+                      {showMrp && (resolvedMrp || 0) > 0 && (
+                        <span className="font-bold text-indigo-700 dark:text-indigo-300">
+                          MRP: {formatCurrencyINR(resolvedMrp || 0)}
+                        </span>
+                      )}
                       <span>
                         Gross: <strong>{formatCurrencyINR(comp?.gross || 0)}</strong>
                       </span>

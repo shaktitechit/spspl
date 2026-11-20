@@ -228,6 +228,7 @@ export const quotationsApi = medicaApi.injectEndpoints({
 
 export const {
   useListQuotationsQuery,
+  useLazyListQuotationsQuery,
   useGetQuotationQuery,
   useCreateQuotationMutation,
   useUpdateQuotationMutation,

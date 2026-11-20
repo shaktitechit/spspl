@@ -17,6 +17,7 @@ export type LeadQuotationItem = {
   hsn_code?: string;
   quantity: number;
   unit?: string;
+  mrp?: number;
   rate: number;
   discount_percent?: number;
   discount_amount?: number;
@@ -51,6 +52,13 @@ export type QuotationRevisionSnapshot = {
   cell?: string;
   email?: string;
   gstin?: string;
+  show_kind_attn?: boolean;
+  show_customer_ref?: boolean;
+  show_cell?: boolean;
+  show_phone?: boolean;
+  show_email?: boolean;
+  show_gstin?: boolean;
+  show_mrp?: boolean;
   address?: {
     address_line_1?: string;
     city?: string;
@@ -175,6 +183,13 @@ export type LeadQuotationRecord = {
   cell?: string;
   email?: string;
   gstin?: string;
+  show_kind_attn?: boolean;
+  show_customer_ref?: boolean;
+  show_cell?: boolean;
+  show_phone?: boolean;
+  show_email?: boolean;
+  show_gstin?: boolean;
+  show_mrp?: boolean;
   address?: {
     address_line_1?: string;
     city?: string;
@@ -324,6 +339,13 @@ export type CreateQuotationPayload = {
   cell?: string;
   email?: string;
   gstin?: string;
+  show_kind_attn?: boolean;
+  show_customer_ref?: boolean;
+  show_cell?: boolean;
+  show_phone?: boolean;
+  show_email?: boolean;
+  show_gstin?: boolean;
+  show_mrp?: boolean;
   address?: {
     address_line_1?: string;
     city?: string;
@@ -341,6 +363,7 @@ export type CreateQuotationPayload = {
     hsn_code?: string;
     quantity: number;
     unit?: string;
+    mrp?: number;
     rate: number;
     gst_enabled?: boolean;
     gst_rate: number;

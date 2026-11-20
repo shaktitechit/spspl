@@ -264,12 +264,21 @@ export function LeadDetailPage({ leadId, portalHome = "/dashboard" }: Props) {
                 </h1>
               </div>
 
-              {lead.company_name && (
-                <p className="flex items-center gap-1.5 text-xs text-muted mt-0.5 truncate">
-                  <Building2 className="h-3.5 w-3.5 shrink-0" />
-                  <span className="font-semibold text-foreground/80">{lead.company_name}</span>
-                  {lead.industry && <span>• {lead.industry}</span>}
-                </p>
+              {(lead.company_name || lead.industry) && (
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted mt-0.5 truncate">
+                  {lead.company_name && (
+                    <span className="flex items-center gap-1.5 font-semibold text-foreground/80">
+                      <Building2 className="h-3.5 w-3.5 shrink-0" />
+                      {lead.company_name}
+                    </span>
+                  )}
+                  {lead.company_name && lead.industry && <span>•</span>}
+                  {lead.industry && (
+                    <span className="inline-flex items-center rounded-md bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-300">
+                      {lead.industry}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -640,6 +649,19 @@ export function LeadDetailPage({ leadId, portalHome = "/dashboard" }: Props) {
                 <dt className="text-muted text-[11px] font-semibold">Company</dt>
                 <dd className="font-semibold text-foreground mt-0.5">
                   {lead.company_name || "—"}
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-muted text-[11px] font-semibold">Industry / Domain</dt>
+                <dd className="mt-0.5">
+                  {lead.industry ? (
+                    <span className="inline-flex items-center rounded-md bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:text-blue-300">
+                      {lead.industry}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 font-normal">—</span>
+                  )}
                 </dd>
               </div>
 

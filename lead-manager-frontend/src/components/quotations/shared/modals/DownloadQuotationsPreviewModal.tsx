@@ -67,6 +67,7 @@ export const DEFAULT_QUOTATION_COLUMNS: QuotationColumnDef[] = [
   { key: "phone", label: "Phone", defaultSelected: false, widthPdf: 1.1 },
   { key: "email", label: "Email", defaultSelected: false, widthPdf: 1.3 },
   { key: "city", label: "City", defaultSelected: false, widthPdf: 1 },
+  { key: "state", label: "State", defaultSelected: false, widthPdf: 1 },
   { key: "signatory_name", label: "Signatory", defaultSelected: false, widthPdf: 1.2 },
   { key: "primary_sales_rep", label: "Primary Sales Rep*", defaultSelected: true, widthPdf: 1.3 },
   { key: "secondary_sales_reps", label: "Secondary Sales Reps*", defaultSelected: true, widthPdf: 1.5 },
@@ -150,10 +151,22 @@ export function DownloadQuotationsPreviewModal({
               .join(", ") || "—"
           : "—";
 
-      const leadObj = typeof q.lead === "object" && q.lead !== null ? q.lead : null;
+      const leadObj = typeof q.lead === "object" && q.lead !== null ? (q.lead as any) : null;
       const leadSource = leadObj
         ? `Lead: ${leadObj.lead_no || leadObj.organization_name || "Linked"}`
         : "Direct Quote";
+      const cityVal =
+        leadObj?.billing_address?.city ||
+        leadObj?.city ||
+        leadObj?.address?.city ||
+        q.address?.city ||
+        "—";
+      const stateVal =
+        leadObj?.billing_address?.state ||
+        leadObj?.state ||
+        leadObj?.address?.state ||
+        q.address?.state ||
+        "—";
 
       return {
         _id: q._id,
@@ -168,7 +181,8 @@ export function DownloadQuotationsPreviewModal({
         kind_attn: q.kind_attn || "—",
         phone: q.phone || "—",
         email: q.email || "—",
-        city: q.address?.city || "—",
+        city: cityVal,
+        state: stateVal,
         signatory_name: q.signatory_name || "—",
         primary_sales_rep: primarySalesRep,
         secondary_sales_reps: secondarySalesReps,
@@ -408,18 +422,18 @@ export function DownloadQuotationsPreviewModal({
                 <FileSpreadsheet className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
                   {title}
                   {scopeLabel && (
-                    <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">
+                    <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-bold uppercase text-primary">
                       {scopeLabel}
                     </span>
                   )}
-                  <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                  <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                     {tableRows.length} Proposals Selected
                   </span>
                 </h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {subtitle}
                 </p>
               </div>
@@ -439,8 +453,8 @@ export function DownloadQuotationsPreviewModal({
             {/* Column Selector Strip */}
             <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50/50 p-3.5 dark:border-white/10 dark:bg-slate-800/40">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-200/60 dark:border-white/5">
-                <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <Columns className="h-3.5 w-3.5 text-primary" />
+                <span className="text-sm font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Columns className="h-4 w-4 text-primary" />
                   Select Columns to Include ({selectedCount}/{DEFAULT_QUOTATION_COLUMNS.length})
                 </span>
 
@@ -448,16 +462,16 @@ export function DownloadQuotationsPreviewModal({
                   <button
                     type="button"
                     onClick={isAllSelected ? handleDeselectAll : handleSelectAll}
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                    className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline cursor-pointer"
                   >
-                    {isAllSelected ? <Square className="h-3 w-3" /> : <CheckSquare className="h-3 w-3" />}
+                    {isAllSelected ? <Square className="h-3.5 w-3.5" /> : <CheckSquare className="h-3.5 w-3.5" />}
                     {isAllSelected ? "Deselect All" : "Select All"}
                   </button>
                   <span className="text-slate-300 dark:text-slate-600">•</span>
                   <button
                     type="button"
                     onClick={handleResetDefaults}
-                    className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
+                    className="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
                   >
                     Reset Defaults
                   </button>
@@ -472,18 +486,18 @@ export function DownloadQuotationsPreviewModal({
                       key={col.key}
                       type="button"
                       onClick={() => handleToggleColumn(col.key)}
-                      className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition text-left cursor-pointer border ${isChecked
+                      className={`flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-sm font-semibold transition text-left cursor-pointer border ${isChecked
                         ? "border-emerald-500/40 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-500/30 font-bold"
                         : "border-slate-200 bg-white text-slate-500 hover:bg-slate-100 dark:border-white/5 dark:bg-slate-800 dark:text-slate-400"
                         }`}
                     >
                       <div
-                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-md border text-[10px] ${isChecked
+                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-md border text-[11px] ${isChecked
                           ? "border-emerald-600 bg-emerald-600 text-white"
                           : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700"
                           }`}
                       >
-                        {isChecked && <Check className="h-3 w-3" />}
+                        {isChecked && <Check className="h-3.5 w-3.5" />}
                       </div>
                       <span className="truncate">{col.label.replace("*", "")}</span>
                     </button>
@@ -495,18 +509,18 @@ export function DownloadQuotationsPreviewModal({
             {/* Live Data Preview Table */}
             <div className="flex-1 flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-800/30">
               <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-white/5">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <Eye className="h-3.5 w-3.5 text-slate-500" />
+                <span className="text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Eye className="h-4 w-4 text-slate-500" />
                   Live Table Export Preview ({tableRows.length} records)
                 </span>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-xs text-slate-400">
                   Showing first {Math.min(tableRows.length, 10)} preview rows
                 </span>
               </div>
 
               <div className="flex-1 overflow-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-100/80 dark:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-200 sticky top-0 border-b border-slate-200 dark:border-white/10 z-10">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead className="bg-slate-100/80 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 sticky top-0 border-b border-slate-200 dark:border-white/10 z-10">
                     <tr>
                       <th className="py-2.5 px-3 w-10 text-center">#</th>
                       {selectedColumns.map((col) => (
@@ -516,7 +530,7 @@ export function DownloadQuotationsPreviewModal({
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-slate-600 dark:text-slate-300">
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-slate-600 dark:text-slate-300 text-sm">
                     {tableRows.length === 0 ? (
                       <tr>
                         <td
@@ -529,7 +543,7 @@ export function DownloadQuotationsPreviewModal({
                     ) : (
                       tableRows.slice(0, 10).map((row, idx) => (
                         <tr key={row._id || idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                          <td className="py-2 px-3 text-center text-slate-400 font-mono text-[10px]">
+                          <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-xs">
                             {idx + 1}
                           </td>
                           {selectedColumns.map((col) => {
@@ -537,7 +551,7 @@ export function DownloadQuotationsPreviewModal({
                               const deptsText = (row as any).departments || "";
                               const splitDepts = deptsText ? deptsText.split(", ").filter(Boolean) : [];
                               return (
-                                <td key={col.key} className="py-2 px-3 whitespace-nowrap">
+                                <td key={col.key} className="py-2.5 px-3 whitespace-nowrap">
                                   {splitDepts.length === 0 || deptsText === "—" ? (
                                     <span className="text-slate-400 italic">—</span>
                                   ) : (
@@ -545,7 +559,7 @@ export function DownloadQuotationsPreviewModal({
                                       {splitDepts.map((d: string) => (
                                         <span
                                           key={d}
-                                          className="inline-flex items-center rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 ring-1 ring-inset ring-purple-600/20 dark:bg-purple-950/40 dark:text-purple-300 dark:ring-purple-500/30"
+                                          className="inline-flex items-center rounded-md bg-purple-50 px-2 py-0.5 text-xs font-semibold text-purple-700 ring-1 ring-inset ring-purple-600/20 dark:bg-purple-950/40 dark:text-purple-300 dark:ring-purple-500/30"
                                         >
                                           {d}
                                         </span>
@@ -556,7 +570,7 @@ export function DownloadQuotationsPreviewModal({
                               );
                             }
                             return (
-                              <td key={col.key} className="py-2 px-3 whitespace-nowrap">
+                              <td key={col.key} className="py-2.5 px-3 whitespace-nowrap">
                                 {(row as any)[col.key] || "—"}
                               </td>
                             );
@@ -575,7 +589,7 @@ export function DownloadQuotationsPreviewModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 transition-colors"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -584,7 +598,7 @@ export function DownloadQuotationsPreviewModal({
               <button
                 type="button"
                 onClick={exportToCSV}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 transition-colors cursor-pointer"
               >
                 <Download className="h-4 w-4 text-slate-600" />
                 Export CSV (.csv)
@@ -593,7 +607,7 @@ export function DownloadQuotationsPreviewModal({
               <button
                 type="button"
                 onClick={exportToPDF}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 transition-colors cursor-pointer"
               >
                 <FileText className="h-4 w-4 text-indigo-600" />
                 Export PDF (.pdf)
@@ -602,7 +616,7 @@ export function DownloadQuotationsPreviewModal({
               <button
                 type="button"
                 onClick={exportToExcel}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4.5 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:opacity-95 transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2 text-sm font-bold text-white shadow-md shadow-emerald-600/20 hover:opacity-95 transition-all cursor-pointer"
               >
                 <FileSpreadsheet className="h-4 w-4" />
                 Download Excel Report (.xlsx)

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X, Filter, RotateCcw, Check, Search, ChevronDown } from "lucide-react";
-import { getLeadManagerPortalRole, getDeptLabel } from "../leadUtils";
+import { getLeadManagerPortalRole, getDeptLabel, DEFAULT_INDUSTRIES } from "../leadUtils";
 import { useLeadDepartmentOptions } from "../useLeadDepartmentOptions";
 
 export type MultiSelectOption = {
@@ -174,6 +174,11 @@ const PRIORITY_OPTIONS: MultiSelectOption[] = [
   { value: "low", label: "Low" },
 ];
 
+const INDUSTRY_MULTI_SELECT_OPTIONS: MultiSelectOption[] = DEFAULT_INDUSTRIES.map((ind) => ({
+  value: ind,
+  label: ind,
+}));
+
 interface FilterDrawerProps {
   open: boolean;
   onClose: () => void;
@@ -185,6 +190,8 @@ interface FilterDrawerProps {
   setDepartmentFilter: (val: string[]) => void;
   sourceFilter: string[];
   setSourceFilter: (val: string[]) => void;
+  industryFilter?: string[];
+  setIndustryFilter?: (val: string[]) => void;
   statusFilter: string[];
   setStatusFilter: (val: string[]) => void;
   priorityFilter: string[];
@@ -248,6 +255,8 @@ export function LeadFilterDrawer({
   setDepartmentFilter,
   sourceFilter,
   setSourceFilter,
+  industryFilter = [],
+  setIndustryFilter,
   statusFilter,
   setStatusFilter,
   priorityFilter,
@@ -430,6 +439,16 @@ export function LeadFilterDrawer({
               selected={sourceFilter}
               onChange={setSourceFilter}
             />
+
+            {setIndustryFilter && (
+              <SearchableMultiSelect
+                label="Industry / Domain"
+                placeholder="All industries"
+                options={INDUSTRY_MULTI_SELECT_OPTIONS}
+                selected={industryFilter}
+                onChange={setIndustryFilter}
+              />
+            )}
 
             <SearchableMultiSelect
               label="Pipeline Status"
