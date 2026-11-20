@@ -95,6 +95,10 @@ function startSchedulers() {
     { timezone: timeZone }
   );
   logger.info(`[scheduler] quotation pre-expiry alerts scheduled at cron="${quoteAlertCron}" tz="${timeZone}"`);
+
+  // 6. IndiaMART Hourly Lead Pull Scheduler
+  const { runIndiaMartPullScheduler } = require('./indiamartPullJob');
+  runIndiaMartPullScheduler({ timeZone });
 }
 
 module.exports = {

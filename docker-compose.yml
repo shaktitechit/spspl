@@ -165,6 +165,9 @@ services:
       OPMS_BACKEND_URL: ${OPMS_BACKEND_URL:-http://opms-backend:7001}
       MESSAGE_SERVICE_URL: ${MESSAGE_SERVICE_URL:-http://message-service:7011}
       NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL:-http://notification-service:7012}
+      INDIAMART_CRM_KEY: ${INDIAMART_CRM_KEY:-gIhfk7cDWoxdqBeFv+sb7kevHW7O1Axy}
+      INDIAMART_PULL_ENABLED: ${INDIAMART_PULL_ENABLED:-true}
+      INDIAMART_PULL_CRON: ${INDIAMART_PULL_CRON:-0 * * * *}
     depends_on:
       auth-service:
         condition: service_healthy

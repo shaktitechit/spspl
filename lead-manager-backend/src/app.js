@@ -19,6 +19,7 @@ const termsAndConditionsRoutes = require('./modules/terms_and_conditions/terms_a
 const teamRoutes = require('./modules/team/team.routes');
 const leadUserRosterRoutes = require('./modules/users/user.routes');
 const indiamartWebhookRoutes = require('./modules/webhooks/indiamart/indiamart.routes');
+const indiamartPullRoutes = require('./modules/integrations/indiamart/indiamartPull.routes');
 const { proxyToAuthService } = require('./utils/proxyToAuthService');
 const { proxyToMessageService } = require('./utils/proxyToMessageService');
 const { proxyToNotificationService } = require('./utils/proxyToNotificationService');
@@ -53,6 +54,7 @@ app.use('/api/lead-masters', leadMasterRoutes);
 app.use('/api/quotations', quotationRoutes);
 app.use('/api/attachments', attachmentRoutes);
 app.use('/api/terms-and-conditions', termsAndConditionsRoutes);
+app.use('/api/integrations/indiamart', indiamartPullRoutes);
 app.use('/api/notifications', proxyToNotificationService);
 app.use('/api/emails', proxyToMessageService);
 app.use('/api/messages', proxyToMessageService);
