@@ -256,4 +256,9 @@ const leadQuotationSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+leadQuotationSchema.index({ deletedAt: 1, createdAt: -1 });
+leadQuotationSchema.index({ deletedAt: 1, created_by: 1, createdAt: -1 });
+leadQuotationSchema.index({ deletedAt: 1, sales_person_user: 1, createdAt: -1 });
+leadQuotationSchema.index({ deletedAt: 1, status: 1, createdAt: -1 });
+
 export default mongoose.models.LeadQuotation || mongoose.model("LeadQuotation", leadQuotationSchema);

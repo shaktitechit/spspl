@@ -8,7 +8,7 @@
 import React, { useRef, useMemo, useState } from "react";
 import Link from "next/link";
 import { X, Printer, FileText, Lock, Copy, History } from "lucide-react";
-import { useGetCompanyInfoQuery, type LeadQuotationRecord } from "@/store/api";
+import { useGetCompanyInfoQuery, useGetQuotationQuery, type LeadQuotationRecord } from "@/store/api";
 import { useAppSelector } from "@/store/hooks";
 import { readSessionFromStorage } from "@/utils/authStorage";
 import QuotationPdfTemplate from "../QuotationPdfTemplate";
@@ -22,7 +22,7 @@ type Props = {
 };
 
 export function QuotationViewModal({
-  quotation,
+  quotation: initialQuotation,
   open,
   onClose,
   portalLabel = "Lead Manager",
@@ -32,6 +32,11 @@ export function QuotationViewModal({
   const reduxUser = useAppSelector((s) => s.auth.user);
   const sessionUser = useMemo(() => (typeof window !== "undefined" ? readSessionFromStorage()?.user || null : null), []);
   const authUser = (reduxUser || sessionUser) as any;
+
+  const { data: fetchedQuotation } = useGetQuotationQuery(initialQuotation?._id || "", {
+    skip: !open || !initialQuotation?._id,
+  });
+  const quotation = (fetchedQuotation || initialQuotation) as LeadQuotationRecord;
 
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
 

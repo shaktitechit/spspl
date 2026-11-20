@@ -16,8 +16,19 @@ export interface LeadManagerRoleState {
 }
 
 export function useLeadManagerRole(): LeadManagerRoleState {
-  const [session, setSession] = useState<UserSession | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<UserSession | null>(() => {
+    if (typeof window !== "undefined") {
+      return readSessionFromStorage();
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const s = readSessionFromStorage();
+      return !s;
+    }
+    return true;
+  });
 
   useEffect(() => {
     const s = readSessionFromStorage();

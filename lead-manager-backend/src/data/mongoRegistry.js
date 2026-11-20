@@ -643,6 +643,10 @@ function registerModels() {
       { timestamps: true }
     );
     leadQuotationSchema.plugin(softDeletePlugin);
+    leadQuotationSchema.index({ deletedAt: 1, createdAt: -1 });
+    leadQuotationSchema.index({ deletedAt: 1, created_by: 1, createdAt: -1 });
+    leadQuotationSchema.index({ deletedAt: 1, sales_person_user: 1, createdAt: -1 });
+    leadQuotationSchema.index({ deletedAt: 1, status: 1, createdAt: -1 });
     mongoose.model('LeadQuotation', leadQuotationSchema);
   }
 

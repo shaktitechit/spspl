@@ -7,9 +7,13 @@ const jwt = require('jsonwebtoken');
 const { JWT_SECRET, AUTH_SERVICE_URL } = require('../config/env');
 const { ApiError } = require('../utils/ApiError');
 
+// Short-lived in-memory cache for validated tokens to eliminate repeated auth-service HTTP hops
+const tokenUserCache = new Map();
+const AUTH_CACHE_TTL_MS = 60 * 1000; // 60 seconds
+
 /**
  * Verifies the JWT signature, then loads the live user from auth-service (/me).
- * Falls back to JWT claims only if auth-service is unreachable.
+ * Uses a fast in-memory cache (60s TTL) and falls back to JWT claims if auth-service is unreachable.
  */
 async function authMiddleware(req, res, next) {
   req.user = null;
@@ -27,6 +31,14 @@ async function authMiddleware(req, res, next) {
   try {
     const payload = jwt.verify(rawToken, JWT_SECRET);
 
+    // Fast path: check in-memory cache
+    const now = Date.now();
+    const cached = tokenUserCache.get(rawToken);
+    if (cached && (now - cached.timestamp < AUTH_CACHE_TTL_MS)) {
+      req.user = cached.user;
+      return next();
+    }
+
     try {
       const resp = await axios.get(`${AUTH_SERVICE_URL.replace(/\/$/, '')}/api/auth/me`, {
         headers: { Authorization: `Bearer ${rawToken}` },
@@ -34,6 +46,13 @@ async function authMiddleware(req, res, next) {
       });
       if (resp.data?.user) {
         req.user = resp.data.user;
+        tokenUserCache.set(rawToken, { user: resp.data.user, timestamp: now });
+        if (tokenUserCache.size > 2000) {
+          const expireThreshold = now - AUTH_CACHE_TTL_MS;
+          for (const [k, v] of tokenUserCache.entries()) {
+            if (v.timestamp < expireThreshold) tokenUserCache.delete(k);
+          }
+        }
         return next();
       }
     } catch (_lookupErr) {
@@ -50,6 +69,7 @@ async function authMiddleware(req, res, next) {
         role_codes: payload.role_codes || [],
         portals: payload.portals || [],
       };
+      tokenUserCache.set(rawToken, { user: req.user, timestamp: now });
     }
     return next();
   } catch (_e) {

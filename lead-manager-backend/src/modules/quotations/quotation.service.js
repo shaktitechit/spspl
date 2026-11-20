@@ -853,14 +853,28 @@ async function checkAndSendPreExpiryAlerts() {
   }
 }
 
+// Background auto-expiry throttle (runs asynchronously without blocking requests, at most once per 15 minutes)
+let lastAutoExpireRun = 0;
+function triggerBackgroundAutoExpire() {
+  const now = Date.now();
+  if (now - lastAutoExpireRun > 15 * 60 * 1000) {
+    lastAutoExpireRun = now;
+    setImmediate(() => {
+      autoExpireQuotations().catch((err) => {
+        logger.error(`[Quotation Service] background autoExpireQuotations error: ${err.message}`);
+      });
+    });
+  }
+}
+
 /**
  * List all quotations with filtering and pagination.
  */
 async function listAll(query = {}, user) {
   const { LeadQuotation } = getModels();
 
-  // Run lazy auto-expiry for any active quotes past validity date
-  await autoExpireQuotations().catch(() => {});
+  // Run lazy auto-expiry in background without blocking read request
+  triggerBackgroundAutoExpire();
 
   const filter = { deletedAt: null };
   const conditions = [];
@@ -952,7 +966,13 @@ async function listAll(query = {}, user) {
   const limit = fetchAll ? 0 : Math.max(1, parseInt(query.limit, 10) || 50);
   const skip = fetchAll ? 0 : (page - 1) * limit;
 
-  let findQuery = LeadQuotation.find(filter)
+  let findQuery = LeadQuotation.find(filter);
+
+  if (!query.include_revisions) {
+    findQuery = findQuery.select('-revision_history -proforma_details -validity_extension_history');
+  }
+
+  findQuery = findQuery
     .populate('lead', 'lead_no organization_name first_name last_name name company_name status assigned_to billing_address address city state')
     .populate('created_by', 'name email department')
     .populate('sales_person_user', 'name email department phone designation')
@@ -963,10 +983,18 @@ async function listAll(query = {}, user) {
     findQuery = findQuery.skip(skip).limit(limit);
   }
 
-  const [total, quotations] = await Promise.all([
-    LeadQuotation.countDocuments(filter),
-    findQuery.lean(),
-  ]);
+  let quotations;
+  let total;
+
+  if (fetchAll) {
+    quotations = await findQuery.lean();
+    total = quotations.length;
+  } else {
+    [total, quotations] = await Promise.all([
+      LeadQuotation.countDocuments(filter),
+      findQuery.lean(),
+    ]);
+  }
 
   return {
     quotations,
@@ -2308,7 +2336,7 @@ async function reviseQuotation(quotationId, user) {
  */
 async function getDashboardStats(query = {}, user) {
   const { LeadQuotation } = getModels();
-  await autoExpireQuotations().catch(() => {});
+  triggerBackgroundAutoExpire();
   const andConditions = [{ deletedAt: null }];
 
   const visibilityFilter = user ? await buildQuotationVisibilityFilter(user) : {};
