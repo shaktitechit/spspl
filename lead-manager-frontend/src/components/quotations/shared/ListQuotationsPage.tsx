@@ -86,7 +86,6 @@ import { DownloadQuotationsPreviewModal } from "./modals/DownloadQuotationsPrevi
 import { QuotationFilterDrawer } from "./QuotationFilterDrawer";
 import type { MultiSelectOption } from "@/components/leads/shared/LeadFilterDrawer";
 import { TableSkeletonRows, CardSkeletonFeed } from "@/components/shared/Skeletons";
-import { PortalBusyOverlay } from "@/components/portal/shared/PortalBusyOverlay";
 import {
   LEAD_DEPARTMENT_OPTIONS,
   getLeadDepartments,
@@ -212,11 +211,8 @@ export function ListQuotationsPage({
     return "my";
   }, [effectiveScope]);
 
-  // RTK Query API call — fetch all quotations within the active scope so listing, filtering, and export cover all records
+  // RTK Query API call — fetch all quotations once for active scope; filtering, sorting, and export are performed instantly in memory
   const { data: rawQuotations, isLoading, isFetching, refetch } = useListQuotationsQuery({
-    search: searchTerm || undefined,
-    status: statusFilter.length === 1 ? statusFilter[0] : undefined,
-    department: departmentFilter.length === 1 ? departmentFilter[0] : undefined,
     scope: apiScope,
     limit: "all",
     all: true,
@@ -622,8 +618,6 @@ export function ListQuotationsPage({
 
   return (
     <div className="relative min-h-screen space-y-5 pb-24 font-sans">
-      <PortalBusyOverlay active={isFetching && !isLoading} />
-
       {/* Top Header Banner */}
       <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs transition-colors">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
