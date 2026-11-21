@@ -5,6 +5,7 @@
 const mongoose = require('mongoose');
 const { getModels } = require('../../data/mongoRegistry');
 const { isAdmin, isManager, isCoordinator } = require('../../middlewares/leadManagerAuth.middleware');
+const cacheService = require('../../services/cache.service');
 
 function userId(user) {
   return user?._id || user?.id;
@@ -29,8 +30,15 @@ async function getVisibleLeadUserIds(user) {
   const uid = String(userId(user) || '');
   if (!uid) return [];
 
+  const cacheKey = `lm:team:visible:${uid}`;
+  const cached = await cacheService.get(cacheKey);
+  if (Array.isArray(cached)) {
+    return cached;
+  }
+
   const { LeadReportingEdge } = getModels();
 
+  let result = [uid];
   if (isManager(user) || isCoordinator(user)) {
     const visited = new Set();
     let currentLevel = [asObjectId(uid)].filter(Boolean);
@@ -57,10 +65,11 @@ async function getVisibleLeadUserIds(user) {
       depth++;
     }
 
-    return [...new Set([uid, ...Array.from(visited)])];
+    result = [...new Set([uid, ...Array.from(visited)])];
   }
 
-  return [uid];
+  await cacheService.set(cacheKey, result, 3600);
+  return result;
 }
 
 async function canAccessLeadUser(actor, targetUserRef) {

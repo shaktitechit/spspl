@@ -597,10 +597,24 @@ async function getQuotationConversionFunnel(query = {}, user) {
   };
 }
 
+const crypto = require('crypto');
+const cacheService = require('../../services/cache.service');
+
+function cachedReport(reportName, fn, ttlSec = 90) {
+  return async function (query = {}, user) {
+    const hash = crypto
+      .createHash('md5')
+      .update(JSON.stringify({ query, uid: user?._id || 'all' }))
+      .digest('hex');
+    const cacheKey = `lm:reports:quot:${reportName}:${hash}`;
+    return await cacheService.getOrSet(cacheKey, () => fn(query, user), ttlSec);
+  };
+}
+
 module.exports = {
-  getQuotationSummaryReport,
-  getQuotationSalesPerformance,
-  getQuotationMonthlyTrends,
-  getQuotationProductBreakdown,
-  getQuotationConversionFunnel,
+  getQuotationSummaryReport: cachedReport('summary', getQuotationSummaryReport),
+  getQuotationSalesPerformance: cachedReport('sales_performance', getQuotationSalesPerformance),
+  getQuotationMonthlyTrends: cachedReport('monthly_trends', getQuotationMonthlyTrends),
+  getQuotationProductBreakdown: cachedReport('products', getQuotationProductBreakdown),
+  getQuotationConversionFunnel: cachedReport('funnel', getQuotationConversionFunnel),
 };

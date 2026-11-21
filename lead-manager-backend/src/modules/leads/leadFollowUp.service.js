@@ -7,6 +7,7 @@ const { toPlain } = require('../../utils/mongoJson');
 const { ApiError } = require('../../utils/ApiError');
 const activityService = require('../activity/activity.service');
 const notificationService = require('../notifications/notification.service');
+const cacheService = require('../../services/cache.service');
 const {
   isLeadAdmin,
   isLeadManager,
@@ -91,6 +92,7 @@ async function createForLead(leadId, body, user) {
     });
   }
 
+  await cacheService.invalidateLead(leadId);
   return plain;
 }
 
@@ -185,6 +187,8 @@ async function complete(followUpId, body, user) {
     message: `Follow-up completed: ${body.outcome}`,
     new_value: plain,
   });
+
+  await cacheService.invalidateLead(lead._id);
 
   return {
     completed: plain,
@@ -661,6 +665,9 @@ async function addAction(followUpId, body, user) {
     .populate('completed_by', 'name email department')
     .populate('actions.author', 'name email department')
     .lean();
+
+  if (fu.lead) await cacheService.invalidateLead(fu.lead);
+  if (fu.quotation) await cacheService.invalidateQuotation(fu.quotation);
 
   return toPlain(populated);
 }

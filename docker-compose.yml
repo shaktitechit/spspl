@@ -161,6 +161,8 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${LEAD_MANAGER_BACKEND_PORT:-7009}
+      # Always build from REDIS_PASSWORD so a stale unauthenticated REDIS_URL in env_file cannot win
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:7003}
       OPMS_BACKEND_URL: ${OPMS_BACKEND_URL:-http://opms-backend:7001}
       MESSAGE_SERVICE_URL: ${MESSAGE_SERVICE_URL:-http://message-service:7011}
@@ -169,6 +171,8 @@ services:
       INDIAMART_PULL_ENABLED: ${INDIAMART_PULL_ENABLED:-true}
       INDIAMART_PULL_CRON: ${INDIAMART_PULL_CRON:-0 * * * *}
     depends_on:
+      redis:
+        condition: service_healthy
       auth-service:
         condition: service_healthy
       opms-backend:

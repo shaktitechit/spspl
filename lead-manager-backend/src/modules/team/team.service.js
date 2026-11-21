@@ -4,6 +4,7 @@
  */
 const { getModels } = require('../../data/mongoRegistry');
 const { ApiError } = require('../../utils/ApiError');
+const cacheService = require('../../services/cache.service');
 const {
   isAdmin,
   isManager,
@@ -164,6 +165,7 @@ async function upsertEdge(body, actor) {
     .populate('manager', 'name email department portals')
     .lean();
 
+  await cacheService.invalidateTeamVisibility();
   return edge;
 }
 
@@ -191,6 +193,7 @@ async function removeEdge(subordinateId, managerId, actor) {
     );
   }
 
+  await cacheService.invalidateTeamVisibility();
   return {
     success: true,
     subordinate: String(subordinateId),

@@ -1358,13 +1358,27 @@ async function getFollowUpAnalyticsReport(query = {}, user) {
   };
 }
 
+const crypto = require('crypto');
+const cacheService = require('../../services/cache.service');
+
+function cachedReport(reportName, fn, ttlSec = 90) {
+  return async function (query = {}, user) {
+    const hash = crypto
+      .createHash('md5')
+      .update(JSON.stringify({ query, uid: user?._id || 'all' }))
+      .digest('hex');
+    const cacheKey = `lm:reports:lead:${reportName}:${hash}`;
+    return await cacheService.getOrSet(cacheKey, () => fn(query, user), ttlSec);
+  };
+}
+
 module.exports = {
-  getDashboardStats,
-  getSalesFunnel,
-  getSalesPerformance,
-  getSourcePerformance: getLeadSourcePerformance,
-  getLeadSourcePerformance,
-  getLeadMonthlyTrends,
-  getLeadProductBreakdown,
-  getFollowUpAnalyticsReport,
+  getDashboardStats: cachedReport('dashboard', getDashboardStats),
+  getSalesFunnel: cachedReport('funnel', getSalesFunnel),
+  getSalesPerformance: cachedReport('sales_performance', getSalesPerformance),
+  getSourcePerformance: cachedReport('source_performance', getLeadSourcePerformance),
+  getLeadSourcePerformance: cachedReport('source_performance', getLeadSourcePerformance),
+  getLeadMonthlyTrends: cachedReport('monthly_trends', getLeadMonthlyTrends),
+  getLeadProductBreakdown: cachedReport('products', getLeadProductBreakdown),
+  getFollowUpAnalyticsReport: cachedReport('follow_ups', getFollowUpAnalyticsReport),
 };

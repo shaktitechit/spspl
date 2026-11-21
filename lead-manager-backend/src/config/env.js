@@ -28,4 +28,11 @@ module.exports = {
   INDIAMART_CRM_KEY: process.env.INDIAMART_CRM_KEY || 'gIhfk7cDWoxdqBeFv+sb7kevHW7O1Axy',
   INDIAMART_PULL_ENABLED: process.env.INDIAMART_PULL_ENABLED ?? 'true',
   INDIAMART_PULL_CRON: process.env.INDIAMART_PULL_CRON || '0 * * * *',
+  REDIS_URL:
+    process.env.REDIS_URL ||
+    (process.env.REDIS_PASSWORD
+      ? `redis://:${process.env.REDIS_PASSWORD}@127.0.0.1:${process.env.REDIS_PORT || 7014}`
+      : 'redis://:replace-with-redis-password@127.0.0.1:7014'),
+  REDIS_CACHE_ENABLED: process.env.REDIS_CACHE_ENABLED !== 'false',
+  REDIS_DEFAULT_TTL_SEC: Number(process.env.REDIS_DEFAULT_TTL_SEC) || 7200,
 };

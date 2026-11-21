@@ -5,6 +5,7 @@
 const { getModels } = require('../../data/mongoRegistry');
 const { toPlain } = require('../../utils/mongoJson');
 const { ApiError } = require('../../utils/ApiError');
+const cacheService = require('../../services/cache.service');
 const {
   softDeleteActiveById,
   restoreSoftDeletedById,
@@ -15,9 +16,11 @@ const {
  * -------------------------------------------------- */
 
 async function listSources() {
-  const { LeadSource } = getModels();
-  const rows = await LeadSource.find({ deletedAt: null }).sort({ is_system: -1, name: 1 }).lean();
-  return rows.map(toPlain);
+  return await cacheService.getOrSet('lm:masters:sources', async () => {
+    const { LeadSource } = getModels();
+    const rows = await LeadSource.find({ deletedAt: null }).sort({ is_system: -1, name: 1 }).lean();
+    return rows.map(toPlain);
+  }, 86400);
 }
 
 async function createSource(body, user) {
@@ -43,6 +46,7 @@ async function createSource(body, user) {
     updated_by: user._id,
   });
 
+  await cacheService.del('lm:masters:sources');
   return toPlain(doc.toObject());
 }
 
@@ -67,6 +71,7 @@ async function updateSource(id, body, user) {
   doc.updated_by = user._id;
 
   await doc.save();
+  await cacheService.del('lm:masters:sources');
   return toPlain(doc.toObject());
 }
 
@@ -75,6 +80,7 @@ async function deleteSource(id, user) {
   const doc = await softDeleteActiveById(LeadSource, id, {
     notFoundMessage: 'Lead source not found',
   });
+  await cacheService.del('lm:masters:sources');
   return toPlain(doc.toObject());
 }
 
@@ -83,9 +89,11 @@ async function deleteSource(id, user) {
  * -------------------------------------------------- */
 
 async function listLostReasons() {
-  const { LeadLostReason } = getModels();
-  const rows = await LeadLostReason.find({ deletedAt: null }).sort({ is_system: -1, name: 1 }).lean();
-  return rows.map(toPlain);
+  return await cacheService.getOrSet('lm:masters:lost_reasons', async () => {
+    const { LeadLostReason } = getModels();
+    const rows = await LeadLostReason.find({ deletedAt: null }).sort({ is_system: -1, name: 1 }).lean();
+    return rows.map(toPlain);
+  }, 86400);
 }
 
 async function createLostReason(body, user) {
@@ -111,6 +119,7 @@ async function createLostReason(body, user) {
     updated_by: user._id,
   });
 
+  await cacheService.del('lm:masters:lost_reasons');
   return toPlain(doc.toObject());
 }
 
@@ -135,6 +144,7 @@ async function updateLostReason(id, body, user) {
   doc.updated_by = user._id;
 
   await doc.save();
+  await cacheService.del('lm:masters:lost_reasons');
   return toPlain(doc.toObject());
 }
 
@@ -143,6 +153,7 @@ async function deleteLostReason(id, user) {
   const doc = await softDeleteActiveById(LeadLostReason, id, {
     notFoundMessage: 'Lost reason not found',
   });
+  await cacheService.del('lm:masters:lost_reasons');
   return toPlain(doc.toObject());
 }
 
@@ -185,12 +196,14 @@ async function ensureDefaultDepartments() {
 }
 
 async function listDepartments() {
-  const { LeadDepartment } = getModels();
-  await ensureDefaultDepartments();
-  const rows = await LeadDepartment.find({ deletedAt: null })
-    .sort({ sort_order: 1, is_system: -1, name: 1 })
-    .lean();
-  return rows.map(toPlain);
+  return await cacheService.getOrSet('lm:masters:departments', async () => {
+    const { LeadDepartment } = getModels();
+    await ensureDefaultDepartments();
+    const rows = await LeadDepartment.find({ deletedAt: null })
+      .sort({ sort_order: 1, is_system: -1, name: 1 })
+      .lean();
+    return rows.map(toPlain);
+  }, 86400);
 }
 
 async function createDepartment(body, user) {
@@ -221,6 +234,7 @@ async function createDepartment(body, user) {
     updated_by: user._id,
   });
 
+  await cacheService.del('lm:masters:departments');
   return toPlain(doc.toObject());
 }
 
@@ -248,6 +262,7 @@ async function updateDepartment(id, body, user) {
   doc.updated_by = user._id;
 
   await doc.save();
+  await cacheService.del('lm:masters:departments');
   return toPlain(doc.toObject());
 }
 
@@ -256,6 +271,7 @@ async function deleteDepartment(id) {
   const doc = await softDeleteActiveById(LeadDepartment, id, {
     notFoundMessage: 'Department not found',
   });
+  await cacheService.del('lm:masters:departments');
   return toPlain(doc.toObject());
 }
 

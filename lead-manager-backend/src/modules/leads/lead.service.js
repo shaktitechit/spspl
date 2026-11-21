@@ -16,6 +16,7 @@ const {
 const activityService = require('../activity/activity.service');
 const notificationService = require('../notifications/notification.service');
 const autoEmailService = require('../auto_emails/autoEmail.service');
+const cacheService = require('../../services/cache.service');
 const { logger } = require('../../utils/logger');
 const { ALLOWED_STATUS_TRANSITIONS } = require('./lead.constants');
 const { getVisibleLeadUserIds, asObjectId } = require('../team/teamVisibility.service');
@@ -676,8 +677,19 @@ async function list(query = {}, user) {
   }
 
   if (!paginate) {
-    const items = await Lead.find(q).populate(LEAD_POPULATE).sort(sort).lean();
-    const enriched = await attachLastActionToLeads(items.map(toPlain));
+    const matchingDocs = await Lead.find(q).sort(sort).select('_id').lean();
+    const ids = matchingDocs.map((d) => d._id);
+    const enriched = await cacheService.mgetWithDbFallback(
+      ids,
+      'lm:lead:view:',
+      async (missingIds) => {
+        const missingItems = await Lead.find({ _id: { $in: missingIds } })
+          .populate(LEAD_POPULATE)
+          .lean();
+        return await attachLastActionToLeads(missingItems.map(toPlain));
+      },
+      7200
+    );
     return {
       items: enriched,
       total: enriched.length,
@@ -687,12 +699,23 @@ async function list(query = {}, user) {
     };
   }
 
-  const [items, total] = await Promise.all([
-    Lead.find(q).populate(LEAD_POPULATE).sort(sort).skip(skip).limit(limit).lean(),
+  const [matchingDocs, total] = await Promise.all([
+    Lead.find(q).sort(sort).skip(skip).limit(limit).select('_id').lean(),
     Lead.countDocuments(q),
   ]);
 
-  const enriched = await attachLastActionToLeads(items.map(toPlain));
+  const ids = matchingDocs.map((d) => d._id);
+  const enriched = await cacheService.mgetWithDbFallback(
+    ids,
+    'lm:lead:view:',
+    async (missingIds) => {
+      const missingItems = await Lead.find({ _id: { $in: missingIds } })
+        .populate(LEAD_POPULATE)
+        .lean();
+      return await attachLastActionToLeads(missingItems.map(toPlain));
+    },
+    7200
+  );
 
   return {
     items: enriched,
@@ -764,13 +787,23 @@ async function attachLastActionToLeads(plainItems) {
  * Get single lead by ID with populated references.
  */
 async function get(id, user) {
+  const cacheKey = `lm:lead:view:${id}`;
+  const cached = await cacheService.get(cacheKey);
+  if (cached) {
+    await assertCanAccessLead(cached, user, 'view');
+    return cached;
+  }
+
   const { Lead } = getModels();
   const row = await Lead.findOne({ _id: id, deletedAt: null }).populate(LEAD_POPULATE).lean();
   if (!row) throw new ApiError(404, 'Lead not found');
 
   await assertCanAccessLead(row, user, 'view');
-
-  return toPlain(row);
+  const plain = toPlain(row);
+  const enriched = await attachLastActionToLeads([plain]);
+  const result = enriched[0] || plain;
+  await cacheService.set(cacheKey, result, 7200);
+  return result;
 }
 
 /**
@@ -897,6 +930,7 @@ async function create(body, user) {
     });
   }
 
+  await cacheService.invalidateLead(plain._id);
   return plain;
 }
 
@@ -1048,6 +1082,7 @@ async function update(id, body, user) {
     });
   }
 
+  await cacheService.invalidateLead(id);
   return plain;
 }
 
@@ -1127,6 +1162,7 @@ async function assign(id, body, user) {
     isNewLead: false,
   });
 
+  await cacheService.invalidateLead(id);
   const populated = await Lead.findById(id).populate(LEAD_POPULATE).lean();
   return toPlain(populated);
 }
@@ -1179,6 +1215,7 @@ async function changeStatus(id, { status, remarks }, user) {
     new_value: { status },
   });
 
+  await cacheService.invalidateLead(id);
   const populated = await Lead.findById(id).populate(LEAD_POPULATE).lean();
   return toPlain(populated);
 }
@@ -1223,6 +1260,7 @@ async function qualify(id, qualificationData = {}, user) {
     new_value: lead.qualification,
   });
 
+  await cacheService.invalidateLead(id);
   const populated = await Lead.findById(id).populate(LEAD_POPULATE).lean();
   return toPlain(populated);
 }
@@ -1261,6 +1299,7 @@ async function markLost(id, { lost_reason, lost_remarks, lost_reason_id }, user)
     new_value: lead.lost_info,
   });
 
+  await cacheService.invalidateLead(id);
   const populated = await Lead.findById(id).populate(LEAD_POPULATE).lean();
   return toPlain(populated);
 }
@@ -1578,6 +1617,7 @@ async function convert(id, body = {}, user) {
     new_value: lead.conversion,
   });
 
+  await cacheService.invalidateLead(id);
   const populated = await Lead.findById(id).populate(LEAD_POPULATE).lean();
   return toPlain(populated);
 }
@@ -1669,6 +1709,7 @@ async function remove(id, user) {
     message: `Lead #${plain.lead_no} deleted`,
   });
 
+  await cacheService.invalidateLead(id);
   return plain;
 }
 
@@ -1694,6 +1735,7 @@ async function restore(id, user) {
     message: `Lead #${plain.lead_no} restored`,
   });
 
+  await cacheService.invalidateLead(id);
   return plain;
 }
 
@@ -1732,6 +1774,10 @@ async function bulkDelete(ids, user) {
       action: 'deleted',
       message: `Bulk soft-deleted ${deletedIds.length} leads: ${deletedNames.join(', ')}`,
     });
+  }
+
+  if (deletedIds.length > 0) {
+    await cacheService.invalidateLeads(deletedIds);
   }
 
   return {
@@ -1852,6 +1898,7 @@ async function bulkCreate(body, user) {
       action: 'created',
       message: `Bulk created ${createdLeads.length} leads (${errors.length} errors)`,
     });
+    await cacheService.invalidateReports('lead');
   }
 
   return {

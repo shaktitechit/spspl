@@ -18,6 +18,7 @@ const {
 } = require('../../middlewares/leadManagerAuth.middleware');
 const { getVisibleLeadUserIds, asObjectId } = require('../team/teamVisibility.service');
 const authService = require('../../services/authService');
+const cacheService = require('../../services/cache.service');
 const { generateOrderNo } = require('../../utils/generateOrderNo');
 const { resolveSalesRepFromQuotation } = require('../../utils/followUpSalesRep');
 const {
@@ -1123,35 +1124,44 @@ async function listAll(query = {}, user) {
   const limit = fetchAll ? 0 : Math.max(1, parseInt(query.limit, 10) || 10);
   const skip = fetchAll ? 0 : (page - 1) * limit;
 
-  let findQuery = LeadQuotation.find(filter);
-
-  if (!query.include_revisions) {
-    findQuery = findQuery.select('-revision_history -proforma_details -validity_extension_history');
-  }
-
-  findQuery = findQuery
-    .populate('lead', 'lead_no organization_name first_name last_name name company_name status assigned_to billing_address address city state')
-    .populate('created_by', 'name email department')
-    .populate('sales_person_user', 'name email department phone designation')
-    .populate('secondary_sales_persons.user', 'name email department phone designation')
-    .sort({ createdAt: -1 });
+  let idQuery = LeadQuotation.find(filter).sort({ createdAt: -1 }).select('_id');
 
   if (!fetchAll) {
-    findQuery = findQuery.skip(skip).limit(limit);
+    idQuery = idQuery.skip(skip).limit(limit);
   }
 
-  let quotations;
+  let matchingDocs;
   let total;
 
   if (fetchAll) {
-    quotations = await findQuery.lean();
-    total = quotations.length;
+    matchingDocs = await idQuery.lean();
+    total = matchingDocs.length;
   } else {
-    [total, quotations] = await Promise.all([
+    [total, matchingDocs] = await Promise.all([
       LeadQuotation.countDocuments(filter),
-      findQuery.lean(),
+      idQuery.lean(),
     ]);
   }
+
+  const ids = matchingDocs.map((d) => d._id);
+
+  const quotations = await cacheService.mgetWithDbFallback(
+    ids,
+    'lm:quot:list:',
+    async (missingIds) => {
+      let missingQuery = LeadQuotation.find({ _id: { $in: missingIds } });
+      if (!query.include_revisions) {
+        missingQuery = missingQuery.select('-revision_history -proforma_details -validity_extension_history');
+      }
+      return await missingQuery
+        .populate('lead', 'lead_no organization_name first_name last_name name company_name status assigned_to billing_address address city state')
+        .populate('created_by', 'name email department')
+        .populate('sales_person_user', 'name email department phone designation')
+        .populate('secondary_sales_persons.user', 'name email department phone designation')
+        .lean();
+    },
+    7200
+  );
 
   return {
     quotations,
@@ -1168,6 +1178,12 @@ async function listAll(query = {}, user) {
  * List quotations for a lead.
  */
 async function listByLead(leadId, user) {
+  const cacheKey = `lm:quot:by_lead:${leadId}:${user?._id || 'all'}`;
+  const cached = await cacheService.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const { Lead, LeadQuotation } = getModels();
 
   const lead = await Lead.findOne({ _id: leadId, deletedAt: null });
@@ -1188,6 +1204,7 @@ async function listByLead(leadId, user) {
     .sort({ createdAt: -1 })
     .lean();
 
+  await cacheService.set(cacheKey, quotations, 3600);
   return quotations;
 }
 
@@ -1466,6 +1483,7 @@ async function create(leadIdOrBody, bodyOrUser, userParam) {
     });
   }
 
+  await cacheService.invalidateQuotation(quotation._id, quotation.lead);
   return quotation;
 }
 
@@ -1473,6 +1491,13 @@ async function create(leadIdOrBody, bodyOrUser, userParam) {
  * Get quotation by id.
  */
 async function getById(id, user) {
+  const cacheKey = `lm:quot:detail:${id}`;
+  const cached = await cacheService.get(cacheKey);
+  if (cached) {
+    await assertQuotationVisible(id, user);
+    return cached;
+  }
+
   const { LeadQuotation } = getModels();
 
   // Lazy auto-expiry check for this quotation if past valid_until (skip for won/converted leads)
@@ -1488,6 +1513,7 @@ async function getById(id, user) {
   ) {
     raw.status = 'expired';
     await raw.save();
+    await cacheService.invalidateQuotation(id, raw.lead);
   }
 
   const quotation = await LeadQuotation.findOne({ _id: id, deletedAt: null })
@@ -1509,6 +1535,7 @@ async function getById(id, user) {
 
   if (!quotation) throw new ApiError(404, 'Quotation not found');
   await assertQuotationVisible(id, user);
+  await cacheService.set(cacheKey, quotation, 7200);
   return quotation;
 }
 
@@ -1912,6 +1939,7 @@ async function update(id, body, user) {
     });
   }
 
+  await cacheService.invalidateQuotation(id, quotation.lead);
   return quotation;
 }
 
@@ -1957,6 +1985,7 @@ async function submitForApproval(id, user) {
 
   await notifySignatoryApprovalRequest(quotation, user, { isResubmit: false });
 
+  await cacheService.invalidateQuotation(id, quotation.lead);
   return quotation;
 }
 
@@ -2038,6 +2067,10 @@ async function linkLead(quotationId, leadId, user) {
     }
   }
 
+  await cacheService.invalidateQuotation(quotationId, lead._id);
+  if (prevLeadId) await cacheService.invalidateLead(prevLeadId);
+  await cacheService.invalidateLead(lead._id);
+
   return { quotation, lead };
 }
 
@@ -2079,6 +2112,9 @@ async function unlinkLead(quotationId, user) {
     // Non-blocking
   }
 
+  await cacheService.invalidateQuotation(quotationId, prevLeadId);
+  await cacheService.invalidateLead(prevLeadId);
+
   return { quotation };
 }
 
@@ -2117,6 +2153,7 @@ async function remove(id, user) {
     },
   });
 
+  await cacheService.invalidateQuotation(id, quotation.lead);
   return { success: true };
 }
 
@@ -2168,6 +2205,7 @@ async function approve(id, user) {
 
   await notifyCreatorDecision(quotation, user, { approved: true });
 
+  await cacheService.invalidateQuotation(id, quotation.lead);
   return quotation;
 }
 
@@ -2221,6 +2259,7 @@ async function reject(id, reason, user) {
     rejectionReason: reason || 'Rejected by signatory',
   });
 
+  await cacheService.invalidateQuotation(id, quotation.lead);
   return quotation;
 }
 
@@ -2485,6 +2524,7 @@ async function reviseQuotation(quotationId, user) {
     });
   }
 
+  await cacheService.invalidateQuotation(quotationId, quotation.lead);
   return quotation;
 }
 
@@ -2492,6 +2532,12 @@ async function reviseQuotation(quotationId, user) {
  * Get dashboard KPI counters for Quotations commercial hub.
  */
 async function getDashboardStats(query = {}, user) {
+  const crypto = require('crypto');
+  const hash = crypto.createHash('md5').update(JSON.stringify({ query, uid: user?._id || 'all' })).digest('hex');
+  const cacheKey = `lm:reports:quot:dashboard:${hash}`;
+  const cached = await cacheService.get(cacheKey);
+  if (cached) return cached;
+
   const { LeadQuotation } = getModels();
   triggerBackgroundAutoExpire();
   const andConditions = [{ deletedAt: null }];
@@ -2588,7 +2634,7 @@ async function getDashboardStats(query = {}, user) {
     ? Math.round((acceptedCount / (activePipelineCount + acceptedCount)) * 100)
     : 0;
 
-  return {
+  const statsResult = {
     total_quotations: totalQuotations,
     draft_count: draftCount,
     pending_approval_count: pendingApprovalCount,
@@ -2607,6 +2653,9 @@ async function getDashboardStats(query = {}, user) {
     avg_discount_percent: avgDiscountPercent,
     win_rate: winRate,
   };
+
+  await cacheService.set(cacheKey, statsResult, 90);
+  return statsResult;
 }
 
 /**
@@ -3107,6 +3156,12 @@ async function convert(id, body = {}, user) {
     .populate('conversion.order_id', 'order_no status grand_total total_amount')
     .lean();
 
+  await cacheService.invalidateQuotation(id, quotation.lead);
+  if (quotation.lead) {
+    await cacheService.invalidateLead(quotation.lead._id || quotation.lead);
+  }
+  await cacheService.invalidateReports();
+
   return {
     quotation: populated,
     order: createdOrder,
@@ -3140,6 +3195,7 @@ async function markProformaIssued(id, user) {
     message: `Proforma Invoice generated for Quotation #${quotation.quotation_no}`,
   });
 
+  await cacheService.invalidateQuotation(id, quotation.lead);
   return getById(quotation._id, user);
 }
 
@@ -3202,6 +3258,7 @@ async function saveProformaDetails(id, body = {}, user) {
     new_value: quotation.proforma_details,
   });
 
+  await cacheService.invalidateQuotation(id, quotation.lead);
   return getById(quotation._id, user);
 }
 
@@ -3277,6 +3334,7 @@ async function extendValidity(id, body = {}, user) {
     },
   });
 
+  await cacheService.invalidateQuotation(id, quotation.lead);
   return getById(quotation._id, user);
 }
 
