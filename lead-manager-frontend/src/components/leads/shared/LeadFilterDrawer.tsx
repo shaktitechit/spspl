@@ -190,6 +190,7 @@ interface FilterDrawerProps {
   setDepartmentFilter: (val: string[]) => void;
   sourceFilter: string[];
   setSourceFilter: (val: string[]) => void;
+  hideSource?: boolean;
   industryFilter?: string[];
   setIndustryFilter?: (val: string[]) => void;
   statusFilter: string[];
@@ -255,6 +256,7 @@ export function LeadFilterDrawer({
   setDepartmentFilter,
   sourceFilter,
   setSourceFilter,
+  hideSource = false,
   industryFilter = [],
   setIndustryFilter,
   statusFilter,
@@ -432,13 +434,15 @@ export function LeadFilterDrawer({
               onChange={setDepartmentFilter}
             />
 
-            <SearchableMultiSelect
-              label="Source"
-              placeholder="All sources"
-              options={sourceOptions}
-              selected={sourceFilter}
-              onChange={setSourceFilter}
-            />
+            {!hideSource && (
+              <SearchableMultiSelect
+                label="Source"
+                placeholder="All sources"
+                options={sourceOptions}
+                selected={sourceFilter}
+                onChange={setSourceFilter}
+              />
+            )}
 
             {setIndustryFilter && (
               <SearchableMultiSelect

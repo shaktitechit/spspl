@@ -95,15 +95,67 @@ const CARD_CLASS =
   "rounded-xl border border-slate-200 bg-white p-3 shadow-xs dark:border-white/10 dark:bg-slate-900";
 const CARD_HEADER_CLASS =
   "flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 mb-2.5 dark:border-white/10";
-const LABEL_CLASS = "block text-xs font-semibold text-slate-700 dark:text-slate-300 leading-tight";
+const LABEL_CLASS = "block text-xs font-semibold text-slate-500 dark:text-slate-400 leading-tight transition-colors duration-150";
 const INPUT_CLASS =
-  "mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white";
+  "mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-500 placeholder:text-slate-400 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-slate-400";
 const SELECT_CLASS =
-  "mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white disabled:opacity-50";
+  "mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-500 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-slate-400 disabled:opacity-50";
 const LOCKED_INPUT_CLASS =
-  "mt-1 w-full rounded-lg border border-slate-200 bg-slate-100/90 px-2.5 py-1.5 text-sm text-slate-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 font-medium";
+  "mt-1 w-full rounded-lg border border-slate-200 bg-slate-100/90 px-2.5 py-1.5 text-sm text-emerald-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-emerald-400 font-medium";
 const LOCKED_SELECT_CLASS =
-  "mt-1 w-full rounded-lg border border-slate-200 bg-slate-100/90 px-2.5 py-1.5 text-sm text-slate-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 font-medium disabled:opacity-70";
+  "mt-1 w-full rounded-lg border border-slate-200 bg-slate-100/90 px-2.5 py-1.5 text-sm text-emerald-700 shadow-xs cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-emerald-400 font-medium disabled:opacity-70";
+
+type FieldStatus = "active" | "filled" | "empty";
+
+const getLabelClass = (status: FieldStatus) => {
+  const base = "block text-xs font-semibold leading-tight transition-colors duration-150";
+  if (status === "active") {
+    return `${base} text-blue-600 dark:text-blue-400`;
+  }
+  if (status === "filled") {
+    return `${base} text-emerald-700 dark:text-emerald-400`;
+  }
+  return `${base} text-slate-500 dark:text-slate-400`;
+};
+
+const getInputClass = (status: FieldStatus, isLocked = false, isSelect = false) => {
+  if (isLocked) {
+    return isSelect ? LOCKED_SELECT_CLASS : LOCKED_INPUT_CLASS;
+  }
+  const base = "mt-1 w-full rounded-lg px-2.5 py-1.5 text-sm shadow-xs transition-all duration-150 focus:outline-none";
+  if (status === "active") {
+    return `${base} border-2 border-blue-500 bg-blue-50/20 text-blue-700 font-medium ring-2 ring-blue-500/20 dark:border-blue-400 dark:bg-blue-950/25 dark:text-blue-300`;
+  }
+  if (status === "filled") {
+    return `${base} border border-emerald-500/70 bg-emerald-50/15 text-emerald-700 font-medium hover:border-emerald-500 dark:border-emerald-500/60 dark:bg-emerald-950/20 dark:text-emerald-300`;
+  }
+  return `${base} border border-slate-200 bg-white text-slate-500 placeholder:text-slate-400 hover:border-slate-300 dark:border-white/10 dark:bg-slate-800 dark:text-slate-400 dark:placeholder:text-slate-500 ${isSelect ? "disabled:opacity-50" : ""}`;
+};
+
+const renderFieldStatusBadge = (status: FieldStatus, isRequired = false) => {
+  if (status === "active") {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 dark:text-blue-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+        Active
+      </span>
+    );
+  }
+  if (status === "filled") {
+    return (
+      <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+        <Check className="h-2.5 w-2.5 stroke-[3]" />
+        Filled
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 dark:text-slate-500">
+      <span className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-600" />
+      {isRequired ? "Required" : "Optional"}
+    </span>
+  );
+};
 
 const DEFAULT_SOURCES = [
   "Website",
@@ -202,7 +254,7 @@ export function LeadFormPage({
   const [addressLine1, setAddressLine1] = useState<string>("");
   const [addressLine2, setAddressLine2] = useState<string>("");
   const [countryId, setCountryId] = useState<string>("");
-  const [country, setCountry] = useState<string>("India");
+  const [country, setCountry] = useState<string>("");
   const [stateId, setStateId] = useState<string>("");
   const [state, setState] = useState<string>("");
   const [cityId, setCityId] = useState<string>("");
@@ -222,21 +274,6 @@ export function LeadFormPage({
     stateId ? { state_id: stateId, limit: 5000, status: "active" } : undefined,
     { skip: !stateId }
   );
-
-  // Auto-select India by default if no country selected
-  useEffect(() => {
-    if (!countryId && countriesData.length > 0) {
-      const india = countriesData.find(
-        (c) =>
-          c.name.trim().toLowerCase() === "india" ||
-          c.iso_code?.toUpperCase() === "IN"
-      );
-      if (india) {
-        setCountryId(india._id || india.id || "");
-        setCountry(india.name);
-      }
-    }
-  }, [countriesData, countryId]);
 
   // Match country name to country ID if set by text from lead or party
   useEffect(() => {
@@ -303,9 +340,9 @@ export function LeadFormPage({
   const [requirement, setRequirement] = useState<string>("");
   const [expectedClosingDate, setExpectedClosingDate] = useState<string>("");
 
-  const [source, setSource] = useState<string>("Website");
-  const [priority, setPriority] = useState<LeadPriority>("medium");
-  const [selectedDepartments, setSelectedDepartments] = useState<string[]>(["UPS/Batteries"]);
+  const [source, setSource] = useState<string>("");
+  const [priority, setPriority] = useState<LeadPriority | "">("");
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
   const { departmentOptions } = useLeadDepartmentOptions(selectedDepartments);
   const [createLeadDepartment, { isLoading: isCreatingDepartment }] = useCreateLeadDepartmentMutation();
   const [quickDeptOpen, setQuickDeptOpen] = useState(false);
@@ -313,6 +350,17 @@ export function LeadFormPage({
   const [createdBy, setCreatedBy] = useState<string>("");
   const [tagsInput, setTagsInput] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
+
+  // Active / Focused field tracker for human-friendly color guidance
+  const [activeField, setActiveField] = useState<string | null>(null);
+
+  const getFieldStatus = (val: unknown, fieldId: string): FieldStatus => {
+    if (activeField === fieldId) return "active";
+    if (Array.isArray(val)) return val.length > 0 ? "filled" : "empty";
+    if (typeof val === "number") return val > 0 ? "filled" : "empty";
+    if (typeof val === "string") return val.trim().length > 0 ? "filled" : "empty";
+    return Boolean(val) ? "filled" : "empty";
+  };
 
   const [products, setProducts] = useState<LeadProductItem[]>([]);
   const [contacts, setContacts] = useState<LeadContactItem[]>([]);
@@ -350,6 +398,17 @@ export function LeadFormPage({
   const canAssign = canAssignLead(authUser, portalHome);
   const [primaryAssigneeId, setPrimaryAssigneeId] = useState<string>("");
   const [secondaryAssigneeIds, setSecondaryAssigneeIds] = useState<string[]>([]);
+  const [secondarySearch, setSecondarySearch] = useState<string>("");
+
+  const effectivePrimaryId = canAssign
+    ? primaryAssigneeId
+    : (
+      primaryAssigneeId ||
+      (typeof existingLead?.assigned_to === "object"
+        ? existingLead?.assigned_to?._id
+        : existingLead?.assigned_to) ||
+      String(authUser?._id || authUser?.id || "")
+    );
 
   const handlePrimaryAssigneeChange = (userId: string) => {
     setPrimaryAssigneeId(userId);
@@ -359,7 +418,7 @@ export function LeadFormPage({
   };
 
   const toggleSecondaryAssignee = (userId: string) => {
-    if (userId === primaryAssigneeId) return;
+    if (userId === effectivePrimaryId) return;
     setSecondaryAssigneeIds((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
     );
@@ -396,7 +455,7 @@ export function LeadFormPage({
         setState(b.state || "");
         setStateId(b.state_id || "");
         setPincode(b.pincode || "");
-        setCountry(b.country || "India");
+        setCountry(b.country || "");
         setCountryId(b.country_id || "");
       }
 
@@ -405,15 +464,15 @@ export function LeadFormPage({
         setExpectedClosingDate(existingLead.expected_closing_date.split("T")[0]);
       }
 
-      setSource(existingLead.source || "Website");
-      setPriority(existingLead.priority || "medium");
+      setSource(existingLead.source || "");
+      setPriority(existingLead.priority || "");
       let existingDepts: string[] = [];
       if (Array.isArray(existingLead.departments) && existingLead.departments.length > 0) {
         existingDepts = existingLead.departments.filter(Boolean);
       } else if (existingLead.department) {
         existingDepts = existingLead.department.split(",").map((d) => d.trim()).filter(Boolean);
       }
-      setSelectedDepartments(existingDepts.length > 0 ? existingDepts : ["UPS/Batteries"]);
+      setSelectedDepartments(existingDepts);
 
       if (isCopyMode) {
         setCreatedBy(String(authUser?._id || authUser?.id || ""));
@@ -441,7 +500,9 @@ export function LeadFormPage({
           : typeof existingLead.assigned_to === "string"
             ? existingLead.assigned_to
             : "";
-      const resolvedPrimary = explicitPrimary || rawAssigned[0] || "";
+      const resolvedPrimary = isCopyMode && !canAssign
+        ? String(authUser?._id || authUser?.id || "")
+        : (explicitPrimary || rawAssigned[0] || (!canAssign ? String(authUser?._id || authUser?.id || "") : ""));
       setPrimaryAssigneeId(resolvedPrimary);
       setSecondaryAssigneeIds([...new Set(rawAssigned.filter((id) => id && id !== resolvedPrimary))]);
 
@@ -536,15 +597,40 @@ export function LeadFormPage({
   }>;
 
   useEffect(() => {
-    if (mode === "create" && !createdBy && authUser) {
-      setCreatedBy(String(authUser._id || authUser.id || ""));
+    if (mode === "create" && authUser) {
+      if (!createdBy) {
+        setCreatedBy(String(authUser._id || authUser.id || ""));
+      }
+      if (!canAssign && !primaryAssigneeId) {
+        setPrimaryAssigneeId(String(authUser._id || authUser.id || ""));
+      }
     }
-  }, [mode, createdBy, authUser]);
+  }, [mode, createdBy, authUser, canAssign, primaryAssigneeId]);
 
   const allPortalUsers = useMemo(() => {
     const filtered = rawUsers.filter(isUserInLeadManagerPortal);
     return filtered.length > 0 ? filtered : rawUsers;
   }, [rawUsers]);
+
+  const primaryUserDisplay = useMemo(() => {
+    if (!effectivePrimaryId) return null;
+    return (
+      allPortalUsers.find((u) => String(u._id) === String(effectivePrimaryId)) ||
+      (String(authUser?._id || authUser?.id || "") === String(effectivePrimaryId) ? authUser : null)
+    );
+  }, [allPortalUsers, effectivePrimaryId, authUser]);
+
+  const filteredSecondaryUsers = useMemo(() => {
+    if (!secondarySearch.trim()) return allPortalUsers;
+    const q = secondarySearch.toLowerCase().trim();
+    return allPortalUsers.filter(
+      (u) =>
+        u.name.toLowerCase().includes(q) ||
+        String(u.email || "").toLowerCase().includes(q) ||
+        String(u.department || "").toLowerCase().includes(q) ||
+        getDeptLabel(u.department || "").toLowerCase().includes(q)
+    );
+  }, [allPortalUsers, secondarySearch]);
 
   const toggleDepartment = (deptValue: string) => {
     setSelectedDepartments((prev) =>
@@ -946,15 +1032,19 @@ export function LeadFormPage({
       toast.error("Please select at least one department");
       return;
     }
+    if (!source.trim()) {
+      toast.error("Lead source is required");
+      return;
+    }
 
-    const cleanSecondary = secondaryAssigneeIds.filter((id) => id && id !== primaryAssigneeId);
-    const assignedUsersPayload = primaryAssigneeId
-      ? [primaryAssigneeId, ...cleanSecondary]
+    const cleanSecondary = secondaryAssigneeIds.filter((id) => id && id !== effectivePrimaryId);
+    const assignedUsersPayload = effectivePrimaryId
+      ? [effectivePrimaryId, ...cleanSecondary]
       : cleanSecondary;
 
     const assignmentFields = canAssign
       ? {
-        assigned_to: primaryAssigneeId || (mode === "edit" ? null : undefined),
+        assigned_to: effectivePrimaryId || (mode === "edit" ? null : undefined),
         assigned_users:
           assignedUsersPayload.length > 0
             ? assignedUsersPayload
@@ -962,19 +1052,10 @@ export function LeadFormPage({
               ? []
               : undefined,
       }
-      : mode === "edit"
-        ? {
-          assigned_to:
-            typeof existingLead?.assigned_to === "object"
-              ? existingLead?.assigned_to?._id
-              : existingLead?.assigned_to,
-          assigned_users: Array.isArray(existingLead?.assigned_users)
-            ? existingLead.assigned_users.map((u: any) =>
-              typeof u === "object" && u !== null ? u._id : String(u)
-            )
-            : undefined,
-        }
-        : {};
+      : {
+        ...(effectivePrimaryId ? { assigned_to: effectivePrimaryId } : {}),
+        assigned_users: assignedUsersPayload,
+      };
 
     const resolvedPartyId = selectedPartyId || "";
 
@@ -1000,7 +1081,7 @@ export function LeadFormPage({
         city: city.trim() || undefined,
         state: state.trim() || undefined,
         pincode: pincode.trim() || undefined,
-        country: country.trim() || "India",
+        country: country.trim() || undefined,
         country_id: countryId || undefined,
         state_id: stateId || undefined,
         city_id: cityId || undefined,
@@ -1009,7 +1090,7 @@ export function LeadFormPage({
       estimated_value: isAdmin ? productsEstimatedTotal : existingLead?.estimated_value,
       expected_closing_date: expectedClosingDate ? expectedClosingDate : undefined,
       source: source.trim(),
-      priority,
+      priority: (priority as LeadPriority) || "medium",
       ...assignmentFields,
       contacts: contacts
         .filter((c) => c.name?.trim() || c.phone?.trim() || c.email?.trim())
@@ -1046,6 +1127,70 @@ export function LeadFormPage({
       }
     } catch (err) {
       toast.error(mutationRejectedMessage(err));
+    }
+  };
+
+  // Human-Friendly Form Completion Guide Computations
+  const filledContactCount = [name, companyName, phone, email, alternatePhone, designation, industry, gstNo].filter((v) => Boolean(v && v.trim())).length;
+  const filledLocationCount = [addressLine1, addressLine2, countryId, stateId, cityId, pincode].filter((v) => Boolean(v && v.trim())).length;
+  const filledPipelineCount = [
+    selectedDepartments.length > 0,
+    Boolean(source && source.trim()),
+    Boolean(priority),
+    Boolean(expectedClosingDate),
+    Boolean(tagsInput && tagsInput.trim()),
+    Boolean(createdBy),
+    Boolean(primaryAssigneeId || effectivePrimaryId),
+  ].filter(Boolean).length;
+  const filledProductCount = [Boolean(requirement && requirement.trim()), products.length > 0].filter(Boolean).length;
+  const filledNotesCount = notes.trim().length > 0 ? 1 : 0;
+
+  const totalFilled = filledContactCount + filledLocationCount + filledPipelineCount + filledProductCount + filledNotesCount;
+  const totalFields = 24;
+
+  const mandatoryChecks = [
+    Boolean(name.trim()),
+    Boolean(phone.trim() || email.trim()),
+    Boolean(country.trim()),
+    Boolean(state.trim()),
+    Boolean(city.trim()),
+    selectedDepartments.length > 0,
+    Boolean(source.trim()),
+  ];
+  const mandatoryCount = mandatoryChecks.filter(Boolean).length;
+
+  const isContactActive = ["name", "companyName", "phone", "email", "alternatePhone", "designation", "industry", "gstNo"].includes(activeField || "");
+  const isLocationActive = ["addressLine1", "addressLine2", "country", "state", "city", "pincode"].includes(activeField || "");
+  const isPipelineActive = ["source", "priority", "expectedClosingDate", "tagsInput", "createdBy", "primaryAssignee", "departments"].includes(activeField || "");
+  const isProductActive = ["requirement", "product"].includes(activeField || "");
+  const isNotesActive = activeField === "notes";
+
+  const getActiveFieldLabel = (f: string | null) => {
+    switch (f) {
+      case "name": return "Contact Name";
+      case "companyName": return "Company Name";
+      case "phone": return "Phone";
+      case "email": return "Email";
+      case "alternatePhone": return "Alt Phone";
+      case "designation": return "Designation";
+      case "industry": return "Industry";
+      case "gstNo": return "GSTIN";
+      case "addressLine1": return "Address 1";
+      case "addressLine2": return "Address 2";
+      case "country": return "Country";
+      case "state": return "State";
+      case "city": return "City";
+      case "pincode": return "Pincode";
+      case "departments": return "Departments";
+      case "source": return "Lead Source";
+      case "priority": return "Priority";
+      case "expectedClosingDate": return "Closing Date";
+      case "tagsInput": return "Tags";
+      case "createdBy": return "Created By";
+      case "primaryAssignee": return "Primary Assignee";
+      case "requirement": return "Requirement";
+      case "notes": return "Internal Notes";
+      default: return f || "None";
     }
   };
 
@@ -1171,7 +1316,7 @@ export function LeadFormPage({
           {/* LEFT COLUMN: Contact Information & Location Address (6 cols) */}
           <div className="lg:col-span-6 space-y-2">
             {/* Card 1: Lead & Contact Information */}
-            <div className={CARD_CLASS}>
+            <div id="section-lead-contact" className={CARD_CLASS}>
               <div className={CARD_HEADER_CLASS}>
                 <div className="flex items-center gap-1.5">
                   <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -1179,12 +1324,26 @@ export function LeadFormPage({
                     1. Lead &amp; Contact Information
                   </h2>
                 </div>
-                {selectedParty && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
-                    <Building2 className="h-3 w-3" />
-                    Party Linked
+                <div className="flex items-center gap-2">
+                  {selectedParty && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                      <Building2 className="h-3 w-3" />
+                      Party Linked
+                    </span>
+                  )}
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    isContactActive
+                      ? "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800"
+                      : filledContactCount > 0
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
+                        : "bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-white/10"
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${
+                      isContactActive ? "bg-blue-500 animate-pulse" : filledContactCount > 0 ? "bg-emerald-500" : "bg-slate-400"
+                    }`} />
+                    {isContactActive ? "Active" : `${filledContactCount}/8 Filled`}
                   </span>
-                )}
+                </div>
               </div>
 
               {/* Party Master Search / Autofill Panel */}
@@ -1271,168 +1430,209 @@ export function LeadFormPage({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className={LABEL_CLASS}>
+                    <label className={getLabelClass(getFieldStatus(name, "name"))}>
                       Contact Person Name <span className="text-rose-500">*</span>
                     </label>
-                    {isPartyLocked && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
-                        <Lock className="h-3 w-3" /> Locked
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {isPartyLocked && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                          <Lock className="h-3 w-3" /> Locked
+                        </span>
+                      )}
+                      {renderFieldStatusBadge(getFieldStatus(name, "name"), true)}
+                    </div>
                   </div>
                   <input
                     type="text"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
+                    onFocus={() => setActiveField("name")}
+                    onBlur={() => setActiveField(null)}
                     readOnly={isPartyLocked}
                     placeholder="e.g. Dr. Rajesh Sharma"
-                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
+                    className={getInputClass(getFieldStatus(name, "name"), isPartyLocked)}
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className={LABEL_CLASS}>
+                    <label className={getLabelClass(getFieldStatus(companyName, "companyName"))}>
                       Company / Organization
                     </label>
-                    {isPartyLocked && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
-                        <Lock className="h-3 w-3" /> Locked
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {isPartyLocked && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                          <Lock className="h-3 w-3" /> Locked
+                        </span>
+                      )}
+                      {renderFieldStatusBadge(getFieldStatus(companyName, "companyName"), false)}
+                    </div>
                   </div>
                   <input
                     type="text"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
-                    onBlur={triggerDuplicateCheck}
+                    onFocus={() => setActiveField("companyName")}
+                    onBlur={() => {
+                      setActiveField(null);
+                      triggerDuplicateCheck();
+                    }}
                     readOnly={isPartyLocked}
                     placeholder="e.g. Apollo Hospital / Tech Corp"
-                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
+                    className={getInputClass(getFieldStatus(companyName, "companyName"), isPartyLocked)}
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className={LABEL_CLASS}>
+                    <label className={getLabelClass(getFieldStatus(phone, "phone"))}>
                       Primary Phone Number <span className="text-rose-500">*</span>
                     </label>
-                    {isPartyLocked && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
-                        <Lock className="h-3 w-3" /> Locked
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {isPartyLocked && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                          <Lock className="h-3 w-3" /> Locked
+                        </span>
+                      )}
+                      {renderFieldStatusBadge(getFieldStatus(phone, "phone"), true)}
+                    </div>
                   </div>
                   <input
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    onBlur={triggerDuplicateCheck}
+                    onFocus={() => setActiveField("phone")}
+                    onBlur={() => {
+                      setActiveField(null);
+                      triggerDuplicateCheck();
+                    }}
                     readOnly={isPartyLocked}
                     placeholder="+91 98765 43210"
-                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
+                    className={getInputClass(getFieldStatus(phone, "phone"), isPartyLocked)}
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className={LABEL_CLASS}>
+                    <label className={getLabelClass(getFieldStatus(email, "email"))}>
                       Email Address
                     </label>
-                    {isPartyLocked && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
-                        <Lock className="h-3 w-3" /> Locked
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {isPartyLocked && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                          <Lock className="h-3 w-3" /> Locked
+                        </span>
+                      )}
+                      {renderFieldStatusBadge(getFieldStatus(email, "email"), false)}
+                    </div>
                   </div>
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    onBlur={triggerDuplicateCheck}
+                    onFocus={() => setActiveField("email")}
+                    onBlur={() => {
+                      setActiveField(null);
+                      triggerDuplicateCheck();
+                    }}
                     readOnly={isPartyLocked}
                     placeholder="contact@company.com"
-                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
+                    className={getInputClass(getFieldStatus(email, "email"), isPartyLocked)}
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className={LABEL_CLASS}>
+                    <label className={getLabelClass(getFieldStatus(alternatePhone, "alternatePhone"))}>
                       Alternate Phone
                     </label>
-                    {isPartyLocked && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
-                        <Lock className="h-3 w-3" /> Locked
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {isPartyLocked && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                          <Lock className="h-3 w-3" /> Locked
+                        </span>
+                      )}
+                      {renderFieldStatusBadge(getFieldStatus(alternatePhone, "alternatePhone"), false)}
+                    </div>
                   </div>
                   <input
                     type="tel"
                     value={alternatePhone}
                     onChange={(e) => setAlternatePhone(e.target.value)}
+                    onFocus={() => setActiveField("alternatePhone")}
+                    onBlur={() => setActiveField(null)}
                     readOnly={isPartyLocked}
                     placeholder="+91 22 1234 5678"
-                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
+                    className={getInputClass(getFieldStatus(alternatePhone, "alternatePhone"), isPartyLocked)}
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className={LABEL_CLASS}>
+                    <label className={getLabelClass(getFieldStatus(designation, "designation"))}>
                       Designation / Role
                     </label>
-                    {isPartyLocked && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
-                        <Lock className="h-3 w-3" /> Locked
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {isPartyLocked && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                          <Lock className="h-3 w-3" /> Locked
+                        </span>
+                      )}
+                      {renderFieldStatusBadge(getFieldStatus(designation, "designation"), false)}
+                    </div>
                   </div>
                   <input
                     type="text"
                     value={designation}
                     onChange={(e) => setDesignation(e.target.value)}
+                    onFocus={() => setActiveField("designation")}
+                    onBlur={() => setActiveField(null)}
                     readOnly={isPartyLocked}
                     placeholder="e.g. Purchase Head"
-                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
+                    className={getInputClass(getFieldStatus(designation, "designation"), isPartyLocked)}
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className={LABEL_CLASS}>
+                    <label className={getLabelClass(getFieldStatus(industry, "industry"))}>
                       Industry / Domain
                     </label>
-                    {isCustomIndustry ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsCustomIndustry(false);
-                          setIndustry("");
-                        }}
-                        className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
-                      >
-                        Choose from list
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setIsCustomIndustry(true)}
-                        className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
-                      >
-                        +Custom
-                      </button>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {isCustomIndustry ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCustomIndustry(false);
+                            setIndustry("");
+                          }}
+                          className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+                        >
+                          Choose from list
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setIsCustomIndustry(true)}
+                          className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+                        >
+                          +Custom
+                        </button>
+                      )}
+                      {renderFieldStatusBadge(getFieldStatus(industry, "industry"), false)}
+                    </div>
                   </div>
                   {isCustomIndustry ? (
                     <input
                       type="text"
                       value={industry}
                       onChange={(e) => setIndustry(e.target.value)}
+                      onFocus={() => setActiveField("industry")}
+                      onBlur={() => setActiveField(null)}
                       placeholder="e.g. Healthcare, Manufacturing"
                       autoFocus
-                      className={INPUT_CLASS}
+                      className={getInputClass(getFieldStatus(industry, "industry"))}
                     />
                   ) : (
                     <select
@@ -1445,7 +1645,9 @@ export function LeadFormPage({
                           setIndustry(e.target.value);
                         }
                       }}
-                      className={SELECT_CLASS}
+                      onFocus={() => setActiveField("industry")}
+                      onBlur={() => setActiveField(null)}
+                      className={getInputClass(getFieldStatus(industry, "industry"), false, true)}
                     >
                       <option value="">Select Industry / Domain</option>
                       {DEFAULT_INDUSTRIES.map((ind) => (
@@ -1463,22 +1665,27 @@ export function LeadFormPage({
 
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className={LABEL_CLASS}>
+                    <label className={getLabelClass(getFieldStatus(gstNo, "gstNo"))}>
                       GSTIN / Tax ID
                     </label>
-                    {isPartyLocked && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
-                        <Lock className="h-3 w-3" /> Locked
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {isPartyLocked && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                          <Lock className="h-3 w-3" /> Locked
+                        </span>
+                      )}
+                      {renderFieldStatusBadge(getFieldStatus(gstNo, "gstNo"), false)}
+                    </div>
                   </div>
                   <input
                     type="text"
                     value={gstNo}
                     onChange={(e) => setGstNo(e.target.value.toUpperCase())}
+                    onFocus={() => setActiveField("gstNo")}
+                    onBlur={() => setActiveField(null)}
                     readOnly={isPartyLocked}
                     placeholder="27AAAAA0000A1Z5"
-                    className={isPartyLocked ? LOCKED_INPUT_CLASS : `${INPUT_CLASS} font-mono uppercase`}
+                    className={isPartyLocked ? LOCKED_INPUT_CLASS : `${getInputClass(getFieldStatus(gstNo, "gstNo"))} font-mono uppercase`}
                   />
                 </div>
               </div>
@@ -1585,7 +1792,7 @@ export function LeadFormPage({
             </div>
 
             {/* Card 2: Location & Address */}
-            <div className={CARD_CLASS}>
+            <div id="section-address-location" className={CARD_CLASS}>
               <div className={CARD_HEADER_CLASS}>
                 <div className="flex items-center gap-1.5">
                   <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -1593,53 +1800,77 @@ export function LeadFormPage({
                     2. Location &amp; Address
                   </h2>
                 </div>
-                {isPartyLocked && (
-                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400">
-                    <Lock className="h-3 w-3" /> Locked to Party Master
+                <div className="flex items-center gap-2">
+                  {isPartyLocked && (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400">
+                      <Lock className="h-3 w-3" /> Locked
+                    </span>
+                  )}
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    isLocationActive
+                      ? "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800"
+                      : filledLocationCount > 0
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
+                        : "bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-white/10"
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${
+                      isLocationActive ? "bg-blue-500 animate-pulse" : filledLocationCount > 0 ? "bg-emerald-500" : "bg-slate-400"
+                    }`} />
+                    {isLocationActive ? "Active" : `${filledLocationCount}/6 Filled`}
                   </span>
-                )}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className={LABEL_CLASS}>
+                    <label className={getLabelClass(getFieldStatus(addressLine1, "addressLine1"))}>
                       Address Line 1
                     </label>
-                    {isPartyLocked && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
-                        <Lock className="h-3 w-3" /> Locked
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {isPartyLocked && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                          <Lock className="h-3 w-3" /> Locked
+                        </span>
+                      )}
+                      {renderFieldStatusBadge(getFieldStatus(addressLine1, "addressLine1"), false)}
+                    </div>
                   </div>
                   <input
                     type="text"
                     value={addressLine1}
                     onChange={(e) => setAddressLine1(e.target.value)}
+                    onFocus={() => setActiveField("addressLine1")}
+                    onBlur={() => setActiveField(null)}
                     readOnly={isPartyLocked}
                     placeholder="Plot / Building, Street / Area"
-                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
+                    className={getInputClass(getFieldStatus(addressLine1, "addressLine1"), isPartyLocked)}
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className={LABEL_CLASS}>
+                    <label className={getLabelClass(getFieldStatus(addressLine2, "addressLine2"))}>
                       Address Line 2 (Optional)
                     </label>
-                    {isPartyLocked && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
-                        <Lock className="h-3 w-3" /> Locked
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {isPartyLocked && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                          <Lock className="h-3 w-3" /> Locked
+                        </span>
+                      )}
+                      {renderFieldStatusBadge(getFieldStatus(addressLine2, "addressLine2"), false)}
+                    </div>
                   </div>
                   <input
                     type="text"
                     value={addressLine2}
                     onChange={(e) => setAddressLine2(e.target.value)}
+                    onFocus={() => setActiveField("addressLine2")}
+                    onBlur={() => setActiveField(null)}
                     readOnly={isPartyLocked}
                     placeholder="Landmark / Floor"
-                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
+                    className={getInputClass(getFieldStatus(addressLine2, "addressLine2"), isPartyLocked)}
                   />
                 </div>
               </div>
@@ -1648,18 +1879,21 @@ export function LeadFormPage({
                 {/* Country */}
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className={LABEL_CLASS}>
+                    <label className={getLabelClass(getFieldStatus(countryId, "country"))}>
                       Country <span className="text-rose-500">*</span>
                     </label>
-                    {!isPartyLocked && (
-                      <button
-                        type="button"
-                        onClick={() => setCountryModalOpen(true)}
-                        className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
-                      >
-                        +Add
-                      </button>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {!isPartyLocked && (
+                        <button
+                          type="button"
+                          onClick={() => setCountryModalOpen(true)}
+                          className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+                        >
+                          +Add
+                        </button>
+                      )}
+                      {renderFieldStatusBadge(getFieldStatus(countryId, "country"), true)}
+                    </div>
                   </div>
                   <select
                     value={countryId}
@@ -1673,8 +1907,10 @@ export function LeadFormPage({
                       setCityId("");
                       setCity("");
                     }}
+                    onFocus={() => setActiveField("country")}
+                    onBlur={() => setActiveField(null)}
                     disabled={isPartyLocked || isCountriesLoading}
-                    className={isPartyLocked ? LOCKED_SELECT_CLASS : SELECT_CLASS}
+                    className={getInputClass(getFieldStatus(countryId, "country"), isPartyLocked, true)}
                   >
                     <option value="">{isCountriesLoading ? "..." : "Select Country"}</option>
                     {countriesData.map((c) => (
@@ -1688,19 +1924,22 @@ export function LeadFormPage({
                 {/* State */}
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className={LABEL_CLASS}>
+                    <label className={getLabelClass(getFieldStatus(stateId, "state"))}>
                       State <span className="text-rose-500">*</span>
                     </label>
-                    {!isPartyLocked && (
-                      <button
-                        type="button"
-                        onClick={() => setStateModalOpen(true)}
-                        disabled={!countryId}
-                        className="text-xs font-semibold text-blue-600 hover:underline disabled:opacity-40 dark:text-blue-400 cursor-pointer"
-                      >
-                        +Add
-                      </button>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {!isPartyLocked && (
+                        <button
+                          type="button"
+                          onClick={() => setStateModalOpen(true)}
+                          disabled={!countryId}
+                          className="text-xs font-semibold text-blue-600 hover:underline disabled:opacity-40 dark:text-blue-400 cursor-pointer"
+                        >
+                          +Add
+                        </button>
+                      )}
+                      {renderFieldStatusBadge(getFieldStatus(stateId, "state"), true)}
+                    </div>
                   </div>
                   <select
                     value={stateId}
@@ -1712,11 +1951,13 @@ export function LeadFormPage({
                       setCityId("");
                       setCity("");
                     }}
+                    onFocus={() => setActiveField("state")}
+                    onBlur={() => setActiveField(null)}
                     disabled={isPartyLocked || !countryId || isStatesLoading}
-                    className={isPartyLocked ? LOCKED_SELECT_CLASS : SELECT_CLASS}
+                    className={getInputClass(getFieldStatus(stateId, "state"), isPartyLocked, true)}
                   >
                     <option value="">
-                      {!countryId ? "Select Country" : isStatesLoading ? "..." : "Select State"}
+                      {!countryId ? "Select Country First" : isStatesLoading ? "..." : "Select State"}
                     </option>
                     {statesData.map((s) => (
                       <option key={s._id || s.id} value={s._id || s.id}>
@@ -1732,19 +1973,22 @@ export function LeadFormPage({
                 {/* City */}
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className={LABEL_CLASS}>
+                    <label className={getLabelClass(getFieldStatus(cityId, "city"))}>
                       City <span className="text-rose-500">*</span>
                     </label>
-                    {!isPartyLocked && (
-                      <button
-                        type="button"
-                        onClick={() => setCityModalOpen(true)}
-                        disabled={!stateId}
-                        className="text-xs font-semibold text-blue-600 hover:underline disabled:opacity-40 dark:text-blue-400 cursor-pointer"
-                      >
-                        +Add
-                      </button>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {!isPartyLocked && (
+                        <button
+                          type="button"
+                          onClick={() => setCityModalOpen(true)}
+                          disabled={!stateId}
+                          className="text-xs font-semibold text-blue-600 hover:underline disabled:opacity-40 dark:text-blue-400 cursor-pointer"
+                        >
+                          +Add
+                        </button>
+                      )}
+                      {renderFieldStatusBadge(getFieldStatus(cityId, "city"), true)}
+                    </div>
                   </div>
                   <select
                     value={cityId}
@@ -1754,11 +1998,13 @@ export function LeadFormPage({
                       const matched = citiesData.find((ci) => (ci._id || ci.id) === ciId);
                       setCity(matched?.name || "");
                     }}
+                    onFocus={() => setActiveField("city")}
+                    onBlur={() => setActiveField(null)}
                     disabled={isPartyLocked || !stateId || isCitiesLoading}
-                    className={isPartyLocked ? LOCKED_SELECT_CLASS : SELECT_CLASS}
+                    className={getInputClass(getFieldStatus(cityId, "city"), isPartyLocked, true)}
                   >
                     <option value="">
-                      {!stateId ? "Select State" : isCitiesLoading ? "..." : "Select City"}
+                      {!stateId ? "Select State First" : isCitiesLoading ? "..." : "Select City"}
                     </option>
                     {citiesData.map((ci) => (
                       <option key={ci._id || ci.id} value={ci._id || ci.id}>
@@ -1774,22 +2020,27 @@ export function LeadFormPage({
                 {/* Pincode */}
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className={LABEL_CLASS}>
+                    <label className={getLabelClass(getFieldStatus(pincode, "pincode"))}>
                       Pincode
                     </label>
-                    {isPartyLocked && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
-                        <Lock className="h-3 w-3" /> Locked
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {isPartyLocked && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                          <Lock className="h-3 w-3" /> Locked
+                        </span>
+                      )}
+                      {renderFieldStatusBadge(getFieldStatus(pincode, "pincode"), false)}
+                    </div>
                   </div>
                   <input
                     type="text"
                     value={pincode}
                     onChange={(e) => setPincode(e.target.value)}
+                    onFocus={() => setActiveField("pincode")}
+                    onBlur={() => setActiveField(null)}
                     readOnly={isPartyLocked}
                     placeholder="e.g. 400001"
-                    className={isPartyLocked ? LOCKED_INPUT_CLASS : INPUT_CLASS}
+                    className={getInputClass(getFieldStatus(pincode, "pincode"), isPartyLocked)}
                   />
                 </div>
               </div>
@@ -1799,7 +2050,7 @@ export function LeadFormPage({
           {/* RIGHT COLUMN: Classification & Pipeline + Products & Requirements + Internal Notes (6 cols) */}
           <div className="lg:col-span-6 space-y-2">
             {/* Card 3: Department & Classification */}
-            <div className={CARD_CLASS}>
+            <div id="section-classification-pipeline" className={CARD_CLASS}>
               <div className={CARD_HEADER_CLASS}>
                 <div className="flex items-center gap-1.5">
                   <Layers className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -1807,12 +2058,26 @@ export function LeadFormPage({
                     3. Classification &amp; Pipeline
                   </h2>
                 </div>
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    isPipelineActive
+                      ? "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800"
+                      : filledPipelineCount > 0
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
+                        : "bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-white/10"
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${
+                      isPipelineActive ? "bg-blue-500 animate-pulse" : filledPipelineCount > 0 ? "bg-emerald-500" : "bg-slate-400"
+                    }`} />
+                    {isPipelineActive ? "Active" : `${filledPipelineCount}/7 Filled`}
+                  </span>
+                </div>
               </div>
 
               {/* Department Multi-Select Pills */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className={LABEL_CLASS}>
+                  <label className={getLabelClass(getFieldStatus(selectedDepartments, "departments"))}>
                     Department(s) <span className="text-rose-500">*</span>
                   </label>
                   <div className="flex items-center gap-2">
@@ -1842,11 +2107,7 @@ export function LeadFormPage({
                         Clear
                       </button>
                     )}
-                    {selectedDepartments.length > 0 && (
-                      <span className="text-xs font-medium text-slate-400">
-                        ({selectedDepartments.length} selected)
-                      </span>
-                    )}
+                    {renderFieldStatusBadge(getFieldStatus(selectedDepartments, "departments"), true)}
                   </div>
                 </div>
                 {quickDeptOpen && (
@@ -1921,17 +2182,22 @@ export function LeadFormPage({
                         key={dept.value}
                         type="button"
                         onClick={() => toggleDepartment(dept.value)}
-                        className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition cursor-pointer ${isSelected
-                          ? "bg-primary text-white font-semibold shadow-xs"
-                          : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                          }`}
+                        className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition cursor-pointer ${
+                          isSelected
+                            ? "border-emerald-500 bg-emerald-50 text-emerald-800 shadow-xs dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300"
+                            : "border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-400 hover:text-blue-600 dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-300 dark:hover:border-blue-400"
+                        }`}
                       >
+                        <span
+                          className={`flex h-3.5 w-3.5 items-center justify-center rounded-sm text-[10px] ${
+                            isSelected
+                              ? "bg-emerald-600 text-white"
+                              : "border border-slate-300 dark:border-slate-600"
+                          }`}
+                        >
+                          {isSelected && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                        </span>
                         <span>{dept.label}</span>
-                        {isSelected ? (
-                          <Check className="h-3 w-3 shrink-0" />
-                        ) : (
-                          <Plus className="h-3 w-3 shrink-0 opacity-40" />
-                        )}
                       </button>
                     );
                   })}
@@ -1947,22 +2213,28 @@ export function LeadFormPage({
               <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className={LABEL_CLASS}>
+                    <label className={getLabelClass(getFieldStatus(source, "source"))}>
                       Lead Source <span className="text-rose-500">*</span>
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setLeadMastersModalOpen(true)}
-                      className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
-                    >
-                      +Add
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setLeadMastersModalOpen(true)}
+                        className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+                      >
+                        +Add
+                      </button>
+                      {renderFieldStatusBadge(getFieldStatus(source, "source"), true)}
+                    </div>
                   </div>
                   <select
                     value={source}
                     onChange={(e) => setSource(e.target.value)}
-                    className={SELECT_CLASS}
+                    onFocus={() => setActiveField("source")}
+                    onBlur={() => setActiveField(null)}
+                    className={getInputClass(getFieldStatus(source, "source"), false, true)}
                   >
+                    <option value="">Select Lead Source</option>
                     {sourcesList.map((src) => (
                       <option key={src} value={src}>
                         {src}
@@ -1972,14 +2244,20 @@ export function LeadFormPage({
                 </div>
 
                 <div>
-                  <label className={LABEL_CLASS}>
-                    Priority
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className={getLabelClass(getFieldStatus(priority, "priority"))}>
+                      Priority
+                    </label>
+                    {renderFieldStatusBadge(getFieldStatus(priority, "priority"), false)}
+                  </div>
                   <select
                     value={priority}
                     onChange={(e) => setPriority(e.target.value as LeadPriority)}
-                    className={SELECT_CLASS}
+                    onFocus={() => setActiveField("priority")}
+                    onBlur={() => setActiveField(null)}
+                    className={getInputClass(getFieldStatus(priority, "priority"), false, true)}
                   >
+                    <option value="">Select Priority</option>
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
                     <option value="high">High</option>
@@ -1988,40 +2266,56 @@ export function LeadFormPage({
                 </div>
 
                 <div>
-                  <label className={LABEL_CLASS}>
-                    Expected Closing Date
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className={getLabelClass(getFieldStatus(expectedClosingDate, "expectedClosingDate"))}>
+                      Expected Closing Date
+                    </label>
+                    {renderFieldStatusBadge(getFieldStatus(expectedClosingDate, "expectedClosingDate"), false)}
+                  </div>
                   <input
                     type="date"
                     value={expectedClosingDate}
                     onChange={(e) => setExpectedClosingDate(e.target.value)}
-                    className={INPUT_CLASS}
+                    onFocus={() => setActiveField("expectedClosingDate")}
+                    onBlur={() => setActiveField(null)}
+                    className={getInputClass(getFieldStatus(expectedClosingDate, "expectedClosingDate"))}
                   />
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className={LABEL_CLASS}>
-                    Tags (Comma separated)
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className={getLabelClass(getFieldStatus(tagsInput, "tagsInput"))}>
+                      Tags (Comma separated)
+                    </label>
+                    {renderFieldStatusBadge(getFieldStatus(tagsInput, "tagsInput"), false)}
+                  </div>
                   <input
                     type="text"
                     value={tagsInput}
                     onChange={(e) => setTagsInput(e.target.value)}
+                    onFocus={() => setActiveField("tagsInput")}
+                    onBlur={() => setActiveField(null)}
                     placeholder="vip, urgent-tender, solar"
-                    className={INPUT_CLASS}
+                    className={getInputClass(getFieldStatus(tagsInput, "tagsInput"))}
                   />
                 </div>
 
                 <div>
-                  <label className={LABEL_CLASS}>
-                    Created By
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className={getLabelClass(getFieldStatus(createdBy, "createdBy"))}>
+                      Created By
+                    </label>
+                    {renderFieldStatusBadge(getFieldStatus(createdBy, "createdBy"), false)}
+                  </div>
                   {isSenior ? (
                     <select
                       value={createdBy}
                       onChange={(e) => setCreatedBy(e.target.value)}
-                      className={SELECT_CLASS}
+                      onFocus={() => setActiveField("createdBy")}
+                      onBlur={() => setActiveField(null)}
+                      className={getInputClass(getFieldStatus(createdBy, "createdBy"), false, true)}
                     >
+                      <option value="">Select Creator</option>
                       {allPortalUsers.map((u) => {
                         const isCurrentUser = String(u._id) === String(authUser?._id || authUser?.id);
                         const roleBadge = getLeadManagerPortalRole(u);
@@ -2041,17 +2335,30 @@ export function LeadFormPage({
                 </div>
               </div>
 
-              {canAssign && (
-                <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-1.5 border-t border-slate-100 pt-2.5 dark:border-white/10">
-                  {/* Column 1: Primary Assignee */}
-                  <div>
-                    <label className={LABEL_CLASS}>
+              {/* Assignment Section (Primary & Secondary) */}
+              <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-1.5 border-t border-slate-100 pt-2.5 dark:border-white/10">
+                {/* Column 1: Primary Assignee */}
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className={getLabelClass(getFieldStatus(effectivePrimaryId, "primaryAssignee"))}>
                       Primary Assignee
                     </label>
+                    {canAssign ? (
+                      renderFieldStatusBadge(getFieldStatus(primaryAssigneeId, "primaryAssignee"), false)
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400">
+                        <Lock className="h-2.5 w-2.5 text-slate-400" />
+                        Fixed
+                      </span>
+                    )}
+                  </div>
+                  {canAssign ? (
                     <select
                       value={primaryAssigneeId}
                       onChange={(e) => handlePrimaryAssigneeChange(e.target.value)}
-                      className={SELECT_CLASS}
+                      onFocus={() => setActiveField("primaryAssignee")}
+                      onBlur={() => setActiveField(null)}
+                      className={getInputClass(getFieldStatus(primaryAssigneeId, "primaryAssignee"), false, true)}
                     >
                       <option value="">Unassigned</option>
                       {allPortalUsers.map((u) => {
@@ -2066,69 +2373,101 @@ export function LeadFormPage({
                         );
                       })}
                     </select>
-                  </div>
+                  ) : (
+                    <div className="mt-1 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm text-slate-700 dark:border-white/10 dark:bg-slate-800/60 dark:text-slate-300">
+                      <span className="font-semibold truncate">
+                        {primaryUserDisplay?.name || authUser?.name || "Self (Primary)"}
+                        {String(primaryUserDisplay?._id || "") === String(authUser?._id || authUser?.id || "") ? " (You)" : ""}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 shrink-0">
+                        <Lock className="h-3 w-3 text-slate-400" />
+                        Primary
+                      </span>
+                    </div>
+                  )}
+                </div>
 
-                  {/* Column 2: Secondary Assignees */}
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <label className={LABEL_CLASS}>
-                        Secondary Assignees
-                        {secondaryAssigneeIds.length > 0 && (
-                          <span className="ml-1 font-normal text-slate-400">
-                            ({secondaryAssigneeIds.length})
-                          </span>
-                        )}
-                      </label>
+                {/* Column 2: Secondary Assignees */}
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className={getLabelClass(getFieldStatus(secondaryAssigneeIds, "secondaryAssignee"))}>
+                      Secondary Assignees
                       {secondaryAssigneeIds.length > 0 && (
+                        <span className="ml-1 font-normal text-slate-400">
+                          ({secondaryAssigneeIds.length})
+                        </span>
+                      )}
+                    </label>
+                    {secondaryAssigneeIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSecondaryAssigneeIds([])}
+                        className="text-xs font-medium text-rose-500 hover:underline cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  {allPortalUsers.length > 6 && (
+                    <div className="mt-1 mb-1 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1 dark:border-white/10 dark:bg-slate-800">
+                      <Search className="h-3 w-3 text-slate-400 shrink-0" />
+                      <input
+                        type="text"
+                        value={secondarySearch}
+                        onChange={(e) => setSecondarySearch(e.target.value)}
+                        placeholder="Filter assignees..."
+                        className="w-full bg-transparent text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none dark:text-slate-200"
+                      />
+                      {secondarySearch && (
                         <button
                           type="button"
-                          onClick={() => setSecondaryAssigneeIds([])}
-                          className="text-xs font-medium text-rose-500 hover:underline cursor-pointer"
+                          onClick={() => setSecondarySearch("")}
+                          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                         >
-                          Clear
+                          <X className="h-3 w-3" />
                         </button>
                       )}
                     </div>
-                    <div className="mt-1 max-h-28 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 space-y-0.5 dark:border-white/10 dark:bg-slate-800">
-                      {allPortalUsers.map((u) => {
-                        const uId = String(u._id);
-                        const isPrimary = uId === String(primaryAssigneeId);
-                        const isSelected = secondaryAssigneeIds.includes(uId);
-                        const roleBadge = getLeadManagerPortalRole(u);
-                        return (
-                          <label
-                            key={uId}
-                            className={`flex items-center justify-between gap-1.5 rounded px-2 py-1 text-xs transition ${isPrimary
-                              ? "opacity-45 cursor-not-allowed bg-slate-50 dark:bg-slate-900/40"
-                              : isSelected
-                                ? "bg-blue-50 text-blue-700 font-semibold cursor-pointer dark:bg-blue-950/40 dark:text-blue-300"
-                                : "text-slate-700 hover:bg-slate-50 cursor-pointer dark:text-slate-300 dark:hover:bg-white/5"
-                              }`}
-                          >
-                            <span className="flex items-center gap-1.5 truncate">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                disabled={isPrimary}
-                                onChange={() => toggleSecondaryAssignee(uId)}
-                                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary"
-                              />
-                              <span className="truncate">{u.name}</span>
-                            </span>
-                            <span className="shrink-0 text-[10px] text-slate-400">
-                              {isPrimary ? "Primary" : roleBadge || ""}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
+                  )}
+                  <div className="mt-1 max-h-36 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 space-y-0.5 dark:border-white/10 dark:bg-slate-800">
+                    {filteredSecondaryUsers.map((u) => {
+                      const uId = String(u._id);
+                      const isPrimary = uId === String(effectivePrimaryId);
+                      const isSelected = secondaryAssigneeIds.includes(uId);
+                      const roleBadge = getLeadManagerPortalRole(u);
+                      return (
+                        <label
+                          key={uId}
+                          className={`flex items-center justify-between gap-1.5 rounded px-2 py-1 text-xs transition ${isPrimary
+                            ? "opacity-45 cursor-not-allowed bg-slate-50 dark:bg-slate-900/40"
+                            : isSelected
+                              ? "bg-blue-50 text-blue-700 font-semibold cursor-pointer dark:bg-blue-950/40 dark:text-blue-300"
+                              : "text-slate-700 hover:bg-slate-50 cursor-pointer dark:text-slate-300 dark:hover:bg-white/5"
+                            }`}
+                        >
+                          <span className="flex items-center gap-1.5 truncate">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              disabled={isPrimary}
+                              onChange={() => toggleSecondaryAssignee(uId)}
+                              className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary"
+                            />
+                            <span className="truncate">{u.name}</span>
+                          </span>
+                          <span className="shrink-0 text-[10px] text-slate-400">
+                            {isPrimary ? "Primary" : roleBadge || ""}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
-              )}
+              </div>
             </div>
 
             {/* Card 4: Products & Requirements */}
-            <div className={CARD_CLASS}>
+            <div id="section-products-requirements" className={CARD_CLASS}>
               <div className={CARD_HEADER_CLASS}>
                 <div className="flex items-center gap-1.5">
                   <Package className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -2136,39 +2475,58 @@ export function LeadFormPage({
                     4. Products &amp; Requirements
                   </h2>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  {canQuickAdd && (
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    isProductActive
+                      ? "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800"
+                      : filledProductCount > 0
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
+                        : "bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-white/10"
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${
+                      isProductActive ? "bg-blue-500 animate-pulse" : filledProductCount > 0 ? "bg-emerald-500" : "bg-slate-400"
+                    }`} />
+                    {isProductActive ? "Active" : `${filledProductCount}/2 Filled`}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {canQuickAdd && (
+                      <button
+                        type="button"
+                        onClick={() => openQuickProductModal(null, "")}
+                        className="inline-flex items-center gap-0.5 rounded-lg border border-blue-200 bg-blue-50/60 px-2.5 py-1 text-xs font-semibold text-blue-600 transition hover:bg-blue-100/70 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-400 cursor-pointer"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>Quick Add</span>
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => openQuickProductModal(null, "")}
-                      className="inline-flex items-center gap-0.5 rounded-lg border border-blue-200 bg-blue-50/60 px-2.5 py-1 text-xs font-semibold text-blue-600 transition hover:bg-blue-100/70 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-400 cursor-pointer"
+                      onClick={handleAddBlankProductRow}
+                      className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 cursor-pointer"
                     >
                       <Plus className="h-3.5 w-3.5" />
-                      <span>Quick Add</span>
+                      <span>Add Item</span>
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleAddBlankProductRow}
-                    className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 cursor-pointer"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Add Item</span>
-                  </button>
+                  </div>
                 </div>
               </div>
 
               {/* Requirement Description */}
               <div>
-                <label className={LABEL_CLASS}>
-                  Requirement Description
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className={getLabelClass(getFieldStatus(requirement, "requirement"))}>
+                    Requirement Description
+                  </label>
+                  {renderFieldStatusBadge(getFieldStatus(requirement, "requirement"), false)}
+                </div>
                 <input
                   type="text"
                   value={requirement}
                   onChange={(e) => setRequirement(e.target.value)}
+                  onFocus={() => setActiveField("requirement")}
+                  onBlur={() => setActiveField(null)}
                   placeholder="High-level description of client needs or tender specifications..."
-                  className={`${INPUT_CLASS} placeholder:text-slate-400`}
+                  className={getInputClass(getFieldStatus(requirement, "requirement"))}
                 />
               </div>
 
@@ -2331,19 +2689,37 @@ export function LeadFormPage({
             </div>
 
             {/* Card 5: Internal Notes */}
-            <div className={CARD_CLASS}>
-              <div className="flex items-center gap-1.5 border-b border-slate-100 pb-1.5 mb-2 dark:border-white/10">
-                <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white">
-                  5. Internal Notes &amp; Remarks
-                </h2>
+            <div id="section-internal-notes" className={CARD_CLASS}>
+              <div className={CARD_HEADER_CLASS}>
+                <div className="flex items-center gap-1.5">
+                  <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                    5. Internal Notes &amp; Remarks
+                  </h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    isNotesActive
+                      ? "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800"
+                      : filledNotesCount > 0
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
+                        : "bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-white/10"
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${
+                      isNotesActive ? "bg-blue-500 animate-pulse" : filledNotesCount > 0 ? "bg-emerald-500" : "bg-slate-400"
+                    }`} />
+                    {isNotesActive ? "Active" : `${filledNotesCount}/1 Filled`}
+                  </span>
+                </div>
               </div>
               <textarea
                 rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
+                onFocus={() => setActiveField("notes")}
+                onBlur={() => setActiveField(null)}
                 placeholder="Internal comments, previous relationship history, or meeting highlights..."
-                className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 shadow-xs placeholder:text-slate-400 focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                className={getInputClass(getFieldStatus(notes, "notes"))}
               />
             </div>
           </div>

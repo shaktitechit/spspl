@@ -17,6 +17,7 @@ import {
   PlusCircle,
   Pencil,
   Eye,
+  ShoppingBag,
 } from "lucide-react";
 
 interface CrumbItem {
@@ -32,6 +33,7 @@ const SEGMENT_MAP: Record<
 > = {
   dashboard: { label: "Control Center", icon: Home },
   leads: { label: "Leads", icon: Users },
+  indiamart: { label: "IndiaMART Leads", icon: ShoppingBag },
   "follow-ups": { label: "Follow-Ups", icon: CalendarDays },
   reports: { label: "Reports", icon: BarChart3 },
   create: { label: "New Lead", icon: PlusCircle },

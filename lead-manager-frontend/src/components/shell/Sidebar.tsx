@@ -18,6 +18,7 @@ import {
   Users,
   X,
   Sparkles,
+  ShoppingBag,
 } from "lucide-react";
 
 interface NavItem {
@@ -55,11 +56,15 @@ export function Sidebar({
 
   // Active route helpers
   const isDashboardActive = pathname === "/dashboard";
+  const isIndiaMartActive =
+    pathname === "/dashboard/leads/indiamart" ||
+    pathname.startsWith("/dashboard/leads/indiamart");
   const isLeadsActive =
-    pathname === "/dashboard/leads" ||
-    (pathname.startsWith("/dashboard/leads") &&
-      !pathname.includes("follow-ups") &&
-      !pathname.includes("reports"));
+    (pathname === "/dashboard/leads" ||
+      (pathname.startsWith("/dashboard/leads") &&
+        !pathname.includes("indiamart") &&
+        !pathname.includes("follow-ups") &&
+        !pathname.includes("reports")));
   const isFollowUpsActive = pathname.startsWith("/dashboard/leads/follow-ups");
   const isReportsActive = pathname.startsWith("/dashboard/leads/reports");
   const isQuotationsActive =
@@ -101,6 +106,13 @@ export function Sidebar({
           href: "/dashboard/leads",
           icon: Users,
           isActive: isLeadsActive,
+          show: true,
+        },
+        {
+          label: "IndiaMART",
+          href: "/dashboard/leads/indiamart",
+          icon: ShoppingBag,
+          isActive: isIndiaMartActive,
           show: true,
         },
         {

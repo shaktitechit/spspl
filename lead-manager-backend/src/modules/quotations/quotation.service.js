@@ -867,11 +867,15 @@ function triggerBackgroundAutoExpire() {
   }
 }
 
+function escapeRegex(str) {
+  return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * List all quotations with filtering and pagination.
  */
 async function listAll(query = {}, user) {
-  const { LeadQuotation } = getModels();
+  const { LeadQuotation, User } = getModels();
 
   // Run lazy auto-expiry in background without blocking read request
   triggerBackgroundAutoExpire();
@@ -903,14 +907,14 @@ async function listAll(query = {}, user) {
     if (depts.length > 1) {
       const orClauses = [];
       for (const d of depts) {
-        const escaped = d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const escaped = escapeRegex(d);
         const deptRegex = new RegExp(`(^|,\\s*)${escaped}(\\s*,|$)`, 'i');
         orClauses.push({ departments: { $in: [new RegExp(`^${escaped}$`, 'i')] } });
         orClauses.push({ department: { $regex: deptRegex } });
       }
       conditions.push({ $or: orClauses });
     } else if (depts.length === 1) {
-      const escaped = depts[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escaped = escapeRegex(depts[0]);
       const deptRegex = new RegExp(`(^|,\\s*)${escaped}(\\s*,|$)`, 'i');
       conditions.push({
         $or: [
@@ -921,29 +925,180 @@ async function listAll(query = {}, user) {
       });
     }
   }
-  if (query.status) {
-    const statusParam = String(query.status).trim();
-    if (statusParam === 'in_negotiation' || statusParam === 'active_pipeline' || statusParam === 'quoted') {
-      filter.status = { $in: ACTIVE_PIPELINE_STATUSES };
-      conditions.push({ approval_status: { $ne: 'pending_approval' } });
-    } else if (statusParam === 'pending_approval') {
-      conditions.push({
-        $or: [{ status: 'pending_approval' }, { approval_status: 'pending_approval' }],
-      });
-    } else if (statusParam === 'accepted') {
-      filter.status = { $in: ['accepted', 'converted'] };
-    } else if (statusParam === 'expired') {
-      filter.status = 'expired';
-      const wonOrConvertedLeadIds = await getWonOrConvertedLeadIds();
-      if (wonOrConvertedLeadIds.length > 0) {
-        conditions.push({ lead: { $nin: wonOrConvertedLeadIds } });
+
+  // Multi-status filtering
+  if (query.status && query.status !== 'all') {
+    const rawStatus = String(query.status).trim();
+    const statuses = rawStatus.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    if (statuses.length > 0) {
+      const statusClauses = [];
+      const wonOrConvertedLeadIds = statuses.includes('expired')
+        ? await getWonOrConvertedLeadIds()
+        : [];
+
+      for (const st of statuses) {
+        if (st === 'in_negotiation' || st === 'active_pipeline' || st === 'quoted') {
+          statusClauses.push({
+            status: { $in: ACTIVE_PIPELINE_STATUSES },
+            approval_status: { $ne: 'pending_approval' },
+          });
+        } else if (st === 'pending_approval') {
+          statusClauses.push({
+            $or: [{ status: 'pending_approval' }, { approval_status: 'pending_approval' }],
+          });
+        } else if (st === 'accepted') {
+          statusClauses.push({
+            status: { $in: ['accepted', 'converted'] },
+          });
+        } else if (st === 'expired') {
+          const expiredClause = { status: 'expired' };
+          if (wonOrConvertedLeadIds.length > 0) {
+            expiredClause.lead = { $nin: wonOrConvertedLeadIds };
+          }
+          statusClauses.push(expiredClause);
+        } else {
+          statusClauses.push({ status: st });
+        }
       }
-    } else {
-      filter.status = statusParam;
+
+      if (statusClauses.length === 1) {
+        conditions.push(statusClauses[0]);
+      } else if (statusClauses.length > 1) {
+        conditions.push({ $or: statusClauses });
+      }
     }
   }
+
+  // Validity filter: valid, expiring_soon, expired
+  if (query.validity) {
+    const validities = String(query.validity).split(',').map((v) => v.trim().toLowerCase()).filter(Boolean);
+    if (validities.length > 0) {
+      const validityClauses = [];
+      const now = new Date();
+      const in3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+
+      for (const v of validities) {
+        if (v === 'valid') {
+          validityClauses.push({
+            $or: [
+              { valid_until: null },
+              { valid_until: { $exists: false } },
+              { valid_until: { $gte: now } },
+            ],
+            status: { $nin: ['expired', 'rejected'] },
+          });
+        } else if (v === 'expiring_soon') {
+          validityClauses.push({
+            valid_until: { $gte: now, $lte: in3Days },
+            status: { $nin: ['accepted', 'converted', 'rejected', 'expired'] },
+          });
+        } else if (v === 'expired') {
+          validityClauses.push({
+            $or: [{ status: 'expired' }, { valid_until: { $lt: now } }],
+          });
+        }
+      }
+
+      if (validityClauses.length === 1) {
+        conditions.push(validityClauses[0]);
+      } else if (validityClauses.length > 1) {
+        conditions.push({ $or: validityClauses });
+      }
+    }
+  }
+
+  // Lead linkage / source: linked vs direct
+  const leadSource = query.lead_source || query.leadSource;
+  if (leadSource) {
+    const sources = String(leadSource).split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    if (sources.includes('linked') && !sources.includes('direct')) {
+      conditions.push({ lead: { $exists: true, $ne: null } });
+    } else if (sources.includes('direct') && !sources.includes('linked')) {
+      conditions.push({ $or: [{ lead: null }, { lead: { $exists: false } }] });
+    }
+  }
+
+  // Amount filtering
+  const minAmount = query.min_amount || query.minAmount;
+  if (minAmount !== undefined && minAmount !== '' && !isNaN(Number(minAmount))) {
+    conditions.push({ grand_total: { $gte: Number(minAmount) } });
+  }
+  const maxAmount = query.max_amount || query.maxAmount;
+  if (maxAmount !== undefined && maxAmount !== '' && !isNaN(Number(maxAmount))) {
+    conditions.push({ grand_total: { $lte: Number(maxAmount) } });
+  }
+
+  // Date range filtering (quotation_date or createdAt)
+  const fromDate = query.from_date || query.fromDate;
+  if (fromDate) {
+    conditions.push({
+      $or: [
+        { quotation_date: { $gte: new Date(fromDate) } },
+        { createdAt: { $gte: new Date(fromDate) } },
+      ],
+    });
+  }
+  const toDate = query.to_date || query.toDate;
+  if (toDate) {
+    const endOfDay = new Date(toDate.includes('T') ? toDate : `${toDate}T23:59:59.999Z`);
+    conditions.push({
+      $or: [
+        { quotation_date: { $lte: endOfDay } },
+        { createdAt: { $lte: endOfDay } },
+      ],
+    });
+  }
+
+  // Signatory filter
+  if (query.signatory) {
+    const sigs = String(query.signatory).split(',').map((s) => s.trim()).filter(Boolean);
+    if (sigs.length > 0) {
+      const sigRegexes = sigs.map((s) => new RegExp(`^${escapeRegex(s)}$`, 'i'));
+      conditions.push({ signatory_name: { $in: sigRegexes } });
+    }
+  }
+
+  // Primary rep filter
+  const primaryRep = query.primary_rep || query.sales_person;
+  if (primaryRep) {
+    const reps = String(primaryRep).split(',').map((s) => s.trim()).filter(Boolean);
+    if (reps.length > 0) {
+      const repRegexes = reps.map((s) => new RegExp(`^${escapeRegex(s)}$`, 'i'));
+      conditions.push({ sales_person_name: { $in: repRegexes } });
+    }
+  }
+
+  // Secondary rep filter
+  const secondaryRep = query.secondary_rep;
+  if (secondaryRep) {
+    const reps = String(secondaryRep).split(',').map((s) => s.trim()).filter(Boolean);
+    if (reps.length > 0) {
+      const repRegexes = reps.map((s) => new RegExp(`^${escapeRegex(s)}$`, 'i'));
+      conditions.push({ 'secondary_sales_persons.name': { $in: repRegexes } });
+    }
+  }
+
+  // Created By filter
+  const createdBy = query.created_by || query.createdBy;
+  if (createdBy) {
+    const creators = String(createdBy).split(',').map((s) => s.trim()).filter(Boolean);
+    if (creators.length > 0) {
+      try {
+        const userMatches = await User.find({
+          name: { $in: creators.map((c) => new RegExp(`^${escapeRegex(c)}$`, 'i')) },
+        }).select('_id').lean();
+        const creatorIds = userMatches.map((u) => u._id);
+        conditions.push({ created_by: { $in: creatorIds } });
+      } catch {
+        // Fallback if user model find fails
+      }
+    }
+  }
+
+  // Search
   if (query.search && String(query.search).trim()) {
-    const searchRegex = new RegExp(String(query.search).trim(), 'i');
+    const searchEscaped = escapeRegex(String(query.search).trim());
+    const searchRegex = new RegExp(searchEscaped, 'i');
     conditions.push({
       $or: [
         { quotation_no: searchRegex },
@@ -961,9 +1116,11 @@ async function listAll(query = {}, user) {
   const fetchAll =
     String(query.limit || '').toLowerCase() === 'all' ||
     query.all === true ||
-    String(query.all || '').toLowerCase() === 'true';
+    String(query.all || '').toLowerCase() === 'true' ||
+    query.paginate === 'false' ||
+    query.paginate === false;
   const page = fetchAll ? 1 : Math.max(1, parseInt(query.page, 10) || 1);
-  const limit = fetchAll ? 0 : Math.max(1, parseInt(query.limit, 10) || 50);
+  const limit = fetchAll ? 0 : Math.max(1, parseInt(query.limit, 10) || 10);
   const skip = fetchAll ? 0 : (page - 1) * limit;
 
   let findQuery = LeadQuotation.find(filter);

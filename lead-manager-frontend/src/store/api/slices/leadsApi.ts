@@ -1070,6 +1070,62 @@ export const leadsApi = medicaApi.injectEndpoints({
         { type: "Lead" as const, id: "LIST" },
       ],
     }),
+
+    triggerIndiaMartPull: build.mutation<
+      {
+        success: boolean;
+        message?: string;
+        total_records?: number;
+        new_leads_count?: number;
+        duplicate_count?: number;
+        status?: string;
+        http_code?: number;
+      },
+      void
+    >({
+      query: () => ({
+        url: "/integrations/indiamart/pull",
+        method: "POST",
+      }),
+      transformResponse: (res: ApiEnvelope<any>) => unwrapEnvelope(res),
+      invalidatesTags: [
+        { type: "Lead" as const, id: "LIST" },
+        { type: "Lead" as const, id: "INDIAMART_STATUS" },
+      ],
+    }),
+
+    getIndiaMartStatus: build.query<
+      {
+        configured: boolean;
+        masked_key: string;
+        is_enabled: boolean;
+        is_running: boolean;
+        schedule: string;
+        frequency: string;
+        mode: string;
+        default_department?: string;
+        last_run?: {
+          run_type: string;
+          status: string;
+          http_code?: number;
+          api_message?: string;
+          total_records: number;
+          new_leads_count: number;
+          duplicate_count: number;
+          error_count?: number;
+          duration_ms: number;
+          timestamp: string;
+          error_details?: string;
+        } | null;
+      },
+      void
+    >({
+      query: () => ({
+        url: "/integrations/indiamart/status",
+      }),
+      transformResponse: (res: ApiEnvelope<any>) => unwrapEnvelope(res),
+      providesTags: [{ type: "Lead" as const, id: "INDIAMART_STATUS" }],
+    }),
   }),
 });
 
@@ -1106,4 +1162,6 @@ export const {
   useGetLeadSourcePerformanceQuery,
   useGetLeadMonthlyTrendsQuery,
   useGetLeadProductBreakdownQuery,
+  useTriggerIndiaMartPullMutation,
+  useGetIndiaMartStatusQuery,
 } = leadsApi;

@@ -1,6 +1,7 @@
 /**
  * @fileoverview Service for IndiaMART LMS CRM Integration v2 (Pull API - Option c).
  * Periodically pulls new leads received after the last API hit without date parameters.
+ * Credentials and configuration are strictly managed via environment variables (.env).
  * @module modules/integrations/indiamart/indiamartPull.service
  */
 const axios = require('axios');
@@ -23,6 +24,7 @@ const {
   INDIAMART_DEFAULT_DEPARTMENT,
   INDIAMART_DEFAULT_ASSIGN_USER_ID,
   INDIAMART_PULL_CRON,
+  INDIAMART_PULL_ENABLED,
 } = require('../../../config/env');
 
 const INDIAMART_PULL_BASE_URL = 'https://mapi.indiamart.com/wservce/crm/crmListing/v2/';
@@ -35,9 +37,10 @@ let lastPullStartedAt = null;
  * Executes a GET request to IndiaMART Pull API (Option c: leads after last hit within 24h).
  */
 async function fetchLeadsFromIndiaMart(crmKeyOverride = null) {
-  const key = crmKeyOverride || INDIAMART_CRM_KEY;
+  const key = (crmKeyOverride || INDIAMART_CRM_KEY || '').trim();
+
   if (!key) {
-    throw new Error('INDIAMART_CRM_KEY is not configured in environment or settings');
+    throw new Error('INDIAMART_CRM_KEY is not configured in environment (.env).');
   }
 
   // Option c URL: glusr_crm_key without start_time/end_time
@@ -50,9 +53,28 @@ async function fetchLeadsFromIndiaMart(crmKeyOverride = null) {
       Accept: 'application/json',
       'User-Agent': 'OPMS-LeadManager/2.0',
     },
+    validateStatus: () => true, // Manually evaluate status codes without unhandled Axios rejections
   });
 
-  return response.data;
+  let data = response.data;
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      data = { MESSAGE: data };
+    }
+  }
+
+  if (!data || typeof data !== 'object') {
+    data = {};
+  }
+
+  // Fallback to transport HTTP status code if payload omitted CODE
+  if (!data.CODE && response.status) {
+    data.CODE = response.status;
+  }
+
+  return data;
 }
 
 /**
@@ -113,7 +135,7 @@ async function ingestRecords(records = [], { runType = 'CRON', actorId = null } 
       // Map record to Lead document format
       const mapped = mapIndiaMartToLead({
         rawData: record,
-        defaultDepartment: INDIAMART_DEFAULT_DEPARTMENT,
+        defaultDepartment: INDIAMART_DEFAULT_DEPARTMENT || 'UPS/Batteries',
         sourceDoc,
       });
 
@@ -185,7 +207,9 @@ async function runLeadPull({ triggerType = 'CRON', actorId = null, crmKeyOverrid
   if (isPullRunning) {
     logger.warn('[IndiaMart Pull] Pull operation already in progress. Skipping concurrent run.');
     return {
+      success: false,
       status: 'BUSY',
+      http_code: 429,
       message: 'A pull operation is already currently in progress. Please retry in a moment.',
       startedAt: lastPullStartedAt,
     };
@@ -212,21 +236,38 @@ async function runLeadPull({ triggerType = 'CRON', actorId = null, crmKeyOverrid
     const data = await fetchLeadsFromIndiaMart(crmKeyOverride);
     httpCode = Number(data.CODE || 200);
     apiMessage = String(data.MESSAGE || data.STATUS || '');
-    totalRecords = Number(data.TOTAL_RECORDS || (Array.isArray(data.RESPONSE) ? data.RESPONSE.length : 0));
+    const statusStr = String(data.STATUS || '').toUpperCase();
+    totalRecords = Number(data.TOTAL_RECORDS ?? (Array.isArray(data.RESPONSE) ? data.RESPONSE.length : 0));
 
-    // Handle IndiaMART Response Codes
-    if (httpCode === 204 || totalRecords === 0) {
-      syncStatus = 'NO_RECORDS';
-      logger.info(`[IndiaMart Pull] No new leads available since last pull (${apiMessage || 'CODE 204'}).`);
-    } else if (httpCode === 429) {
-      syncStatus = 'RATE_LIMITED';
-      errorDetails = apiMessage || 'Hit frequency limit exceeded (IndiaMART requires >= 5 min intervals)';
-      logger.warn(`[IndiaMart Pull] Rate limited: ${errorDetails}`);
-    } else if (httpCode === 401) {
+    // Handle IndiaMART Response Codes strictly in priority order:
+    // 1. Authentication failure (HTTP 401 or failure message referencing key/auth)
+    if (httpCode === 401 || (statusStr === 'FAILURE' && /key|unauthori|credential|incorrect/i.test(apiMessage))) {
       syncStatus = 'ERROR';
-      errorDetails = apiMessage || 'Invalid or expired IndiaMART Pull API Key (glusr_crm_key)';
+      errorDetails = apiMessage || 'Invalid or expired IndiaMART CRM Key (glusr_crm_key). Check INDIAMART_CRM_KEY in .env.';
       logger.error(`[IndiaMart Pull] Authentication failed: ${errorDetails}`);
-    } else if (httpCode === 200 && Array.isArray(data.RESPONSE)) {
+    }
+    // 2. Rate limit (HTTP 429 or hit frequency interval exceeded)
+    else if (httpCode === 429 || (statusStr === 'FAILURE' && /frequency|interval|rate limit|too many/i.test(apiMessage))) {
+      syncStatus = 'RATE_LIMITED';
+      errorDetails = apiMessage || 'Hit frequency limit exceeded. IndiaMART allows requests at minimum 5-minute intervals.';
+      logger.warn(`[IndiaMart Pull] Rate limited: ${errorDetails}`);
+    }
+    // 3. Other explicit failures from API or 4xx/5xx HTTP codes
+    else if (httpCode >= 400 || statusStr === 'FAILURE') {
+      syncStatus = 'ERROR';
+      errorDetails = apiMessage || `IndiaMART returned failure response (CODE: ${httpCode})`;
+      logger.error(`[IndiaMart Pull] API Error: ${errorDetails}`);
+    }
+    // 4. No new records found (CODE 204, or CODE 200 with 0 records / empty response)
+    else if (
+      httpCode === 204 ||
+      (httpCode === 200 && (totalRecords === 0 || !data.RESPONSE || (Array.isArray(data.RESPONSE) && data.RESPONSE.length === 0)))
+    ) {
+      syncStatus = 'NO_RECORDS';
+      logger.info(`[IndiaMart Pull] No new leads available since last pull (${apiMessage || 'CODE 204 / 0 records'}).`);
+    }
+    // 5. Success with lead records array
+    else if (httpCode === 200 && Array.isArray(data.RESPONSE) && data.RESPONSE.length > 0) {
       const ingestionResult = await ingestRecords(data.RESPONSE, { runType: triggerType, actorId });
       newLeadsCount = ingestionResult.newLeadsCount;
       duplicateCount = ingestionResult.duplicateCount;
@@ -234,7 +275,9 @@ async function runLeadPull({ triggerType = 'CRON', actorId = null, crmKeyOverrid
       createdLeadIds = ingestionResult.createdLeadIds;
 
       logger.info(`[IndiaMart Pull] Finished: ${newLeadsCount} new leads created, ${duplicateCount} duplicates skipped.`);
-    } else {
+    }
+    // 6. Fallback unexpected format
+    else {
       syncStatus = 'ERROR';
       errorDetails = `Unexpected IndiaMART response CODE: ${httpCode}. Message: ${apiMessage}`;
       logger.error(`[IndiaMart Pull] ${errorDetails}`);
@@ -266,11 +309,14 @@ async function runLeadPull({ triggerType = 'CRON', actorId = null, crmKeyOverrid
       }).catch((e) => logger.warn('[IndiaMart Pull] Failed to save sync log:', e.message));
     }
 
+    const isSuccessful = syncStatus === 'SUCCESS' || syncStatus === 'NO_RECORDS';
+
     return {
-      success: syncStatus === 'SUCCESS' || syncStatus === 'NO_RECORDS',
+      success: isSuccessful,
       status: syncStatus,
       http_code: httpCode,
-      message: apiMessage || (syncStatus === 'SUCCESS' ? 'Leads pulled and processed successfully' : errorDetails),
+      message: errorDetails || apiMessage || (syncStatus === 'SUCCESS' ? `Processed ${newLeadsCount} new lead(s)` : 'No new leads found'),
+      error: !isSuccessful ? (errorDetails || apiMessage) : undefined,
       total_records: totalRecords,
       new_leads_count: newLeadsCount,
       duplicate_count: duplicateCount,
@@ -295,23 +341,28 @@ async function getIntegrationStatus() {
 
   const configured = Boolean(INDIAMART_CRM_KEY);
   const maskedKey = configured
-    ? `${INDIAMART_CRM_KEY.slice(0, 4)}...${INDIAMART_CRM_KEY.slice(-4)}`
+    ? (INDIAMART_CRM_KEY.length > 8 ? `${INDIAMART_CRM_KEY.slice(0, 4)}...${INDIAMART_CRM_KEY.slice(-4)}` : '••••••••')
     : 'Not Configured';
 
   return {
     configured,
     masked_key: maskedKey,
+    is_enabled: String(INDIAMART_PULL_ENABLED).toLowerCase() !== 'false',
     is_running: isPullRunning,
     schedule: INDIAMART_PULL_CRON || '0 * * * *',
     frequency: 'Hourly (minute 0 of every hour)',
     mode: 'Option c (Leads received after last API hit without date parameters)',
+    default_department: INDIAMART_DEFAULT_DEPARTMENT || 'UPS/Batteries',
     last_run: lastRun
       ? {
           run_type: lastRun.run_type,
           status: lastRun.status,
+          http_code: lastRun.http_code,
+          api_message: lastRun.api_message,
           total_records: lastRun.total_records,
           new_leads_count: lastRun.new_leads_count,
           duplicate_count: lastRun.duplicate_count,
+          error_count: lastRun.error_count,
           duration_ms: lastRun.duration_ms,
           timestamp: lastRun.createdAt,
           error_details: lastRun.error_details,

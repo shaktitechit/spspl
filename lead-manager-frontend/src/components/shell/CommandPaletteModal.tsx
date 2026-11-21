@@ -20,6 +20,7 @@ import {
   Phone,
   Building2,
   CornerDownLeft,
+  ShoppingBag,
 } from "lucide-react";
 import { useListLeadsQuery } from "@/store/api";
 import { useLeadManagerRole } from "@/hooks/useLeadManagerRole";
@@ -103,6 +104,15 @@ export function CommandPaletteModal({ open, onClose }: CommandPaletteModalProps)
         description: "Browse all incoming leads, status pipelines & filters",
         href: "/dashboard/leads",
         icon: Users,
+        category: "Navigation",
+        roleCheck: true,
+      },
+      {
+        id: "indiamart-leads",
+        title: "IndiaMART Leads",
+        description: "Browse leads received specifically from IndiaMART marketplace",
+        href: "/dashboard/leads/indiamart",
+        icon: ShoppingBag,
         category: "Navigation",
         roleCheck: true,
       },

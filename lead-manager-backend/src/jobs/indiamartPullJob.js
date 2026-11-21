@@ -1,5 +1,6 @@
 /**
  * @fileoverview Scheduled job for pulling IndiaMART leads hourly.
+ * Credentials and configuration are managed strictly via environment variables (.env).
  * @module jobs/indiamartPullJob
  */
 const cron = require('node-cron');
@@ -12,8 +13,8 @@ const { runLeadPull } = require('../modules/integrations/indiamart/indiamartPull
 const { logger } = require('../utils/logger');
 
 function runIndiaMartPullScheduler({ timeZone = 'Asia/Kolkata' } = {}) {
-  const enabled = String(INDIAMART_PULL_ENABLED).toLowerCase() !== 'false';
-  if (!enabled) {
+  const isEnabled = String(INDIAMART_PULL_ENABLED).toLowerCase() !== 'false';
+  if (!isEnabled) {
     logger.info('[scheduler] IndiaMART pull scheduler is disabled (INDIAMART_PULL_ENABLED=false)');
     return;
   }
@@ -35,7 +36,9 @@ function runIndiaMartPullScheduler({ timeZone = 'Asia/Kolkata' } = {}) {
       logger.info(`[scheduler] Triggering scheduled IndiaMART lead pull at ${new Date().toISOString()}...`);
       try {
         const result = await runLeadPull({ triggerType: 'CRON' });
-        logger.info(`[scheduler] IndiaMART pull job completed: ${result.new_leads_count} new leads, ${result.duplicate_count} duplicates (status: ${result.status}).`);
+        logger.info(
+          `[scheduler] IndiaMART pull job completed: ${result.new_leads_count || 0} new leads, ${result.duplicate_count || 0} duplicates (status: ${result.status}).`
+        );
       } catch (err) {
         logger.error(`[scheduler] IndiaMART scheduled lead pull error: ${err.message}`);
       }

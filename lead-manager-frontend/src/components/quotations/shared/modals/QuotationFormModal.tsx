@@ -26,7 +26,10 @@ import {
   Eye,
   Printer,
   Pencil,
+  CheckCircle2,
 } from "lucide-react";
+
+type FieldStatus = "active" | "filled" | "empty";
 
 const QUOTATION_FORM_STEPS = [
   { id: 1 as const, title: "Proposal & Customer" },
@@ -70,14 +73,12 @@ import { PartyDetailModal } from "@/components/portal/shared/parties/modals/Part
 import { getFieldText } from "@/components/leads/shared/LeadFormPage";
 import { splitLeadAssignees } from "@/components/leads/leadUtils";
 import {
-  buildQuotationSignatoryUsers,
   getLeadManagerPortalRole,
   isUserInLeadManagerPortal,
   getDeptLabel,
   getLeadDepartments,
 } from "@/components/leads/leadUtils";
 import { useLeadDepartmentOptions } from "@/components/leads/useLeadDepartmentOptions";
-import { useLeadManagerTeamScope } from "@/hooks/useLeadManagerTeamScope";
 import { isAdmin, isManager } from "@/utils/authStorage";
 
 type Props = {
@@ -804,7 +805,6 @@ export function QuotationFormModal({
   const isEditing = Boolean(quotation?._id) && !isCopy;
   const isCopyMode = Boolean(quotation?._id) && Boolean(isCopy);
   const authUser = useAppSelector((state) => state.auth.user);
-  const { filterByTeam, withSelfInList } = useLeadManagerTeamScope();
 
   const [selectedPartyId, setSelectedPartyId] = useState<string>("");
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
@@ -813,6 +813,63 @@ export function QuotationFormModal({
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editingProductRowIdx, setEditingProductRowIdx] = useState<number | null>(null);
   const [editingPartyId, setEditingPartyId] = useState<string | null>(null);
+
+  const [activeField, setActiveField] = useState<string | null>(null);
+
+  const getFieldStatus = (val: any, fieldId: string): FieldStatus => {
+    if (activeField === fieldId) return "active";
+    if (val !== undefined && val !== null && String(val).trim() !== "" && val !== 0) {
+      return "filled";
+    }
+    return "empty";
+  };
+
+  const getInputClass = (status: FieldStatus, isLocked = false, isSelect = false) => {
+    if (isLocked) {
+      return "w-full rounded-xl border border-slate-200/80 bg-slate-100/90 px-3 py-2 text-sm text-slate-500 cursor-not-allowed dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-400";
+    }
+
+    const base = "w-full rounded-xl px-3 py-2 text-sm transition-all duration-150 focus:outline-none";
+
+    if (status === "active") {
+      return `${base} border-2 border-blue-500 bg-blue-50/20 text-blue-700 font-medium ring-2 ring-blue-500/20 dark:border-blue-400 dark:bg-blue-950/25 dark:text-blue-300`;
+    }
+    if (status === "filled") {
+      return `${base} border border-emerald-500/70 bg-emerald-50/15 text-emerald-700 font-medium hover:border-emerald-500 dark:border-emerald-500/60 dark:bg-emerald-950/20 dark:text-emerald-300`;
+    }
+    // empty
+    return `${base} border border-slate-200 bg-white text-slate-500 placeholder:text-slate-400 hover:border-slate-300 dark:border-white/10 dark:bg-slate-900 dark:text-slate-400 dark:placeholder:text-slate-500 dark:hover:border-white/20`;
+  };
+
+  const getLabelClass = (status: FieldStatus) => {
+    if (status === "active") return "text-blue-600 dark:text-blue-400 font-semibold";
+    if (status === "filled") return "text-emerald-700 dark:text-emerald-400 font-semibold";
+    return "text-slate-500 dark:text-slate-400 font-semibold";
+  };
+
+  const renderFieldStatusBadge = (status: FieldStatus, isRequired = false) => {
+    if (status === "active") {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 animate-pulse">
+          <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+          Active
+        </span>
+      );
+    }
+    if (status === "filled") {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+          <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+          Filled
+        </span>
+      );
+    }
+    return isRequired ? (
+      <span className="text-[10px] font-medium text-rose-500 dark:text-rose-400">Required</span>
+    ) : (
+      <span className="text-[10px] text-slate-400 dark:text-slate-500">Optional</span>
+    );
+  };
 
   useEffect(() => {
     if (open) setCurrentStep(1);
@@ -832,17 +889,6 @@ export function QuotationFormModal({
         : (usersData as { items?: unknown[] })?.items || (usersData as { data?: unknown[] })?.data || []
     ) as Array<{ _id: string; name: string; email: string; phone?: string; department?: string; is_active?: boolean }>;
   }, [usersData]);
-
-  const managerUsers = useMemo(() => {
-    const selfRow = authUser?._id
-      ? usersList.find((u) => String(u._id) === String(authUser._id))
-      : undefined;
-    return buildQuotationSignatoryUsers(usersList, {
-      filterByTeam,
-      withSelfInList,
-      selfUser: selfRow,
-    });
-  }, [usersList, filterByTeam, withSelfInList, authUser]);
 
   // Sales rep picker: list all Lead Manager portal users
   const salesUsers = useMemo(() => {
@@ -1041,6 +1087,7 @@ export function QuotationFormModal({
     setSelectedLeadId(lId);
     if (!lId) {
       setSelectedPartyId("");
+      setSelectedDepartments([]);
       setCustomerName("");
       setKindAttn("");
       setPhone("");
@@ -1062,6 +1109,11 @@ export function QuotationFormModal({
           ? targetLead.party_id
           : "") || "";
     setSelectedPartyId(leadPartyId);
+
+    const leadDepts = getLeadDepartments(targetLead as any);
+    if (leadDepts.length > 0) {
+      setSelectedDepartments(leadDepts);
+    }
 
     const leadOrg =
       targetLead.company_name ||
@@ -1120,7 +1172,7 @@ export function QuotationFormModal({
   const [refNo, setRefNo] = useState("");
   const [customerRef, setCustomerRef] = useState("");
   const [quotationDate, setQuotationDate] = useState("");
-  const [validityDays, setValidityDays] = useState(15);
+  const [validityDays, setValidityDays] = useState<number | string>("");
 
   // Compute calculated validity expiry date (Quotation Date + Validity Days)
   const validityEndDate = useMemo(() => {
@@ -1266,12 +1318,42 @@ export function QuotationFormModal({
   const [signatoryEmail, setSignatoryEmail] = useState("");
   const [signatoryDesignation, setSignatoryDesignation] = useState("");
 
+  // Signatory users list: all users of this Lead Manager portal (without senior/team-senior restrictions)
+  const signatoryUsers = useMemo(() => {
+    const portalUsers = (usersList as Array<{
+      _id: string;
+      name: string;
+      email?: string;
+      phone?: string;
+      department?: string;
+      designation?: string;
+      role?: string;
+      is_active?: boolean;
+      portals?: Array<{ portal_code: string; access_roles?: string[] }>;
+    }>).filter((u) => isUserInLeadManagerPortal(u) && u.is_active !== false);
+
+    const baseList = portalUsers.length > 0 ? portalUsers : (usersList as Array<any>);
+
+    const byId = new Map<string, any>();
+    for (const u of baseList) {
+      if (u._id) byId.set(String(u._id), u);
+    }
+    if (signatoryUserId && !byId.has(String(signatoryUserId))) {
+      const current = usersList.find((u) => String(u._id) === String(signatoryUserId));
+      if (current) byId.set(String(current._id), current);
+    }
+
+    return Array.from(byId.values()).sort((a, b) =>
+      String(a.name || a.email || "").localeCompare(String(b.name || b.email || ""))
+    );
+  }, [usersList, signatoryUserId]);
+
   // Sales Person State (Internal)
   const [salesPersonUserId, setSalesPersonUserId] = useState("");
   const [salesPersonName, setSalesPersonName] = useState("");
   const [salesPersonPhone, setSalesPersonPhone] = useState("");
   const [salesPersonEmail, setSalesPersonEmail] = useState("");
-  const [salesPersonDesignation, setSalesPersonDesignation] = useState("Sales Executive");
+  const [salesPersonDesignation, setSalesPersonDesignation] = useState("");
   const [secondarySalesPersons, setSecondarySalesPersons] = useState<
     Array<{
       user: string;
@@ -1283,16 +1365,12 @@ export function QuotationFormModal({
   >([]);
 
   // Departments State (Internal Purpose)
-  const [selectedDepartments, setSelectedDepartments] = useState<string[]>(["UPS/Batteries"]);
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
   const { departmentOptions } = useLeadDepartmentOptions(selectedDepartments);
 
   const toggleDepartment = (dept: string) => {
     setSelectedDepartments((prev) => {
       if (prev.includes(dept)) {
-        if (prev.length === 1) {
-          toast.warning("Quotation must belong to at least one department");
-          return prev;
-        }
         return prev.filter((d) => d !== dept);
       }
       return [...prev, dept];
@@ -1539,10 +1617,23 @@ export function QuotationFormModal({
     } else {
       setSelectedLeadId("");
       setSelectedPartyId("");
+      setSelectedDepartments([]);
+      setSelectedBranchId("");
+      setCompanyName("");
+      setCompanyRegdAddress("");
+      setCompanyPhone("");
+      setCompanyEmail("");
+      setCompanyGstin("");
+      setBankName("");
+      setAccountName("");
+      setAccountNumber("");
+      setIfscCode("");
+      setBankBranchName("");
+      setAccountType("");
       setRefNo(autoNextRefNo);
       setCustomerRef("");
       setQuotationDate(new Date().toISOString().split("T")[0]);
-      setValidityDays(15);
+      setValidityDays("");
       setCustomerName("");
       setKindAttn("");
       setPhone("");
@@ -1836,16 +1927,6 @@ export function QuotationFormModal({
     }
   };
 
-  // Default to Head Office branch on new quotation when branches load
-  useEffect(() => {
-    if (!quotation && !selectedBranchId && branches.length > 0 && open) {
-      const headOffice = branches.find((b) => b.is_head_office) || branches[0];
-      if (headOffice) {
-        handleBranchSelect(headOffice._id, false);
-      }
-    }
-  }, [quotation, selectedBranchId, branches, open]);
-
   // If editing an existing quote that didn't have branch_id explicitly set, match branch by code, gstin, or fallback to head office
   useEffect(() => {
     if (quotation && !selectedBranchId && branches.length > 0 && open) {
@@ -1883,9 +1964,16 @@ export function QuotationFormModal({
     setSignatoryPhone(selected.phone || "");
     setSignatoryEmail(selected.email || "");
     setSignatoryDesignation(
-      roleBadge === "Admin"
+      (selected as any).designation ||
+      (roleBadge === "Admin"
         ? "Lead Administrator"
-        : "Lead Manager"
+        : roleBadge === "Manager"
+        ? "Lead Manager"
+        : roleBadge === "Coordinator"
+        ? "Lead Coordinator"
+        : roleBadge === "Executive"
+        ? "Sales Executive"
+        : "Authorized Signatory")
     );
   };
 
@@ -1916,7 +2004,7 @@ export function QuotationFormModal({
       setSalesPersonName("");
       setSalesPersonPhone("");
       setSalesPersonEmail("");
-      setSalesPersonDesignation("Sales Executive");
+      setSalesPersonDesignation("");
     }
 
     const primaryId = primary?._id ? String(primary._id) : "";
@@ -2625,7 +2713,7 @@ export function QuotationFormModal({
                 {!isEditing && !lead && (
                   <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 sm:p-3.5">
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                      <label className="text-sm font-bold uppercase tracking-wider text-primary flex items-center gap-2 shrink-0">
+                      <label className={`text-sm font-bold uppercase tracking-wider flex items-center gap-2 shrink-0 ${getLabelClass(getFieldStatus(selectedLeadId, "selectedLeadId"))}`}>
                         <Building2 className="h-4 w-4" />
                         Quotation Type &amp; Lead Link Source
                       </label>
@@ -2633,7 +2721,9 @@ export function QuotationFormModal({
                         <select
                           value={selectedLeadId}
                           onChange={(e) => handleLeadSelect(e.target.value)}
-                          className="flex-1 max-w-md rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white cursor-pointer"
+                          onFocus={() => setActiveField("selectedLeadId")}
+                          onBlur={() => setActiveField(null)}
+                          className={`flex-1 max-w-md ${getInputClass(getFieldStatus(selectedLeadId, "selectedLeadId"))} cursor-pointer font-semibold`}
                         >
                           <option value="">-- Direct Quotation (Standalone Proposal) --</option>
                           {leadsList.map((l) => (
@@ -2671,16 +2761,21 @@ export function QuotationFormModal({
 
                       <div className="space-y-3">
                         <div className="space-y-1">
-                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
-                            Opt Company Branch <span className="text-rose-500">*</span>
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className={`block text-sm ${getLabelClass(getFieldStatus(selectedBranchId, "selectedBranchId"))}`}>
+                              Opt Company Branch <span className="text-rose-500">*</span>
+                            </label>
+                            {renderFieldStatusBadge(getFieldStatus(selectedBranchId, "selectedBranchId"), true)}
+                          </div>
                           <div className="relative">
                             <select
                               value={selectedBranchId}
                               onChange={(e) => handleBranchSelect(e.target.value)}
-                              className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 pr-8 text-sm font-bold text-slate-900 shadow-2xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white cursor-pointer"
+                              onFocus={() => setActiveField("selectedBranchId")}
+                              onBlur={() => setActiveField(null)}
+                              className={`w-full appearance-none pr-8 font-bold cursor-pointer ${getInputClass(getFieldStatus(selectedBranchId, "selectedBranchId"))}`}
                             >
-                              <option value="" disabled>-- Select Company Branch --</option>
+                              <option value="">-- Select Company Branch --</option>
                               {branches.map((b) => (
                                 <option key={b._id} value={b._id}>
                                   {b.branch_name} ({b.address?.city || b.branch_code}){b.is_head_office ? " [HQ]" : ""}
@@ -2729,84 +2824,109 @@ export function QuotationFormModal({
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            <label className={`block text-sm ${getLabelClass(getFieldStatus(refNo, "refNo"))}`}>
                               Ref. No.
                             </label>
-                            {!isEditing && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  refetchQuotations();
-                                  setRefNo(autoNextRefNo);
-                                  toast.info(`Next sequential reference number: ${autoNextRefNo}`);
-                                }}
-                                className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
-                                title="Recalculate next sequential reference number"
-                              >
-                                <RefreshCw className="h-3 w-3" />
-                                Auto Pick
-                              </button>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {renderFieldStatusBadge(getFieldStatus(refNo, "refNo"), false)}
+                              {!isEditing && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    refetchQuotations();
+                                    setRefNo(autoNextRefNo);
+                                    toast.info(`Next sequential reference number: ${autoNextRefNo}`);
+                                  }}
+                                  className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
+                                  title="Recalculate next sequential reference number"
+                                >
+                                  <RefreshCw className="h-3 w-3" />
+                                  Auto Pick
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <input
                             type="text"
                             value={refNo}
                             onChange={(e) => setRefNo(e.target.value)}
+                            onFocus={() => setActiveField("refNo")}
+                            onBlur={() => setActiveField(null)}
                             placeholder="e.g. Q-1001"
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-mono font-bold text-primary"
+                            className={`${getInputClass(getFieldStatus(refNo, "refNo"))} font-mono font-bold text-primary`}
                           />
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Quotation Date
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className={`block text-sm ${getLabelClass(getFieldStatus(quotationDate, "quotationDate"))}`}>
+                              Quotation Date
+                            </label>
+                            {renderFieldStatusBadge(getFieldStatus(quotationDate, "quotationDate"), false)}
+                          </div>
                           <input
                             type="date"
                             value={quotationDate}
                             onChange={(e) => setQuotationDate(e.target.value)}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                            onFocus={() => setActiveField("quotationDate")}
+                            onBlur={() => setActiveField(null)}
+                            className={getInputClass(getFieldStatus(quotationDate, "quotationDate"))}
                           />
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Validity (Days)
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className={`block text-sm ${getLabelClass(getFieldStatus(validityDays, "validityDays"))}`}>
+                              Validity (Days)
+                            </label>
+                            {renderFieldStatusBadge(getFieldStatus(validityDays, "validityDays"), false)}
+                          </div>
                           <input
                             type="number"
                             min="1"
                             max="180"
                             value={validityDays}
-                            onChange={(e) => setValidityDays(Number(e.target.value))}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-bold"
+                            onChange={(e) => setValidityDays(e.target.value === "" ? "" : Number(e.target.value))}
+                            onFocus={() => setActiveField("validityDays")}
+                            onBlur={() => setActiveField(null)}
+                            placeholder="e.g. 15"
+                            className={`${getInputClass(getFieldStatus(validityDays, "validityDays"))} font-bold`}
                           />
                           <p className="mt-0.5 text-xs text-slate-400">Defaults to 15 days validity</p>
                         </div>
 
                         <div>
-                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                            <span>Validity Date</span>
-                            <span className="text-xs text-blue-600 font-bold dark:text-blue-400">Valid Until</span>
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className={`block text-sm ${getLabelClass(getFieldStatus(validityEndDate, "validityEndDate"))} flex items-center justify-between w-full`}>
+                              <span>Validity Date</span>
+                              <span className="text-xs text-blue-600 font-bold dark:text-blue-400">Valid Until</span>
+                            </label>
+                          </div>
                           <input
                             type="date"
                             value={validityEndDate}
                             onChange={(e) => handleValidityEndDateChange(e.target.value)}
-                            className="w-full rounded-xl border border-blue-200 bg-blue-50/40 px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-semibold"
+                            onFocus={() => setActiveField("validityEndDate")}
+                            onBlur={() => setActiveField(null)}
+                            className={`${getInputClass(getFieldStatus(validityEndDate, "validityEndDate"))} font-semibold`}
                           />
                         </div>
 
                         <div className="sm:col-span-2">
-                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Subject / Title
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className={`block text-sm ${getLabelClass(getFieldStatus(subject, "subject"))}`}>
+                              Subject / Title
+                            </label>
+                            {renderFieldStatusBadge(getFieldStatus(subject, "subject"), false)}
+                          </div>
                           <input
                             type="text"
                             value={subject}
                             onChange={(e) => handleSubjectChange(e.target.value)}
+                            onFocus={() => setActiveField("subject")}
+                            onBlur={() => setActiveField(null)}
                             placeholder="e.g. Offer For Medical Equipment"
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-semibold"
+                            className={`${getInputClass(getFieldStatus(subject, "subject"))} font-semibold`}
                           />
                         </div>
                       </div>
@@ -2855,223 +2975,275 @@ export function QuotationFormModal({
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="sm:col-span-2">
-                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Customer Name / M/s. <span className="text-rose-500">*</span>
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className={`block text-sm ${getLabelClass(getFieldStatus(customerName, "customerName"))}`}>
+                              Customer Name / M/s. <span className="text-rose-500">*</span>
+                            </label>
+                            {renderFieldStatusBadge(getFieldStatus(customerName, "customerName"), true)}
+                          </div>
                           <input
                             type="text"
                             required
                             value={customerName}
                             onChange={(e) => setCustomerName(e.target.value)}
+                            onFocus={() => setActiveField("customerName")}
+                            onBlur={() => setActiveField(null)}
                             placeholder="e.g. M/s. Apex Super Specialty Hospital"
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-bold"
+                            className={`${getInputClass(getFieldStatus(customerName, "customerName"))} font-bold`}
                           />
                         </div>
 
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            <label className={`block text-sm ${getLabelClass(getFieldStatus(customerRef, "customerRef"))}`}>
                               Customer Ref <span className="text-xs text-slate-400 font-normal">(Enquiry / PO Ref)</span>
                             </label>
-                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
-                              <input
-                                type="checkbox"
-                                checked={showCustomerRef}
-                                onChange={(e) => setShowCustomerRef(e.target.checked)}
-                                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
-                              />
-                              <span className={showCustomerRef ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
-                                {showCustomerRef ? "Show in PDF" : "Hidden in PDF"}
-                              </span>
-                            </label>
+                            <div className="flex items-center gap-2">
+                              {renderFieldStatusBadge(getFieldStatus(customerRef, "customerRef"), false)}
+                              <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={showCustomerRef}
+                                  onChange={(e) => setShowCustomerRef(e.target.checked)}
+                                  className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                                />
+                                <span className={showCustomerRef ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                                  {showCustomerRef ? "Show in PDF" : "Hidden in PDF"}
+                                </span>
+                              </label>
+                            </div>
                           </div>
                           <input
                             type="text"
                             value={customerRef}
                             onChange={(e) => setCustomerRef(e.target.value)}
+                            onFocus={() => setActiveField("customerRef")}
+                            onBlur={() => setActiveField(null)}
                             placeholder="e.g. PO-9876 / ENQ-123"
-                            className={`w-full rounded-xl border ${!showCustomerRef ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-sm font-bold text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white font-mono`}
+                            className={`${getInputClass(getFieldStatus(customerRef, "customerRef"))} font-mono font-bold ${!showCustomerRef ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : ""}`}
                           />
                         </div>
 
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            <label className={`block text-sm ${getLabelClass(getFieldStatus(kindAttn, "kindAttn"))}`}>
                               Kind Attn (Contact Person)
                             </label>
-                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
-                              <input
-                                type="checkbox"
-                                checked={showKindAttn}
-                                onChange={(e) => setShowKindAttn(e.target.checked)}
-                                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
-                              />
-                              <span className={showKindAttn ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
-                                {showKindAttn ? "Show in PDF" : "Hidden in PDF"}
-                              </span>
-                            </label>
+                            <div className="flex items-center gap-2">
+                              {renderFieldStatusBadge(getFieldStatus(kindAttn, "kindAttn"), false)}
+                              <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={showKindAttn}
+                                  onChange={(e) => setShowKindAttn(e.target.checked)}
+                                  className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                                />
+                                <span className={showKindAttn ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                                  {showKindAttn ? "Show in PDF" : "Hidden in PDF"}
+                                </span>
+                              </label>
+                            </div>
                           </div>
                           <input
                             type="text"
                             value={kindAttn}
                             onChange={(e) => setKindAttn(e.target.value)}
+                            onFocus={() => setActiveField("kindAttn")}
+                            onBlur={() => setActiveField(null)}
                             placeholder="e.g. Dr. Rajesh Sharma"
-                            className={`w-full rounded-xl border ${!showKindAttn ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white`}
+                            className={`${getInputClass(getFieldStatus(kindAttn, "kindAttn"))} ${!showKindAttn ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : ""}`}
                           />
                         </div>
 
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            <label className={`block text-sm ${getLabelClass(getFieldStatus(cell, "cell"))}`}>
                               Mobile / Cell
                             </label>
-                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
-                              <input
-                                type="checkbox"
-                                checked={showCell}
-                                onChange={(e) => setShowCell(e.target.checked)}
-                                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
-                              />
-                              <span className={showCell ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
-                                {showCell ? "Show in PDF" : "Hidden in PDF"}
-                              </span>
-                            </label>
+                            <div className="flex items-center gap-2">
+                              {renderFieldStatusBadge(getFieldStatus(cell, "cell"), false)}
+                              <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={showCell}
+                                  onChange={(e) => setShowCell(e.target.checked)}
+                                  className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                                />
+                                <span className={showCell ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                                  {showCell ? "Show in PDF" : "Hidden in PDF"}
+                                </span>
+                              </label>
+                            </div>
                           </div>
                           <input
                             type="text"
                             value={cell}
                             onChange={(e) => setCell(e.target.value)}
+                            onFocus={() => setActiveField("cell")}
+                            onBlur={() => setActiveField(null)}
                             placeholder="Mobile Number"
-                            className={`w-full rounded-xl border ${!showCell ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white`}
+                            className={`${getInputClass(getFieldStatus(cell, "cell"))} ${!showCell ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : ""}`}
                           />
                         </div>
 
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            <label className={`block text-sm ${getLabelClass(getFieldStatus(phone, "phone"))}`}>
                               Phone / Tel.
                             </label>
-                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
-                              <input
-                                type="checkbox"
-                                checked={showPhone}
-                                onChange={(e) => setShowPhone(e.target.checked)}
-                                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
-                              />
-                              <span className={showPhone ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
-                                {showPhone ? "Show in PDF" : "Hidden in PDF"}
-                              </span>
-                            </label>
+                            <div className="flex items-center gap-2">
+                              {renderFieldStatusBadge(getFieldStatus(phone, "phone"), false)}
+                              <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={showPhone}
+                                  onChange={(e) => setShowPhone(e.target.checked)}
+                                  className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                                />
+                                <span className={showPhone ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                                  {showPhone ? "Show in PDF" : "Hidden in PDF"}
+                                </span>
+                              </label>
+                            </div>
                           </div>
                           <input
                             type="text"
                             value={phone}
                             onChange={(e) => setPhone(e.target.value)}
+                            onFocus={() => setActiveField("phone")}
+                            onBlur={() => setActiveField(null)}
                             placeholder="Office Landline / Phone"
-                            className={`w-full rounded-xl border ${!showPhone ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white`}
+                            className={`${getInputClass(getFieldStatus(phone, "phone"))} ${!showPhone ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : ""}`}
                           />
                         </div>
 
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            <label className={`block text-sm ${getLabelClass(getFieldStatus(email, "email"))}`}>
                               Email Address
                             </label>
-                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
-                              <input
-                                type="checkbox"
-                                checked={showEmail}
-                                onChange={(e) => setShowEmail(e.target.checked)}
-                                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
-                              />
-                              <span className={showEmail ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
-                                {showEmail ? "Show in PDF" : "Hidden in PDF"}
-                              </span>
-                            </label>
+                            <div className="flex items-center gap-2">
+                              {renderFieldStatusBadge(getFieldStatus(email, "email"), false)}
+                              <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={showEmail}
+                                  onChange={(e) => setShowEmail(e.target.checked)}
+                                  className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                                />
+                                <span className={showEmail ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                                  {showEmail ? "Show in PDF" : "Hidden in PDF"}
+                                </span>
+                              </label>
+                            </div>
                           </div>
                           <input
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
+                            onFocus={() => setActiveField("email")}
+                            onBlur={() => setActiveField(null)}
                             placeholder="customer@email.com"
-                            className={`w-full rounded-xl border ${!showEmail ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white`}
+                            className={`${getInputClass(getFieldStatus(email, "email"))} ${!showEmail ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : ""}`}
                           />
                         </div>
 
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            <label className={`block text-sm ${getLabelClass(getFieldStatus(gstin, "gstin"))}`}>
                               GSTIN
                             </label>
-                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
-                              <input
-                                type="checkbox"
-                                checked={showGstin}
-                                onChange={(e) => setShowGstin(e.target.checked)}
-                                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
-                              />
-                              <span className={showGstin ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
-                                {showGstin ? "Show in PDF" : "Hidden in PDF"}
-                              </span>
-                            </label>
+                            <div className="flex items-center gap-2">
+                              {renderFieldStatusBadge(getFieldStatus(gstin, "gstin"), false)}
+                              <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={showGstin}
+                                  onChange={(e) => setShowGstin(e.target.checked)}
+                                  className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 dark:border-white/20 dark:bg-slate-800"
+                                />
+                                <span className={showGstin ? "text-slate-500 dark:text-slate-400" : "text-amber-600 dark:text-amber-400 font-medium"}>
+                                  {showGstin ? "Show in PDF" : "Hidden in PDF"}
+                                </span>
+                              </label>
+                            </div>
                           </div>
                           <input
                             type="text"
                             value={gstin}
                             onChange={(e) => setGstin(e.target.value.toUpperCase())}
+                            onFocus={() => setActiveField("gstin")}
+                            onBlur={() => setActiveField(null)}
                             placeholder="e.g. 03ABCDE1234F1Z5"
-                            className={`w-full rounded-xl border ${!showGstin ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : "border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900"} px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:text-white font-mono uppercase`}
+                            className={`${getInputClass(getFieldStatus(gstin, "gstin"))} font-mono uppercase ${!showGstin ? "border-dashed border-amber-300/80 bg-amber-50/20 dark:border-amber-500/30 dark:bg-amber-950/10" : ""}`}
                           />
                         </div>
 
                         <div className="sm:col-span-2">
-                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                            Street Address
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className={`block text-sm ${getLabelClass(getFieldStatus(addressLine, "addressLine"))}`}>
+                              Street Address
+                            </label>
+                            {renderFieldStatusBadge(getFieldStatus(addressLine, "addressLine"), false)}
+                          </div>
                           <input
                             type="text"
                             value={addressLine}
                             onChange={(e) => setAddressLine(e.target.value)}
+                            onFocus={() => setActiveField("addressLine")}
+                            onBlur={() => setActiveField(null)}
                             placeholder="Building / Street Address"
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                            className={getInputClass(getFieldStatus(addressLine, "addressLine"))}
                           />
                         </div>
 
                         <div className="grid grid-cols-3 gap-2 sm:col-span-2">
                           <div>
-                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                              City
-                            </label>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className={`block text-sm ${getLabelClass(getFieldStatus(city, "city"))}`}>
+                                City
+                              </label>
+                            </div>
                             <input
                               type="text"
                               value={city}
                               onChange={(e) => setCity(e.target.value)}
+                              onFocus={() => setActiveField("city")}
+                              onBlur={() => setActiveField(null)}
                               placeholder="City"
-                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                              className={getInputClass(getFieldStatus(city, "city"))}
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                              State
-                            </label>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className={`block text-sm ${getLabelClass(getFieldStatus(state, "state"))}`}>
+                                State
+                              </label>
+                            </div>
                             <input
                               type="text"
                               value={state}
                               onChange={(e) => setState(e.target.value)}
+                              onFocus={() => setActiveField("state")}
+                              onBlur={() => setActiveField(null)}
                               placeholder="State"
-                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                              className={getInputClass(getFieldStatus(state, "state"))}
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                              Pincode
-                            </label>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className={`block text-sm ${getLabelClass(getFieldStatus(pincode, "pincode"))}`}>
+                                Pincode
+                              </label>
+                            </div>
                             <input
                               type="text"
                               value={pincode}
                               onChange={(e) => setPincode(e.target.value)}
+                              onFocus={() => setActiveField("pincode")}
+                              onBlur={() => setActiveField(null)}
                               placeholder="Pincode"
-                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white"
+                              className={getInputClass(getFieldStatus(pincode, "pincode"))}
                             />
                           </div>
                         </div>
@@ -3754,17 +3926,19 @@ export function QuotationFormModal({
 
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                          <label className={`block text-sm ${getLabelClass(getFieldStatus(salesPersonDesignation, "salesPersonDesignation"))}`}>
                             Sales Role / Designation
                           </label>
-                          <span className="text-xs text-emerald-600 font-bold dark:text-emerald-400">Editable</span>
+                          {renderFieldStatusBadge(getFieldStatus(salesPersonDesignation, "salesPersonDesignation"), false)}
                         </div>
                         <input
                           type="text"
                           value={salesPersonDesignation}
                           onChange={(e) => setSalesPersonDesignation(e.target.value)}
+                          onFocus={() => setActiveField("salesPersonDesignation")}
+                          onBlur={() => setActiveField(null)}
                           placeholder="e.g. Sales Executive"
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-medium"
+                          className={getInputClass(getFieldStatus(salesPersonDesignation, "salesPersonDesignation"))}
                         />
                       </div>
 
@@ -3880,13 +4054,13 @@ export function QuotationFormModal({
                             type="button"
                             onClick={() => toggleDepartment(dept.value)}
                             className={`flex items-center justify-between rounded-xl border px-3 py-2 text-xs font-medium transition cursor-pointer text-left ${isSelected
-                              ? "border-purple-500 bg-purple-50 text-purple-700 font-bold ring-1 ring-purple-300 shadow-xs dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-500 dark:ring-purple-900"
-                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700/60"
+                              ? "border-emerald-500 bg-emerald-50/25 text-emerald-700 font-bold ring-1 ring-emerald-300 shadow-xs dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-500 dark:ring-emerald-900"
+                              : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700/60"
                               }`}
                           >
                             <span className="truncate">{dept.label}</span>
                             {isSelected ? (
-                              <Check className="h-3.5 w-3.5 shrink-0 text-purple-600 dark:text-purple-400" />
+                              <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                             ) : (
                               <Plus className="h-3.5 w-3.5 shrink-0 text-slate-400 opacity-60" />
                             )}
@@ -3895,8 +4069,8 @@ export function QuotationFormModal({
                       })}
                     </div>
                     {selectedDepartments.length === 0 && (
-                      <p className="text-xs font-medium text-rose-500">
-                        Please select at least one department for internal purpose.
+                      <p className="text-xs font-medium text-slate-400">
+                        Optional: Select departments for internal classification &amp; routing.
                       </p>
                     )}
                   </div>
@@ -3920,31 +4094,36 @@ export function QuotationFormModal({
 
                     {/* Selector for admin/finance/signatory users */}
                     {usersList.length > 0 && (
-                      <div className="space-y-1.5 rounded-xl bg-blue-50/50 p-2.5 border border-blue-200/60 dark:bg-blue-950/20 dark:border-blue-900/40">
+                      <div className="space-y-1.5 rounded-xl bg-slate-50/70 p-2.5 border border-slate-200 dark:bg-slate-800/40 dark:border-white/10">
                         <div className="flex items-center justify-between">
-                          <label className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                          <label className={`text-sm ${getLabelClass(getFieldStatus(signatoryUserId, "signatoryUserId"))}`}>
                             Choose Authorized Signatory: <span className="text-rose-500">*</span>
                           </label>
-                          {signatoryUserId && (
-                            <button
-                              type="button"
-                              onClick={() => handleSelectAdminUser("")}
-                              className="text-xs font-semibold text-rose-600 hover:underline dark:text-rose-400 cursor-pointer"
-                              title="Clear selected signatory"
-                            >
-                              Clear
-                            </button>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {renderFieldStatusBadge(getFieldStatus(signatoryUserId, "signatoryUserId"), true)}
+                            {signatoryUserId && (
+                              <button
+                                type="button"
+                                onClick={() => handleSelectAdminUser("")}
+                                className="text-xs font-semibold text-rose-600 hover:underline dark:text-rose-400 cursor-pointer"
+                                title="Clear selected signatory"
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <select
                           value={signatoryUserId}
                           onChange={(e) => handleSelectAdminUser(e.target.value)}
-                          className="w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-slate-100 cursor-pointer"
+                          onFocus={() => setActiveField("signatoryUserId")}
+                          onBlur={() => setActiveField(null)}
+                          className={`w-full ${getInputClass(getFieldStatus(signatoryUserId, "signatoryUserId"))} font-bold cursor-pointer`}
                         >
                           <option value="">
                             -- Select Authorized Signatory (Required) --
                           </option>
-                          {managerUsers.map((u: any) => {
+                          {signatoryUsers.map((u: any) => {
                             const roleBadge = getLeadManagerPortalRole(u);
                             return (
                               <option key={u._id} value={u._id}>
@@ -3976,17 +4155,19 @@ export function QuotationFormModal({
 
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                          <label className={`block text-sm ${getLabelClass(getFieldStatus(signatoryDesignation, "signatoryDesignation"))}`}>
                             Designation / Title
                           </label>
-                          <span className="text-xs text-blue-600 font-bold dark:text-blue-400">Editable</span>
+                          {renderFieldStatusBadge(getFieldStatus(signatoryDesignation, "signatoryDesignation"), false)}
                         </div>
                         <input
                           type="text"
                           value={signatoryDesignation}
                           onChange={(e) => setSignatoryDesignation(e.target.value)}
+                          onFocus={() => setActiveField("signatoryDesignation")}
+                          onBlur={() => setActiveField(null)}
                           placeholder="e.g. Authorized Signatory / Director"
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-xs focus:border-primary focus:outline-none dark:border-white/10 dark:bg-slate-900 dark:text-white font-medium"
+                          className={getInputClass(getFieldStatus(signatoryDesignation, "signatoryDesignation"))}
                         />
                       </div>
 

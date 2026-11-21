@@ -48,6 +48,8 @@ import {
 } from "lucide-react";
 import {
   useListQuotationsQuery,
+  useLazyListQuotationsQuery,
+  useListUsersQuery,
   useSubmitQuotationForApprovalMutation,
   useApproveQuotationMutation,
   useRejectQuotationMutation,
@@ -85,6 +87,8 @@ import { ExtendQuotationValidityModal } from "./modals/ExtendQuotationValidityMo
 import { DownloadQuotationsPreviewModal } from "./modals/DownloadQuotationsPreviewModal";
 import { QuotationFilterDrawer } from "./QuotationFilterDrawer";
 import type { MultiSelectOption } from "@/components/leads/shared/LeadFilterDrawer";
+import { TablePaginationBar } from "@/components/portal/shared/pagination/TablePaginationBar";
+import { TableScrollContainer } from "@/components/portal/shared/TableScrollContainer";
 import { TableSkeletonRows, CardSkeletonFeed } from "@/components/shared/Skeletons";
 import {
   LEAD_DEPARTMENT_OPTIONS,
@@ -183,7 +187,7 @@ export function ListQuotationsPage({
   const [secondaryRepFilter, setSecondaryRepFilter] = useState<string[]>([]);
   const [createdByFilter, setCreatedByFilter] = useState<string[]>([]);
   const [page, setPage] = useState(1);
-  const limit = 25;
+  const [limit, setLimit] = useState(10);
 
   // View mode & selection state
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
@@ -211,56 +215,66 @@ export function ListQuotationsPage({
     return "my";
   }, [effectiveScope]);
 
-  // RTK Query API call — fetch all quotations once for active scope; filtering, sorting, and export are performed instantly in memory
-  const { data: rawQuotations, isLoading, isFetching, refetch } = useListQuotationsQuery({
-    scope: apiScope,
-    limit: "all",
-    all: true,
-  });
+  const queryArgs = useMemo(
+    () => ({
+      page,
+      limit,
+      scope: apiScope,
+      search: searchTerm.trim() || undefined,
+      status: statusFilter.length > 0 ? statusFilter.join(",") : undefined,
+      department: departmentFilter.length > 0 ? departmentFilter.join(",") : undefined,
+      validity: validityFilter.length > 0 ? validityFilter.join(",") : undefined,
+      lead_source: leadSourceFilter.length > 0 ? leadSourceFilter.join(",") : undefined,
+      min_amount: minAmount || undefined,
+      max_amount: maxAmount || undefined,
+      from_date: fromDate || undefined,
+      to_date: toDate || undefined,
+      signatory: signatoryFilter.length > 0 ? signatoryFilter.join(",") : undefined,
+      primary_rep: primaryRepFilter.length > 0 ? primaryRepFilter.join(",") : undefined,
+      secondary_rep: secondaryRepFilter.length > 0 ? secondaryRepFilter.join(",") : undefined,
+      created_by: createdByFilter.length > 0 ? createdByFilter.join(",") : undefined,
+    }),
+    [
+      page,
+      limit,
+      apiScope,
+      searchTerm,
+      statusFilter,
+      departmentFilter,
+      validityFilter,
+      leadSourceFilter,
+      minAmount,
+      maxAmount,
+      fromDate,
+      toDate,
+      signatoryFilter,
+      primaryRepFilter,
+      secondaryRepFilter,
+      createdByFilter,
+    ]
+  );
 
-  const baseQuotations: QuotationRecord[] = useMemo(() => {
-    let list: QuotationRecord[] = [];
-    if (Array.isArray(rawQuotations)) {
-      list = rawQuotations;
-    } else if (rawQuotations && typeof rawQuotations === "object") {
-      if ("data" in rawQuotations && Array.isArray((rawQuotations as any).data)) {
-        list = (rawQuotations as any).data;
-      } else if ("quotations" in rawQuotations && Array.isArray((rawQuotations as any).quotations)) {
-        list = (rawQuotations as any).quotations;
-      }
-    }
-    const currentUser = authUser || (typeof window !== "undefined" ? readSessionFromStorage()?.user : null);
-    if (!currentUser) return list;
-    if (effectiveScope === "my") {
-      const currentUid = String(currentUser?._id || currentUser?.id || "");
-      return list.filter((q) => {
-        const leadObj = typeof q.lead === "object" && q.lead !== null ? (q.lead as any) : null;
-        const assignedTo =
-          leadObj && typeof leadObj.assigned_to === "object"
-            ? leadObj.assigned_to?._id
-            : leadObj?.assigned_to;
-        const isLeadAssigned =
-          Boolean(currentUid && assignedTo && String(assignedTo) === currentUid) ||
-          (Boolean(currentUid) &&
-            Array.isArray(leadObj?.assigned_users) &&
-            leadObj.assigned_users.some(
-              (u: any) => String(typeof u === "object" ? u?._id : u) === currentUid
-            ));
-        return (
-          isQuotationCreator(currentUser as any, q as any) ||
-          isQuotationSalesRepresentative(currentUser as any, q as any) ||
-          isStrictSignatory(currentUser as any, q as any) ||
-          isLeadAssigned
-        );
-      });
-    }
-    if (canManageQuotations(currentUser) || canViewQuotations(currentUser)) {
-      return list;
-    }
-    return list.filter((q) => isQuotationRosterVisible(currentUser as any, q as any));
-  }, [rawQuotations, authUser, effectiveScope]);
+  const { data: rawQuotations, isLoading, isFetching, refetch } = useListQuotationsQuery(queryArgs);
+  const { data: usersData } = useListUsersQuery();
 
-  // Unique facet values from current data
+  const [fetchExportQuotations, { isFetching: isExportFetching }] = useLazyListQuotationsQuery();
+  const [exportRawQuotations, setExportRawQuotations] = useState<QuotationRecord[] | null>(null);
+
+  const users = useMemo(() => {
+    if (Array.isArray(usersData)) return usersData;
+    return (usersData as any)?.data || [];
+  }, [usersData]);
+
+  const quotations: QuotationRecord[] = useMemo(() => {
+    if (!rawQuotations) return [];
+    if (Array.isArray(rawQuotations)) return rawQuotations;
+    return (rawQuotations as any).quotations || (rawQuotations as any).items || [];
+  }, [rawQuotations]);
+
+  const totalCount = (rawQuotations as any)?.total ?? (rawQuotations as any)?.pagination?.total ?? quotations.length;
+  const totalPages = (rawQuotations as any)?.totalPages ?? (rawQuotations as any)?.pagination?.totalPages ?? Math.max(1, Math.ceil(totalCount / limit));
+
+  // Unique facet values from users catalogue and current page items
   const {
     availableSignatoryOptions,
     availablePrimaryRepOptions,
@@ -272,7 +286,18 @@ export function ListQuotationsPage({
     const secondaryMap = new Map<string, MultiSelectOption>();
     const createdByMap = new Map<string, MultiSelectOption>();
 
-    baseQuotations.forEach((q) => {
+    users.forEach((u: any) => {
+      if (u.name?.trim()) {
+        const name = u.name.trim();
+        const sub = u.email || u.department || undefined;
+        sigMap.set(name, { value: name, label: name, sublabel: sub });
+        primaryMap.set(name, { value: name, label: name, sublabel: sub });
+        secondaryMap.set(name, { value: name, label: name, sublabel: sub });
+        createdByMap.set(name, { value: name, label: name, sublabel: sub });
+      }
+    });
+
+    quotations.forEach((q) => {
       if (q.signatory_name?.trim()) {
         const name = q.signatory_name.trim();
         if (!sigMap.has(name)) {
@@ -307,112 +332,7 @@ export function ListQuotationsPage({
       availableSecondaryRepOptions: sortOpts(secondaryMap),
       availableCreatedByOptions: sortOpts(createdByMap),
     };
-  }, [baseQuotations]);
-
-  // Extended client-side faceted filtering
-  const quotations: QuotationRecord[] = useMemo(() => {
-    return baseQuotations.filter((q) => {
-      // Status multi-select filter
-      if (statusFilter.length > 0) {
-        const expiryInfo = getQuotationExpiryInfo(q);
-        const normalizedStatus = q.status === "converted" ? "accepted" : q.status;
-        const matchesStatus = statusFilter.some((st) => {
-          if (st === "expired") return expiryInfo.isExpired || q.status === "expired";
-          if (st === "pending_approval") return q.approval_status === "pending_approval" || q.status === "pending_approval";
-          if (st === "converted") return q.status === "converted";
-          return q.status === st || normalizedStatus === st;
-        });
-        if (!matchesStatus) return false;
-      }
-
-      // Validity filter
-      if (validityFilter.length > 0) {
-        const matchesValidity = validityFilter.some((v) => {
-          if (v === "valid") return !isQuotationExpired(q);
-          if (v === "expiring_soon") return isQuotationExpiringSoon(q);
-          if (v === "expired") return isQuotationExpired(q);
-          return false;
-        });
-        if (!matchesValidity) return false;
-      }
-
-      // Lead source filter
-      if (leadSourceFilter.length > 0) {
-        const matchesSource = leadSourceFilter.some((src) => {
-          if (src === "linked") return Boolean(q.lead);
-          if (src === "direct") return !q.lead;
-          return false;
-        });
-        if (!matchesSource) return false;
-      }
-
-      // Min amount filter
-      if (minAmount && (q.grand_total || 0) < parseFloat(minAmount)) return false;
-
-      // Max amount filter
-      if (maxAmount && (q.grand_total || 0) > parseFloat(maxAmount)) return false;
-
-      // Date range filter
-      if (fromDate) {
-        const qDate = q.quotation_date ? new Date(q.quotation_date) : null;
-        if (!qDate || qDate < new Date(fromDate)) return false;
-      }
-      if (toDate) {
-        const qDate = q.quotation_date ? new Date(q.quotation_date) : null;
-        if (!qDate || qDate > new Date(toDate + "T23:59:59")) return false;
-      }
-
-      // Signatory filter
-      if (signatoryFilter.length > 0 && !signatoryFilter.includes((q.signatory_name || "").trim())) {
-        return false;
-      }
-
-      // Primary Sales Rep filter
-      if (primaryRepFilter.length > 0) {
-        const rep = salesRepresentativeDisplay(q);
-        if (!primaryRepFilter.includes(rep.name)) return false;
-      }
-
-      // Secondary Sales Reps filter
-      if (secondaryRepFilter.length > 0) {
-        const rep = salesRepresentativeDisplay(q);
-        if (!rep.secondary.some((s) => secondaryRepFilter.includes(s.name))) return false;
-      }
-
-      // Created By filter
-      if (createdByFilter.length > 0) {
-        const creatorName = (q.created_by?.name || "").trim();
-        if (!createdByFilter.includes(creatorName)) return false;
-      }
-
-      // Department filter
-      if (departmentFilter.length > 0) {
-        const depts = getLeadDepartments(q as any);
-        const matchesDept = departmentFilter.some((dep) => {
-          const matchArray = depts.some((d) => d.toLowerCase() === dep.toLowerCase());
-          const matchString = (q.department || "").toLowerCase().includes(dep.toLowerCase());
-          return matchArray || matchString;
-        });
-        if (!matchesDept) return false;
-      }
-
-      return true;
-    });
-  }, [
-    baseQuotations,
-    statusFilter,
-    departmentFilter,
-    validityFilter,
-    leadSourceFilter,
-    minAmount,
-    maxAmount,
-    fromDate,
-    toDate,
-    signatoryFilter,
-    primaryRepFilter,
-    secondaryRepFilter,
-    createdByFilter,
-  ]);
+  }, [users, quotations]);
 
   // Active filter count
   const activeFilterCount = useMemo(() => {
@@ -461,6 +381,8 @@ export function ListQuotationsPage({
     setSecondaryRepFilter([]);
     setCreatedByFilter([]);
     setSearchTerm("");
+    setPage(1);
+    setSelectedIds(new Set());
   };
 
   // Selection handlers
@@ -474,10 +396,14 @@ export function ListQuotationsPage({
   };
 
   const handleSelectAllVisible = () => {
-    if (selectedIds.size === quotations.length && quotations.length > 0) {
+    if (quotations.length > 0 && quotations.every((q) => selectedIds.has(q._id))) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(quotations.map((q) => q._id)));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        quotations.forEach((q) => next.add(q._id));
+        return next;
+      });
     }
   };
 
@@ -485,11 +411,46 @@ export function ListQuotationsPage({
     setSelectedIds(new Set());
   };
 
-  // Selected quotations list
-  const selectedQuotations = useMemo(() => {
-    if (!exportOnlySelected) return quotations;
-    return quotations.filter((q) => selectedIds.has(q._id));
-  }, [quotations, selectedIds, exportOnlySelected]);
+  // Full export handler on-demand (queries all data without affecting table query)
+  const handleOpenExportAll = async () => {
+    try {
+      const res = await fetchExportQuotations({
+        ...queryArgs,
+        limit: "all",
+        all: true,
+      }).unwrap();
+      const allQuotes = (res as any)?.quotations || (res as any)?.items || (Array.isArray(res) ? res : []);
+      setExportRawQuotations(allQuotes);
+      setExportOnlySelected(false);
+      setDownloadQuotationsModalOpen(true);
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to load all quotations for export");
+    }
+  };
+
+  const handleOpenExportSelected = async () => {
+    const selectedInPage = quotations.filter((q) => selectedIds.has(q._id));
+    if (selectedInPage.length === selectedIds.size) {
+      setExportRawQuotations(selectedInPage);
+      setExportOnlySelected(true);
+      setDownloadQuotationsModalOpen(true);
+      return;
+    }
+    try {
+      const res = await fetchExportQuotations({
+        ...queryArgs,
+        limit: "all",
+        all: true,
+      }).unwrap();
+      const allQuotes = (res as any)?.quotations || (res as any)?.items || (Array.isArray(res) ? res : []);
+      const selected = allQuotes.filter((q: QuotationRecord) => selectedIds.has(q._id));
+      setExportRawQuotations(selected);
+      setExportOnlySelected(true);
+      setDownloadQuotationsModalOpen(true);
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to load selected quotations for export");
+    }
+  };
 
   // Modal States
   const [downloadQuotationsModalOpen, setDownloadQuotationsModalOpen] = useState(false);
@@ -593,21 +554,16 @@ export function ListQuotationsPage({
     }
   };
 
-  const allVisibleSelected = quotations.length > 0 && selectedIds.size === quotations.length;
+  const allVisibleSelected = quotations.length > 0 && quotations.every((q) => selectedIds.has(q._id));
   const someVisibleSelected = selectedIds.size > 0 && !allVisibleSelected;
-  const totalCount = quotations.length;
-  const totalPages = Math.max(1, Math.ceil(quotations.length / limit));
 
   useEffect(() => {
-    if (page > totalPages) {
+    if (totalPages > 0 && page > totalPages) {
       setPage(totalPages);
     }
   }, [page, totalPages]);
 
-  const paginatedQuotations = useMemo(() => {
-    const start = (page - 1) * limit;
-    return quotations.slice(start, start + limit);
-  }, [quotations, page, limit]);
+  const paginatedQuotations = quotations;
 
   const scopeBadgeLabel =
     effectiveScope === "organisation"
@@ -685,14 +641,12 @@ export function ListQuotationsPage({
 
             <button
               type="button"
-              onClick={() => {
-                setExportOnlySelected(false);
-                setDownloadQuotationsModalOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 shadow-2xs hover:bg-emerald-500/20 transition cursor-pointer"
+              disabled={isExportFetching}
+              onClick={handleOpenExportAll}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 shadow-2xs hover:bg-emerald-500/20 transition cursor-pointer disabled:opacity-50"
             >
               <FileSpreadsheet className="h-3.5 w-3.5" />
-              <span>Export (.xlsx)</span>
+              <span>{isExportFetching ? "Loading..." : "Export (.xlsx)"}</span>
             </button>
 
             {canViewQuotations(authUser) && (
@@ -754,7 +708,24 @@ export function ListQuotationsPage({
       {viewMode === "table" ? (
         /* High-Density Desktop Table View */
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
-          <div className="overflow-x-auto">
+          {/* Top Pagination Bar */}
+          <div className="border-b border-border">
+            <TablePaginationBar
+              startEntry={totalCount === 0 ? 0 : (page - 1) * limit + 1}
+              endEntry={Math.min(page * limit, totalCount)}
+              totalEntries={totalCount}
+              itemsPerPage={limit}
+              onItemsPerPageChange={(val) => {
+                setLimit(val);
+                setPage(1);
+              }}
+              currentPage={page}
+              totalPages={totalPages}
+              onPageChange={(p) => setPage(p)}
+            />
+          </div>
+
+          <TableScrollContainer>
             <table className="w-full text-left text-xs text-foreground">
               <thead className="border-b border-border bg-surface-muted/60 font-bold uppercase tracking-wider text-muted text-[11px]">
                 <tr>
@@ -1197,34 +1168,23 @@ export function ListQuotationsPage({
                 )}
               </tbody>
             </table>
-          </div>
+          </TableScrollContainer>
 
-          {/* Pagination Bar */}
-          <div className="flex items-center justify-between border-t border-border px-5 py-3 bg-surface-muted/30">
-            <div className="text-xs text-muted">
-              Showing Page <span className="font-semibold text-foreground">{page}</span> of{" "}
-              <span className="font-semibold text-foreground">{totalPages}</span> (
-              {paginatedQuotations.length} of {quotations.length} records)
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1 text-xs font-semibold text-foreground hover:bg-surface-muted disabled:opacity-40 cursor-pointer"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" /> Previous
-              </button>
-              <button
-                type="button"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1 text-xs font-semibold text-foreground hover:bg-surface-muted disabled:opacity-40 cursor-pointer"
-              >
-                Next <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
+          {/* Bottom Pagination Bar */}
+          <div className="border-t border-border">
+            <TablePaginationBar
+              startEntry={totalCount === 0 ? 0 : (page - 1) * limit + 1}
+              endEntry={Math.min(page * limit, totalCount)}
+              totalEntries={totalCount}
+              itemsPerPage={limit}
+              onItemsPerPageChange={(val) => {
+                setLimit(val);
+                setPage(1);
+              }}
+              currentPage={page}
+              totalPages={totalPages}
+              onPageChange={(p) => setPage(p)}
+            />
           </div>
         </div>
       ) : (
@@ -1450,6 +1410,25 @@ export function ListQuotationsPage({
               })}
             </div>
           )}
+
+          {/* Cards View Pagination */}
+          {quotations.length > 0 && (
+            <div className="rounded-2xl border border-border bg-card shadow-xs">
+              <TablePaginationBar
+                startEntry={totalCount === 0 ? 0 : (page - 1) * limit + 1}
+                endEntry={Math.min(page * limit, totalCount)}
+                totalEntries={totalCount}
+                itemsPerPage={limit}
+                onItemsPerPageChange={(val) => {
+                  setLimit(val);
+                  setPage(1);
+                }}
+                currentPage={page}
+                totalPages={totalPages}
+                onPageChange={(p) => setPage(p)}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -1468,14 +1447,12 @@ export function ListQuotationsPage({
 
             <button
               type="button"
-              onClick={() => {
-                setExportOnlySelected(true);
-                setDownloadQuotationsModalOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition cursor-pointer"
+              disabled={isExportFetching}
+              onClick={handleOpenExportSelected}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition cursor-pointer disabled:opacity-50"
             >
               <FileSpreadsheet className="h-3.5 w-3.5" />
-              Export Selected
+              {isExportFetching ? "Loading..." : "Export Selected"}
             </button>
 
             <button
@@ -1495,31 +1472,70 @@ export function ListQuotationsPage({
         open={filterDrawerOpen}
         onClose={() => setFilterDrawerOpen(false)}
         searchTerm={searchTerm}
-        setSearchTerm={setSearchTerm}
+        setSearchTerm={(val) => {
+          setSearchTerm(val);
+          setPage(1);
+        }}
         statusFilter={statusFilter}
-        setStatusFilter={setStatusFilter}
+        setStatusFilter={(val) => {
+          setStatusFilter(val);
+          setPage(1);
+        }}
         departmentFilter={departmentFilter}
-        setDepartmentFilter={setDepartmentFilter}
+        setDepartmentFilter={(val) => {
+          setDepartmentFilter(val);
+          setPage(1);
+        }}
         validityFilter={validityFilter}
-        setValidityFilter={setValidityFilter}
+        setValidityFilter={(val) => {
+          setValidityFilter(val);
+          setPage(1);
+        }}
         leadSourceFilter={leadSourceFilter}
-        setLeadSourceFilter={setLeadSourceFilter}
+        setLeadSourceFilter={(val) => {
+          setLeadSourceFilter(val);
+          setPage(1);
+        }}
         minAmount={minAmount}
-        setMinAmount={setMinAmount}
+        setMinAmount={(val) => {
+          setMinAmount(val);
+          setPage(1);
+        }}
         maxAmount={maxAmount}
-        setMaxAmount={setMaxAmount}
+        setMaxAmount={(val) => {
+          setMaxAmount(val);
+          setPage(1);
+        }}
         fromDate={fromDate}
-        setFromDate={setFromDate}
+        setFromDate={(val) => {
+          setFromDate(val);
+          setPage(1);
+        }}
         toDate={toDate}
-        setToDate={setToDate}
+        setToDate={(val) => {
+          setToDate(val);
+          setPage(1);
+        }}
         signatoryFilter={signatoryFilter}
-        setSignatoryFilter={setSignatoryFilter}
+        setSignatoryFilter={(val) => {
+          setSignatoryFilter(val);
+          setPage(1);
+        }}
         primaryRepFilter={primaryRepFilter}
-        setPrimaryRepFilter={setPrimaryRepFilter}
+        setPrimaryRepFilter={(val) => {
+          setPrimaryRepFilter(val);
+          setPage(1);
+        }}
         secondaryRepFilter={secondaryRepFilter}
-        setSecondaryRepFilter={setSecondaryRepFilter}
+        setSecondaryRepFilter={(val) => {
+          setSecondaryRepFilter(val);
+          setPage(1);
+        }}
         createdByFilter={createdByFilter}
-        setCreatedByFilter={setCreatedByFilter}
+        setCreatedByFilter={(val) => {
+          setCreatedByFilter(val);
+          setPage(1);
+        }}
         signatoryOptions={availableSignatoryOptions}
         primaryRepOptions={availablePrimaryRepOptions}
         secondaryRepOptions={availableSecondaryRepOptions}
@@ -1853,8 +1869,9 @@ export function ListQuotationsPage({
           onClose={() => {
             setDownloadQuotationsModalOpen(false);
             setExportOnlySelected(false);
+            setExportRawQuotations(null);
           }}
-          quotations={selectedQuotations}
+          quotations={exportRawQuotations || []}
           scopeLabel={scopeBadgeLabel}
         />
       )}

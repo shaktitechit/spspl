@@ -47,12 +47,14 @@ import {
   useListProductsQuery,
   useListPartiesQuery,
   useBulkDeleteLeadsMutation,
+  useTriggerIndiaMartPullMutation,
   type LeadRecord,
   type LeadStatus,
 } from "@/store/api";
 import { useAppSelector } from "@/store/hooks";
 import { toast } from "@/lib/toast";
 import { TablePaginationBar } from "@/components/portal/shared/pagination/TablePaginationBar";
+import { TableScrollContainer } from "@/components/portal/shared/TableScrollContainer";
 import { PortalBusyOverlay } from "@/components/portal/shared/PortalBusyOverlay";
 import {
   formatLeadAssignees,
@@ -94,6 +96,7 @@ export type LeadScope = "organisation" | "manager" | "coordinator" | "my";
 type Props = {
   portalHome?: string;
   scope?: LeadScope;
+  fixedSource?: string;
 };
 
 function getCreatedByName(createdBy: LeadRecord["created_by"], fallback = "—"): string {
@@ -143,7 +146,7 @@ const DEFAULT_LEAD_EXPORT_COLUMNS: ColumnDef[] = [
   { key: "created_by_name", label: "Created By*", defaultSelected: true, widthPdf: 1.3 },
 ];
 
-export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
+export function ListLeadsPage({ portalHome = "/dashboard", scope, fixedSource }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const reduxUser = useAppSelector((state) => state.auth.user);
@@ -175,7 +178,7 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
   const [page, setPage] = useState<number>(1);
-  const [limit, setLimit] = useState<number>(25);
+  const [limit, setLimit] = useState<number>(10);
 
   // Filter popup panel toggle
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
@@ -222,7 +225,7 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
       status: statusFilter.length > 0 ? statusFilter.join(",") : undefined,
       priority: priorityFilter.length > 0 ? priorityFilter.join(",") : undefined,
       department: departmentFilter.length > 0 ? departmentFilter.join(",") : undefined,
-      source: sourceFilter.length > 0 ? sourceFilter.join(",") : undefined,
+      source: fixedSource || (sourceFilter.length > 0 ? sourceFilter.join(",") : undefined),
       industry: industryFilter.length > 0 ? industryFilter.join(",") : undefined,
       scope: isTeamLead ? scopeFilter : undefined,
       assigned_to:
@@ -254,6 +257,7 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
       priorityFilter,
       departmentFilter,
       sourceFilter,
+      fixedSource,
       industryFilter,
       isTeamLead,
       scopeFilter,
@@ -282,6 +286,35 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
     refetch,
   } = useListLeadsQuery(queryArgs);
 
+  const [triggerIndiaMartPull, { isLoading: isPullingIndiaMart }] =
+    useTriggerIndiaMartPullMutation();
+
+  const handleSyncIndiaMart = async () => {
+    try {
+      const res: any = await triggerIndiaMartPull().unwrap();
+      const payload = res?.data || res;
+      if (payload?.status === "SUCCESS" && payload.new_leads_count > 0) {
+        toast.success(`Successfully synced ${payload.new_leads_count} new IndiaMART lead(s).`);
+      } else if (payload?.status === "SUCCESS" && payload.duplicate_count > 0) {
+        toast.info(`Sync complete. ${payload.duplicate_count} lead(s) were duplicates and already exist.`);
+      } else if (payload?.status === "NO_RECORDS") {
+        toast.info("No new leads on IndiaMART since last check.");
+      } else if (payload?.success === false || payload?.status === "ERROR") {
+        toast.error(payload?.message || "Failed to sync IndiaMART leads.");
+      } else {
+        toast.success(payload?.message || "IndiaMART sync completed successfully.");
+      }
+      refetch();
+    } catch (err: any) {
+      const errMsg =
+        err?.data?.message ||
+        err?.data?.data?.message ||
+        err?.message ||
+        "Failed to sync IndiaMART leads. Please check your CRM key in .env.";
+      toast.error(errMsg);
+    }
+  };
+
   const items = leadsData?.items || [];
   const total = leadsData?.total || 0;
   const totalPages = leadsData?.totalPages || 1;
@@ -309,8 +342,8 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
     const requiredProducts =
       Array.isArray(lead.products) && lead.products.length > 0
         ? lead.products
-            .map((p: any) => `${p.product_name || p.name || "Item"} (${Number(p.quantity) || 0})`)
-            .join(", ")
+          .map((p: any) => `${p.product_name || p.name || "Item"} (${Number(p.quantity) || 0})`)
+          .join(", ")
         : "—";
     const totalQty = Array.isArray(lead.products)
       ? lead.products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0)
@@ -319,12 +352,12 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
       [lead.requirement, lead.notes].filter(Boolean).join(" — ") || "—";
     const lastRemarks = lead.last_action?.remarks
       ? [
-          lead.last_action.remarks,
-          lead.last_action.timestamp ? formatLeadDate(lead.last_action.timestamp) : "",
-          lead.last_action.by_user?.name ? `by ${lead.last_action.by_user.name}` : "",
-        ]
-          .filter(Boolean)
-          .join(" • ")
+        lead.last_action.remarks,
+        lead.last_action.timestamp ? formatLeadDate(lead.last_action.timestamp) : "",
+        lead.last_action.by_user?.name ? `by ${lead.last_action.by_user.name}` : "",
+      ]
+        .filter(Boolean)
+        .join(" • ")
       : "—";
     const party = lead.party_id;
     const contactName =
@@ -461,8 +494,8 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
     const rawProducts = Array.isArray(catalogProductsData)
       ? catalogProductsData
       : (catalogProductsData as { items?: any[]; data?: any[] } | undefined)?.items ||
-        (catalogProductsData as { data?: any[] } | undefined)?.data ||
-        [];
+      (catalogProductsData as { data?: any[] } | undefined)?.data ||
+      [];
     for (const prod of rawProducts) {
       const name = getFieldText(prod.product_name);
       if (name) {
@@ -514,7 +547,7 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
     if (statusFilter.length > 0) count++;
     if (priorityFilter.length > 0) count++;
     if (departmentFilter.length > 0) count++;
-    if (sourceFilter.length > 0) count++;
+    if (!fixedSource && sourceFilter.length > 0) count++;
     if (industryFilter.length > 0) count++;
     if (canFilterRep && primaryAssigneeFilter.length > 0) count++;
     if (canFilterRep && secondaryAssigneeFilter.length > 0) count++;
@@ -532,6 +565,7 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
     priorityFilter,
     departmentFilter,
     sourceFilter,
+    fixedSource,
     industryFilter,
     canFilterRep,
     primaryAssigneeFilter,
@@ -574,9 +608,8 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
   // Bulk delete handler
   const handleBulkDelete = async () => {
     if (!isAdmin || selectedLeadIds.length === 0) return;
-    const confirmMsg = `Are you sure you want to delete ${selectedLeadIds.length} lead${
-      selectedLeadIds.length > 1 ? "s" : ""
-    }? This action cannot be undone.`;
+    const confirmMsg = `Are you sure you want to delete ${selectedLeadIds.length} lead${selectedLeadIds.length > 1 ? "s" : ""
+      }? This action cannot be undone.`;
     if (!window.confirm(confirmMsg)) return;
 
     try {
@@ -599,23 +632,25 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-xl font-black tracking-tight text-foreground">
-                Lead Pipeline
+                {fixedSource ? `${fixedSource} Pipeline` : "Lead Pipeline"}
               </h1>
               <span className="rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-primary">
                 {isAdmin
                   ? "Global Scope"
                   : isTeamLead
-                  ? scopeFilter === "team"
-                    ? "Team Scope"
-                    : "Personal Scope"
-                  : "Personal Scope"}
+                    ? scopeFilter === "team"
+                      ? "Team Scope"
+                      : "Personal Scope"
+                    : "Personal Scope"}
               </span>
               <span className="text-xs text-muted font-mono tabular-nums">
                 ({total} total lead{total !== 1 ? "s" : ""})
               </span>
             </div>
             <p className="mt-1 text-xs text-muted max-w-2xl">
-              Track enquiries, assign sales representatives, qualify prospects, and drive sales conversions.
+              {fixedSource === "IndiaMART"
+                ? "Review, qualify, and convert buyer inquiries received directly from IndiaMART in real time and via hourly pull sync."
+                : "Track enquiries, assign sales representatives, qualify prospects, and drive sales conversions."}
             </p>
           </div>
 
@@ -624,11 +659,10 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
             <button
               type="button"
               onClick={() => setDrawerOpen(true)}
-              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold shadow-2xs transition cursor-pointer ${
-                hasActiveFilters
-                  ? "border-primary bg-primary/10 text-primary font-bold"
-                  : "border-border bg-card text-foreground hover:bg-surface-muted"
-              }`}
+              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold shadow-2xs transition cursor-pointer ${hasActiveFilters
+                ? "border-primary bg-primary/10 text-primary font-bold"
+                : "border-border bg-card text-foreground hover:bg-surface-muted"
+                }`}
               title="Filter leads"
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
@@ -661,6 +695,19 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
               <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">Refresh</span>
             </button>
+
+            {fixedSource === "IndiaMART" && (
+              <button
+                type="button"
+                onClick={handleSyncIndiaMart}
+                disabled={isPullingIndiaMart || isFetching}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-700 dark:text-blue-300 shadow-2xs hover:bg-blue-500/20 transition cursor-pointer disabled:opacity-50"
+                title="Pull new leads from IndiaMART now"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isPullingIndiaMart ? "animate-spin" : ""}`} />
+                <span>{isPullingIndiaMart ? "Syncing..." : "Sync IndiaMART"}</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -727,11 +774,10 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
                 setScopeFilter("team");
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                scopeFilter === "team"
-                  ? "bg-card text-primary shadow-xs font-bold"
-                  : "text-muted hover:text-foreground"
-              }`}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${scopeFilter === "team"
+                ? "bg-card text-primary shadow-xs font-bold"
+                : "text-muted hover:text-foreground"
+                }`}
             >
               Team Leads (Created or Assigned to Team)
             </button>
@@ -741,11 +787,10 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
                 setScopeFilter("mine");
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                scopeFilter === "mine"
-                  ? "bg-card text-primary shadow-xs font-bold"
-                  : "text-muted hover:text-foreground"
-              }`}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${scopeFilter === "mine"
+                ? "bg-card text-primary shadow-xs font-bold"
+                : "text-muted hover:text-foreground"
+                }`}
             >
               My Leads (Created or Assigned to Me)
             </button>
@@ -757,7 +802,24 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
 
       {/* 1. Desktop High-Density Table (lg+) */}
       <div className="hidden lg:block overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
-        <div className="overflow-x-auto">
+        {/* Top Pagination */}
+        <div className="border-b border-border">
+          <TablePaginationBar
+            startEntry={total === 0 ? 0 : (page - 1) * limit + 1}
+            endEntry={Math.min(page * limit, total)}
+            totalEntries={total}
+            itemsPerPage={limit}
+            onItemsPerPageChange={(val) => {
+              setLimit(val);
+              setPage(1);
+            }}
+            currentPage={page}
+            totalPages={totalPages}
+            onPageChange={(p) => setPage(p)}
+          />
+        </div>
+
+        <TableScrollContainer>
           <table className="w-full text-left text-xs text-foreground">
             <thead className="border-b border-border bg-surface-muted/60 font-bold uppercase tracking-wider text-muted text-[11px]">
               <tr>
@@ -830,9 +892,8 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
                   return (
                     <tr
                       key={lead._id}
-                      className={`transition-colors hover:bg-surface-muted/40 ${
-                        isSelected ? "bg-primary/5" : ""
-                      }`}
+                      className={`transition-colors hover:bg-surface-muted/40 ${isSelected ? "bg-primary/5" : ""
+                        }`}
                     >
                       {/* Checkbox */}
                       <td className="px-3.5 py-3 text-center">
@@ -1124,13 +1185,12 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
                       <td className="px-3 py-3 whitespace-nowrap text-[11px]">
                         {lead.next_follow_up_at ? (
                           <span
-                            className={`font-semibold ${
-                              isOverdue
-                                ? "text-rose-600 dark:text-rose-400 font-bold"
-                                : isToday
+                            className={`font-semibold ${isOverdue
+                              ? "text-rose-600 dark:text-rose-400 font-bold"
+                              : isToday
                                 ? "text-amber-600 dark:text-amber-400 font-bold"
                                 : "text-muted"
-                            }`}
+                              }`}
                           >
                             {formatLeadDate(lead.next_follow_up_at)}
                             {isOverdue && " (Overdue)"}
@@ -1191,7 +1251,7 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
               )}
             </tbody>
           </table>
-        </div>
+        </TableScrollContainer>
 
         {/* Desktop Pagination */}
         <div className="border-t border-border">
@@ -1266,11 +1326,10 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
             return (
               <div
                 key={lead._id}
-                className={`rounded-2xl border bg-card p-4 shadow-xs transition-all ${
-                  isSelected
-                    ? "border-primary bg-primary/5 shadow-md"
-                    : "border-border hover:border-primary/40"
-                }`}
+                className={`rounded-2xl border bg-card p-4 shadow-xs transition-all ${isSelected
+                  ? "border-primary bg-primary/5 shadow-md"
+                  : "border-border hover:border-primary/40"
+                  }`}
               >
                 {/* Card Top: Checkbox, Lead No & Badges */}
                 <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-3">
@@ -1393,13 +1452,12 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
                           Next Follow-Up
                         </span>
                         <span
-                          className={`text-xs font-semibold mt-0.5 block ${
-                            isOverdue
-                              ? "text-rose-600 dark:text-rose-400 font-bold"
-                              : isToday
+                          className={`text-xs font-semibold mt-0.5 block ${isOverdue
+                            ? "text-rose-600 dark:text-rose-400 font-bold"
+                            : isToday
                               ? "text-amber-600 dark:text-amber-400 font-bold"
                               : "text-foreground"
-                          }`}
+                            }`}
                         >
                           {formatLeadDate(lead.next_follow_up_at)}
                           {isOverdue && " (⚠️ Overdue)"}
@@ -1553,6 +1611,7 @@ export function ListLeadsPage({ portalHome = "/dashboard", scope }: Props) {
           setSourceFilter(val);
           setPage(1);
         }}
+        hideSource={Boolean(fixedSource)}
         industryFilter={industryFilter}
         setIndustryFilter={(val) => {
           setIndustryFilter(val);

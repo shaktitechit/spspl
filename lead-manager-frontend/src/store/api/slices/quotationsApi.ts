@@ -17,18 +17,34 @@ export type QuotationRecord = LeadQuotationRecord;
 
 export type ListQuotationsQueryParams = {
   lead?: string;
-  unlinked?: boolean;
+  unlinked?: boolean | string;
   status?: string;
   search?: string;
   department?: string;
   scope?: string;
   page?: number;
   limit?: number | "all";
-  all?: boolean;
+  all?: boolean | string;
+  paginate?: boolean | string;
+  validity?: string;
+  lead_source?: string;
+  min_amount?: string | number;
+  max_amount?: string | number;
+  from_date?: string;
+  to_date?: string;
+  signatory?: string;
+  primary_rep?: string;
+  secondary_rep?: string;
+  created_by?: string;
 };
 
-export type ListQuotationsResponse = {
+export type ListQuotationsResponse = Array<QuotationRecord> & {
   quotations: QuotationRecord[];
+  items: QuotationRecord[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
   pagination: {
     total: number;
     page: number;
@@ -39,16 +55,42 @@ export type ListQuotationsResponse = {
 
 export const quotationsApi = medicaApi.injectEndpoints({
   endpoints: (build) => ({
-    listQuotations: build.query<QuotationRecord[], ListQuotationsQueryParams | void>({
+    listQuotations: build.query<ListQuotationsResponse, ListQuotationsQueryParams | void>({
       query: (params) => ({
         url: "/quotations",
         method: "GET",
         params: params || undefined,
       }),
-      transformResponse: (raw: ApiEnvelope<QuotationRecord[]>) =>
-        unwrapEnvelope(raw) ?? [],
+      transformResponse: (raw: any): ListQuotationsResponse => {
+        const rawData = raw && typeof raw === "object" && "data" in raw ? raw.data : raw;
+        const list: QuotationRecord[] = Array.isArray(rawData)
+          ? rawData
+          : (rawData as any)?.quotations || (rawData as any)?.items || [];
+        const rawPagination = raw?.pagination || (rawData as any)?.pagination;
+
+        const total = typeof rawPagination?.total === "number" ? rawPagination.total : list.length;
+        const page = typeof rawPagination?.page === "number" ? rawPagination.page : 1;
+        const limit = typeof rawPagination?.limit === "number" ? rawPagination.limit : (list.length || 10);
+        const totalPages =
+          typeof rawPagination?.totalPages === "number"
+            ? rawPagination.totalPages
+            : Math.max(1, Math.ceil(total / (limit || 10)));
+
+        const paginationObj = { total, page, limit, totalPages };
+
+        const result: any = [...list];
+        result.quotations = list;
+        result.items = list;
+        result.pagination = paginationObj;
+        result.total = total;
+        result.page = page;
+        result.limit = limit;
+        result.totalPages = totalPages;
+
+        return result as ListQuotationsResponse;
+      },
       providesTags: (result) =>
-        result
+        result && Array.isArray(result)
           ? [
               ...result.map(({ _id }) => ({ type: "Quotation" as const, id: _id })),
               { type: "Quotation", id: "LIST" },

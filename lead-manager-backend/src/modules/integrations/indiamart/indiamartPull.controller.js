@@ -11,16 +11,27 @@ const { logger } = require('../../../utils/logger');
 async function triggerPull(req, res, next) {
   try {
     const actorId = req.user?._id || null;
-    const { key } = req.body || {};
 
     const result = await service.runLeadPull({
       triggerType: 'MANUAL',
       actorId,
-      crmKeyOverride: key || null,
     });
 
+    if (!result.success) {
+      const statusCode = result.status === 'RATE_LIMITED'
+        ? 429
+        : (result.http_code === 401 ? 401 : 400);
+
+      return res.status(statusCode).json({
+        success: false,
+        message: result.message || 'IndiaMART sync failed',
+        data: result,
+      });
+    }
+
     return res.json({
-      success: result.success,
+      success: true,
+      message: result.message,
       data: result,
     });
   } catch (err) {

@@ -86,7 +86,10 @@ export function LinkQuotationModal({
 
   // Filter quotations
   const filteredQuotations = useMemo(() => {
-    return quotations.filter((q) => {
+    const list: QuotationRecord[] = Array.isArray(quotations)
+      ? quotations
+      : (quotations as any)?.quotations || (quotations as any)?.items || [];
+    return list.filter((q) => {
       const qLeadId = getQuotationLeadId(q);
       const isCurrentlyLinkedToThisLead = qLeadId === String(lead._id);
       const isUnlinked = !qLeadId;
